@@ -1,0 +1,68 @@
+{
+  "version": 5,
+  "receivers": {
+    "udp_in": {
+      "type": "udp_gnet",
+      "listen": "udp://0.0.0.0:9000",
+      "multicore": true,
+      "frame": ""
+    }
+  },
+  "senders": {
+    "udp_uni_out": {
+      "type": "udp_unicast",
+      "remote": "127.0.0.1:9001",
+      "local_ip": "0.0.0.0",
+      "local_port": 50000,
+      "concurrency": 1
+    },
+    "udp_mcast_out": {
+      "type": "udp_multicast",
+      "remote": "239.1.2.3:9002",
+      "local_ip": "0.0.0.0",
+      "local_port": 50001,
+      "iface": "",
+      "ttl": 8,
+      "loop": false,
+      "concurrency": 1
+    }
+  },
+  "pipelines": {
+    "p1": [
+      {
+        "type": "match_offset_bytes",
+        "offset": 0,
+        "hex": "AABB",
+        "flag": "matched"
+      }
+    ]
+  },
+  "tasks": {
+    "udp_task_unicast": {
+      "pool_size": 64,
+      "fast_path": false,
+      "receivers": [
+        "udp_in"
+      ],
+      "pipelines": [
+        "p1"
+      ],
+      "senders": [
+        "udp_uni_out"
+      ]
+    },
+    "udp_task_multicast": {
+      "pool_size": 64,
+      "fast_path": false,
+      "receivers": [
+        "udp_in"
+      ],
+      "pipelines": [
+        "p1"
+      ],
+      "senders": [
+        "udp_mcast_out"
+      ]
+    }
+  }
+}
