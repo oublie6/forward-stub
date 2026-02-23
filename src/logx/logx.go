@@ -13,16 +13,23 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
+// Options 为日志初始化参数。
 type Options struct {
 	Level string
 	File  string
 }
 
 var (
-	mu     sync.RWMutex
-	logger = zap.NewNop().Sugar()
+	mu          sync.RWMutex
+	logger      = zap.NewNop().Sugar()
+	atomicLevel = zap.NewAtomicLevelAt(zapcore.InfoLevel)
 )
 
+// Init 初始化全局 logger。
+//
+// 依赖的稳定第三方库：
+//  1. zap：高性能结构化日志；
+//  2. lumberjack：日志切割与压缩，避免单文件无限增长。
 func Init(opts Options) error {
 	lvl, err := parseLevel(opts.Level)
 	if err != nil {
@@ -45,7 +52,8 @@ func Init(opts Options) error {
 		})
 	}
 
-	core := zapcore.NewCore(encoder, ws, lvl)
+	atomicLevel.SetLevel(lvl)
+	core := zapcore.NewCore(encoder, ws, atomicLevel)
 	z := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 	next := z.Sugar()
 
@@ -54,21 +62,30 @@ func Init(opts Options) error {
 	logger = next
 	mu.Unlock()
 
+	// 将标准库 log 重定向到 zap，统一日志出口。
 	log.SetOutput(zap.NewStdLog(next.Desugar()).Writer())
 	_ = prev.Sync()
 	return nil
 }
 
+// L 返回当前全局 sugar logger。
 func L() *zap.SugaredLogger {
 	mu.RLock()
 	defer mu.RUnlock()
 	return logger
 }
 
+// Sync 刷盘（进程退出前建议调用）。
 func Sync() error {
 	mu.RLock()
 	defer mu.RUnlock()
 	return logger.Sync()
+}
+
+// Enabled 判断某级别日志是否启用。
+// 可在高频路径上用于“先判断后构造字段”，减少无效开销。
+func Enabled(level zapcore.Level) bool {
+	return atomicLevel.Enabled(level)
 }
 
 func parseLevel(level string) (zapcore.Level, error) {
@@ -86,6 +103,7 @@ func parseLevel(level string) (zapcore.Level, error) {
 	}
 }
 
+// ParseGnetLogLevel 将项目日志级别映射到 gnet 日志级别。
 func ParseGnetLogLevel(level string) logging.Level {
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case "debug":
