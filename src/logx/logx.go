@@ -82,8 +82,6 @@ func Sync() error {
 	return logger.Sync()
 }
 
-// Enabled 判断某级别日志是否启用。
-// 可在高频路径上用于“先判断后构造字段”，减少无效开销。
 func Enabled(level zapcore.Level) bool {
 	return atomicLevel.Enabled(level)
 }

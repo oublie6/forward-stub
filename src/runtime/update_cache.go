@@ -29,9 +29,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		lg.Infow("updating runtime cache", "version", cfg.Version, "receivers", len(cfg.Receivers), "tasks", len(cfg.Tasks), "senders", len(cfg.Senders))
 	}
 
-	if err := st.StopAll(ctx); err != nil && logx.Enabled(zapcore.WarnLevel) {
-		lg.Warnw("stop old runtime objects got errors", "error", err)
-	}
+	_ = st.StopAll(ctx)
 
 	compiled, err := CompilePipelines(cfg.Pipelines)
 	if err != nil {
