@@ -2,10 +2,16 @@ package config
 
 type Config struct {
 	Version   int64                     `json:"version"`
+	Logging   LoggingConfig             `json:"logging"`
 	Receivers map[string]ReceiverConfig `json:"receivers"`
 	Senders   map[string]SenderConfig   `json:"senders"`
 	Pipelines map[string][]StageConfig  `json:"pipelines"`
 	Tasks     map[string]TaskConfig     `json:"tasks"`
+}
+
+type LoggingConfig struct {
+	Level string `json:"level"`
+	File  string `json:"file"`
 }
 
 type ReceiverConfig struct {

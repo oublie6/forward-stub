@@ -7,12 +7,14 @@ import (
 	"forword-stub/src/packet"
 
 	"github.com/panjf2000/gnet/v2"
+	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
 
 type GnetUDP struct {
-	name      string
-	listen    string
-	multicore bool
+	name         string
+	listen       string
+	multicore    bool
+	gnetLogLevel logging.Level
 
 	onPacket func(*packet.Packet)
 
@@ -20,8 +22,8 @@ type GnetUDP struct {
 	stopFn func(context.Context) error
 }
 
-func NewGnetUDP(name, listen string, multicore bool) *GnetUDP {
-	return &GnetUDP{name: name, listen: listen, multicore: multicore}
+func NewGnetUDP(name, listen string, multicore bool, gnetLogLevel string) *GnetUDP {
+	return &GnetUDP{name: name, listen: listen, multicore: multicore, gnetLogLevel: parseGnetLogLevel(gnetLogLevel)}
 }
 
 func (r *GnetUDP) Name() string { return r.name }
@@ -29,7 +31,14 @@ func (r *GnetUDP) Key() string  { return "udp_gnet|" + r.listen }
 
 func (r *GnetUDP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
-	return gnet.Run(&udpHandler{recv: r}, r.listen, gnet.WithMulticore(r.multicore), gnet.WithReusePort(true), gnet.WithReuseAddr(true))
+	return gnet.Run(
+		&udpHandler{recv: r},
+		r.listen,
+		gnet.WithMulticore(r.multicore),
+		gnet.WithReusePort(true),
+		gnet.WithReuseAddr(true),
+		gnet.WithLogLevel(r.gnetLogLevel),
+	)
 }
 
 func (r *GnetUDP) Stop(ctx context.Context) error {

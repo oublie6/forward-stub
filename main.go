@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,13 +10,23 @@ import (
 	"forword-stub/src/app"
 	"forword-stub/src/config"
 	"forword-stub/src/control"
+	"forword-stub/src/logx"
 )
 
 func main() {
 	localPath := flag.String("config", "", "local config json path (optional)")
 	apiURL := flag.String("api", "", "java config service url (optional)")
 	timeoutSec := flag.Int("timeout", 5, "api timeout seconds")
+	logLevel := flag.String("log-level", "info", "log level: debug|info|warn|error")
+	logFile := flag.String("log-file", "", "optional log file path (stdout when empty)")
 	flag.Parse()
+
+	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile}); err != nil {
+		_, _ = os.Stderr.WriteString("init logger error: " + err.Error() + "\n")
+		os.Exit(1)
+	}
+	defer func() { _ = logx.Sync() }()
+	lg := logx.L()
 
 	var cfg config.Config
 	var err error
@@ -29,30 +38,37 @@ func main() {
 		cli := control.NewConfigAPIClient(*apiURL, *timeoutSec)
 		cfg, err = cli.FetchConfig(context.Background())
 	default:
-		fmt.Fprintln(os.Stderr, "must provide -config or -api")
+		lg.Error("must provide -config or -api")
 		os.Exit(1)
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "load config error: %v\n", err)
+		lg.Errorf("load config error: %v", err)
 		os.Exit(1)
 	}
 	if err := cfg.Validate(); err != nil {
-		fmt.Fprintf(os.Stderr, "config validate error: %v\n", err)
+		lg.Errorf("config validate error: %v", err)
 		os.Exit(1)
+	}
+
+	if cfg.Logging.Level == "" {
+		cfg.Logging.Level = *logLevel
+	}
+	if cfg.Logging.File == "" {
+		cfg.Logging.File = *logFile
 	}
 
 	rt := app.NewRuntime()
 	if err := rt.UpdateCache(context.Background(), cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "UpdateCache error: %v\n", err)
+		lg.Errorf("UpdateCache error: %v", err)
 		os.Exit(1)
 	}
 
-	fmt.Println("forword-stub started. Press Ctrl+C to stop.")
+	lg.Info("forword-stub started. Press Ctrl+C to stop.")
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 
 	_ = rt.Stop(context.Background())
-	fmt.Println("forword-stub stopped.")
+	lg.Info("forword-stub stopped.")
 }

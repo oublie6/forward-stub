@@ -34,7 +34,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 
 	// build senders
 	for name, sc := range cfg.Senders {
-		s, err := buildSender(name, sc)
+		s, err := buildSender(name, sc, cfg.Logging.Level)
 		if err != nil {
 			return err
 		}
@@ -91,7 +91,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 
 	// build & start receivers
 	for name, rc := range cfg.Receivers {
-		r, err := buildReceiver(name, rc)
+		r, err := buildReceiver(name, rc, cfg.Logging.Level)
 		if err != nil {
 			return err
 		}
@@ -149,10 +149,10 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 	}
 }
 
-func buildReceiver(name string, rc config.ReceiverConfig) (receiver.Receiver, error) {
+func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (receiver.Receiver, error) {
 	switch rc.Type {
 	case "udp_gnet":
-		return receiver.NewGnetUDP(name, rc.Listen, rc.Multicore), nil
+		return receiver.NewGnetUDP(name, rc.Listen, rc.Multicore, gnetLogLevel), nil
 	case "tcp_gnet":
 		var fr receiver.Framer
 		switch rc.Frame {
@@ -163,13 +163,13 @@ func buildReceiver(name string, rc config.ReceiverConfig) (receiver.Receiver, er
 		default:
 			return nil, fmt.Errorf("receiver %s unknown frame %s", name, rc.Frame)
 		}
-		return receiver.NewGnetTCP(name, rc.Listen, rc.Multicore, fr), nil
+		return receiver.NewGnetTCP(name, rc.Listen, rc.Multicore, fr, gnetLogLevel), nil
 	default:
 		return nil, fmt.Errorf("receiver %s unknown type %s", name, rc.Type)
 	}
 }
 
-func buildSender(name string, sc config.SenderConfig) (sender.Sender, error) {
+func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (sender.Sender, error) {
 	conc := sc.Concurrency
 	if conc <= 0 {
 		conc = 1
@@ -189,7 +189,7 @@ func buildSender(name string, sc config.SenderConfig) (sender.Sender, error) {
 		return sender.NewUDPMulticastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.Iface, sc.TTL, sc.Loop)
 	case "tcp_gnet":
 		with := sc.Frame == "u16be"
-		return sender.NewGnetTCPSender(name, sc.Remote, with, conc)
+		return sender.NewGnetTCPSender(name, sc.Remote, with, conc, gnetLogLevel)
 	case "kafka":
 		return sender.NewKafkaSender(name, sc.Topic), nil
 	default:

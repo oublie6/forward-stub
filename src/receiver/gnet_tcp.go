@@ -2,18 +2,21 @@ package receiver
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"forword-stub/src/packet"
 
 	"github.com/panjf2000/gnet/v2"
+	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
 
 type GnetTCP struct {
-	name      string
-	listen    string
-	multicore bool
-	framer    Framer
+	name         string
+	listen       string
+	multicore    bool
+	framer       Framer
+	gnetLogLevel logging.Level
 
 	onPacket func(*packet.Packet)
 
@@ -21,8 +24,14 @@ type GnetTCP struct {
 	stopFn func(context.Context) error
 }
 
-func NewGnetTCP(name, listen string, multicore bool, framer Framer) *GnetTCP {
-	return &GnetTCP{name: name, listen: listen, multicore: multicore, framer: framer}
+func NewGnetTCP(name, listen string, multicore bool, framer Framer, gnetLogLevel string) *GnetTCP {
+	return &GnetTCP{
+		name:         name,
+		listen:       listen,
+		multicore:    multicore,
+		framer:       framer,
+		gnetLogLevel: parseGnetLogLevel(gnetLogLevel),
+	}
 }
 
 func (r *GnetTCP) Name() string { return r.name }
@@ -30,7 +39,14 @@ func (r *GnetTCP) Key() string  { return "tcp_gnet|" + r.listen }
 
 func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
-	return gnet.Run(&tcpHandler{recv: r}, r.listen, gnet.WithMulticore(r.multicore), gnet.WithReusePort(true), gnet.WithReuseAddr(true))
+	return gnet.Run(
+		&tcpHandler{recv: r},
+		r.listen,
+		gnet.WithMulticore(r.multicore),
+		gnet.WithReusePort(true),
+		gnet.WithReuseAddr(true),
+		gnet.WithLogLevel(r.gnetLogLevel),
+	)
 }
 
 func (r *GnetTCP) Stop(ctx context.Context) error {
@@ -112,4 +128,17 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 		})
 	}
 	return gnet.None
+}
+
+func parseGnetLogLevel(level string) logging.Level {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "debug":
+		return logging.DebugLevel
+	case "warn", "warning":
+		return logging.WarnLevel
+	case "error":
+		return logging.ErrorLevel
+	default:
+		return logging.InfoLevel
+	}
 }
