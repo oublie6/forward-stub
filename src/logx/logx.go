@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/panjf2000/gnet/v2/pkg/logging"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -82,5 +83,18 @@ func parseLevel(level string) (zapcore.Level, error) {
 		return zapcore.ErrorLevel, nil
 	default:
 		return 0, fmt.Errorf("unsupported log level: %s", level)
+	}
+}
+
+func ParseGnetLogLevel(level string) logging.Level {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "debug":
+		return logging.DebugLevel
+	case "warn", "warning":
+		return logging.WarnLevel
+	case "error":
+		return logging.ErrorLevel
+	default:
+		return logging.InfoLevel
 	}
 }

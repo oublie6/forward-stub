@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"forword-stub/src/logx"
 	"forword-stub/src/packet"
 
 	"github.com/panjf2000/gnet/v2"
@@ -23,7 +24,7 @@ type GnetUDP struct {
 }
 
 func NewGnetUDP(name, listen string, multicore bool, gnetLogLevel string) *GnetUDP {
-	return &GnetUDP{name: name, listen: listen, multicore: multicore, gnetLogLevel: parseGnetLogLevel(gnetLogLevel)}
+	return &GnetUDP{name: name, listen: listen, multicore: multicore, gnetLogLevel: logx.ParseGnetLogLevel(gnetLogLevel)}
 }
 
 func (r *GnetUDP) Name() string { return r.name }
