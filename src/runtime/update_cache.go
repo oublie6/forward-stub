@@ -6,16 +6,25 @@ import (
 	"time"
 
 	"forword-stub/src/config"
+	"forword-stub/src/logx"
 	"forword-stub/src/packet"
 	"forword-stub/src/pipeline"
 	"forword-stub/src/receiver"
 	"forword-stub/src/sender"
 	"forword-stub/src/task"
+
+	"go.uber.org/zap/zapcore"
 )
 
 // UpdateCache: 简化实现 —— 先整体停掉旧对象，再按新配置重建并启动。
 // 这样代码更短、更稳（便于离线环境快速落地）；后续如果需要“热更新差异化”再扩展。
 func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
+	lg := logx.L()
+	start := time.Now()
+	if logx.Enabled(zapcore.InfoLevel) {
+		lg.Infow("updating runtime cache", "version", cfg.Version, "receivers", len(cfg.Receivers), "tasks", len(cfg.Tasks), "senders", len(cfg.Senders))
+	}
+
 	_ = st.StopAll(ctx)
 
 	compiled, err := CompilePipelines(cfg.Pipelines)
@@ -104,48 +113,42 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		st.mu.Unlock()
 
 		go func(r receiver.Receiver, rn string) {
-			_ = r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) })
+			if err := r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) }); err != nil && logx.Enabled(zapcore.ErrorLevel) {
+				lg.Errorw("receiver stopped with error", "receiver", rn, "error", err)
+			}
 		}(r, name)
 	}
 
 	// 给 gnet 一个很短的启动时间，避免立即 Stop/Update 时边界问题
 	time.Sleep(10 * time.Millisecond)
+	if logx.Enabled(zapcore.InfoLevel) {
+		lg.Infow("runtime cache updated", "version", cfg.Version, "cost", time.Since(start))
+	}
 	return nil
 }
 
 func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.Packet) {
 	st.mu.Lock()
 	sub := st.subs[receiverName]
-	taskNames := make([]string, 0, len(sub))
+	tasks := make([]*TaskState, 0, len(sub))
 	for tn := range sub {
-		taskNames = append(taskNames, tn)
+		if ts := st.tasks[tn]; ts != nil {
+			tasks = append(tasks, ts)
+		}
 	}
 	st.mu.Unlock()
 
-	if len(taskNames) == 0 {
+	if len(tasks) == 0 {
 		pkt.Release()
 		return
 	}
 
-	usedOriginal := false
-	for _, tn := range taskNames {
-		st.mu.Lock()
-		ts := st.tasks[tn]
-		st.mu.Unlock()
-		if ts == nil {
-			continue
-		}
-		var sendPkt *packet.Packet
-		if !usedOriginal {
-			sendPkt = pkt
-			usedOriginal = true
-		} else {
+	for i, ts := range tasks {
+		sendPkt := pkt
+		if i > 0 {
 			sendPkt = pkt.Clone()
 		}
 		ts.T.Handle(ctx, sendPkt)
-	}
-	if !usedOriginal {
-		pkt.Release()
 	}
 }
 
