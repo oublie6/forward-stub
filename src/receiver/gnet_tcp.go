@@ -2,9 +2,9 @@ package receiver
 
 import (
 	"context"
-	"strings"
 	"sync"
 
+	"forword-stub/src/logx"
 	"forword-stub/src/packet"
 
 	"github.com/panjf2000/gnet/v2"
@@ -30,7 +30,7 @@ func NewGnetTCP(name, listen string, multicore bool, framer Framer, gnetLogLevel
 		listen:       listen,
 		multicore:    multicore,
 		framer:       framer,
-		gnetLogLevel: parseGnetLogLevel(gnetLogLevel),
+		gnetLogLevel: logx.ParseGnetLogLevel(gnetLogLevel),
 	}
 }
 
@@ -128,17 +128,4 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 		})
 	}
 	return gnet.None
-}
-
-func parseGnetLogLevel(level string) logging.Level {
-	switch strings.ToLower(strings.TrimSpace(level)) {
-	case "debug":
-		return logging.DebugLevel
-	case "warn", "warning":
-		return logging.WarnLevel
-	case "error":
-		return logging.ErrorLevel
-	default:
-		return logging.InfoLevel
-	}
 }

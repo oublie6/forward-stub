@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"strings"
 	"sync"
 	"sync/atomic"
 
+	"forword-stub/src/logx"
 	"forword-stub/src/packet"
 
 	"github.com/panjf2000/gnet/v2"
@@ -38,7 +38,7 @@ func NewGnetTCPSender(name, remote string, withU16BELen bool, concurrency int, g
 		remote:       remote,
 		withU16BELen: withU16BELen,
 		concurrency:  concurrency,
-		gnetLogLevel: parseGnetLogLevel(gnetLogLevel),
+		gnetLogLevel: logx.ParseGnetLogLevel(gnetLogLevel),
 	}
 	if err := s.ensureClientAndDial(); err != nil {
 		return nil, err
@@ -143,17 +143,4 @@ func (s *GnetTCPSender) pickConn() gnet.Conn {
 	}
 	i := int(atomic.AddUint64(&s.rr, 1)-1) % len(s.conns)
 	return s.conns[i]
-}
-
-func parseGnetLogLevel(level string) logging.Level {
-	switch strings.ToLower(strings.TrimSpace(level)) {
-	case "debug":
-		return logging.DebugLevel
-	case "warn", "warning":
-		return logging.WarnLevel
-	case "error":
-		return logging.ErrorLevel
-	default:
-		return logging.InfoLevel
-	}
 }
