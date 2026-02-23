@@ -64,5 +64,9 @@
         "udp_mcast_out"
       ]
     }
+  },
+  "logging": {
+    "level": "info",
+    "file": ""
   }
 }
