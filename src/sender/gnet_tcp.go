@@ -96,7 +96,7 @@ func (s *GnetTCPSender) ensureClientAndDial() error {
 	defer s.cliMu.Unlock()
 
 	if s.cli == nil {
-		cli, err := gnet.NewClient(&clientEH{}, gnet.WithMulticore(true))
+		cli, err := gnet.NewClient(&clientEH{}, gnet.WithMulticore(true), gnet.WithReusePort(true), gnet.WithReuseAddr(true))
 		if err != nil {
 			return err
 		}

@@ -30,7 +30,7 @@ func (r *GnetTCP) Key() string  { return "tcp_gnet|" + r.listen }
 
 func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
-	return gnet.Run(&tcpHandler{recv: r}, r.listen, gnet.WithMulticore(r.multicore))
+	return gnet.Run(&tcpHandler{recv: r}, r.listen, gnet.WithMulticore(r.multicore), gnet.WithReusePort(true), gnet.WithReuseAddr(true))
 }
 
 func (r *GnetTCP) Stop(ctx context.Context) error {

@@ -29,7 +29,7 @@ func (r *GnetUDP) Key() string  { return "udp_gnet|" + r.listen }
 
 func (r *GnetUDP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
-	return gnet.Run(&udpHandler{recv: r}, r.listen, gnet.WithMulticore(r.multicore))
+	return gnet.Run(&udpHandler{recv: r}, r.listen, gnet.WithMulticore(r.multicore), gnet.WithReusePort(true), gnet.WithReuseAddr(true))
 }
 
 func (r *GnetUDP) Stop(ctx context.Context) error {
