@@ -16,8 +16,12 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// UpdateCache: 简化实现 —— 先整体停掉旧对象，再按新配置重建并启动。
-// 这样代码更短、更稳（便于离线环境快速落地）；后续如果需要“热更新差异化”再扩展。
+// UpdateCache 负责将运行时状态切换到新配置。
+//
+// 当前实现采用“全量替换”策略（先停旧实例，再创建新实例）：
+//  1. 逻辑清晰、故障边界小，适合作为稳定基线；
+//  2. 避免差量更新时复杂的拓扑依赖与回滚成本；
+//  3. 后续若需更高实时性，可在此基础上演进为增量热更新。
 func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	lg := logx.L()
 	start := time.Now()
@@ -32,6 +36,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		return err
 	}
 
+	// 一次性替换 store 内部索引，确保新配置以完整快照生效。
 	st.mu.Lock()
 	st.receivers = make(map[string]*ReceiverState)
 	st.senders = make(map[string]*SenderState)
@@ -41,7 +46,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	st.version = cfg.Version
 	st.mu.Unlock()
 
-	// build senders
+	// 1) 构建 senders：任务阶段需要引用 sender 实例。
 	for name, sc := range cfg.Senders {
 		s, err := buildSender(name, sc, cfg.Logging.Level)
 		if err != nil {
@@ -52,7 +57,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		st.mu.Unlock()
 	}
 
-	// build tasks
+	// 2) 构建 tasks：绑定 pipeline + sender，并建立 receiver 订阅关系。
 	for name, tc := range cfg.Tasks {
 		pipes := make([]*pipeline.Pipeline, 0, len(tc.Pipelines))
 		for _, pn := range tc.Pipelines {
@@ -98,7 +103,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		st.mu.Unlock()
 	}
 
-	// build & start receivers
+	// 3) 构建并启动 receivers：消息入口最终回调 dispatch。
 	for name, rc := range cfg.Receivers {
 		r, err := buildReceiver(name, rc, cfg.Logging.Level)
 		if err != nil {
@@ -119,7 +124,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		}(r, name)
 	}
 
-	// 给 gnet 一个很短的启动时间，避免立即 Stop/Update 时边界问题
+	// 给 gnet 一个很短的启动时间，避免立即 Stop/Update 时边界问题。
 	time.Sleep(10 * time.Millisecond)
 	if logx.Enabled(zapcore.InfoLevel) {
 		lg.Infow("runtime cache updated", "version", cfg.Version, "cost", time.Since(start))
@@ -127,6 +132,12 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	return nil
 }
 
+// dispatch 将单个输入包 fan-out 到订阅当前 receiver 的所有任务。
+//
+// 性能关键点：
+//  1. 在锁内仅完成任务列表快照，避免长时间持锁；
+//  2. 第一个任务复用原始包，后续任务再 Clone，减少一次不必要复制；
+//  3. 没有订阅者时立即释放，避免内存泄漏。
 func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.Packet) {
 	st.mu.Lock()
 	sub := st.subs[receiverName]
