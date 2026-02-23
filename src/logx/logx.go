@@ -19,8 +19,9 @@ type Options struct {
 }
 
 var (
-	mu     sync.RWMutex
-	logger = zap.NewNop().Sugar()
+	mu          sync.RWMutex
+	logger      = zap.NewNop().Sugar()
+	atomicLevel = zap.NewAtomicLevelAt(zapcore.InfoLevel)
 )
 
 func Init(opts Options) error {
@@ -45,7 +46,8 @@ func Init(opts Options) error {
 		})
 	}
 
-	core := zapcore.NewCore(encoder, ws, lvl)
+	atomicLevel.SetLevel(lvl)
+	core := zapcore.NewCore(encoder, ws, atomicLevel)
 	z := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 	next := z.Sugar()
 
@@ -69,6 +71,10 @@ func Sync() error {
 	mu.RLock()
 	defer mu.RUnlock()
 	return logger.Sync()
+}
+
+func Enabled(level zapcore.Level) bool {
+	return atomicLevel.Enabled(level)
 }
 
 func parseLevel(level string) (zapcore.Level, error) {

@@ -5,11 +5,13 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"forword-stub/src/logx"
 	"forword-stub/src/packet"
 	"forword-stub/src/pipeline"
 	"forword-stub/src/sender"
 
 	"github.com/panjf2000/ants/v2"
+	"go.uber.org/zap/zapcore"
 )
 
 type Task struct {
@@ -61,6 +63,9 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 	if err := t.pool.Submit(run); err != nil {
 		t.inflight.Done()
 		pkt.Release()
+		if logx.Enabled(zapcore.DebugLevel) {
+			logx.L().Debugw("task dropped packet due to full worker pool", "task", t.Name, "pool_size", t.PoolSize, "error", err)
+		}
 		return
 	}
 }
@@ -81,6 +86,8 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 		}
 	}
 	for _, s := range t.Senders {
-		_ = s.Send(ctx, pkt)
+		if err := s.Send(ctx, pkt); err != nil && logx.Enabled(zapcore.WarnLevel) {
+			logx.L().Warnw("sender send failed", "task", t.Name, "error", err)
+		}
 	}
 }
