@@ -122,11 +122,15 @@ go run . -api http://127.0.0.1:8080/config -timeout 5 -log-level info
 - `type`：
   - `udp_gnet`
   - `tcp_gnet`
+  - `kafka`
 - `listen`：监听地址（如 `udp://0.0.0.0:9000`）
 - `multicore`：是否启用 gnet multicore。
 - `frame`：仅 TCP 生效，目前支持：
   - `""`：原始流
   - `"u16be"`：2 字节大端长度帧
+- `topic`：`kafka` receiver 消费 topic
+- `group_id`：`kafka` receiver 消费组（可选，不填将自动生成）
+- `listen`：`kafka` receiver 的 broker 列表（逗号分隔，如 `127.0.0.1:9092,127.0.0.1:9093`）
 
 ### 6.3 senders
 
