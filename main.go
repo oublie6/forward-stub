@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"forword-stub/src/app"
 	"forword-stub/src/config"
@@ -64,6 +65,14 @@ func main() {
 	}
 	if cfg.Logging.File == "" {
 		cfg.Logging.File = *logFile
+	}
+	if cfg.Logging.TrafficStatsInterval != "" {
+		d, err := time.ParseDuration(cfg.Logging.TrafficStatsInterval)
+		if err != nil {
+			lg.Errorf("invalid traffic_stats_interval: %v", err)
+			os.Exit(1)
+		}
+		logx.SetTrafficStatsInterval(d)
 	}
 
 	rt := app.NewRuntime()
