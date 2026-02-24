@@ -10,8 +10,9 @@ type Config struct {
 }
 
 type LoggingConfig struct {
-	Level string `json:"level"`
-	File  string `json:"file"`
+	Level                string `json:"level"`
+	File                 string `json:"file"`
+	TrafficStatsInterval string `json:"traffic_stats_interval,omitempty"`
 }
 
 type ReceiverConfig struct {
