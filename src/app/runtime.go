@@ -1,3 +1,4 @@
+// runtime.go 暴露应用层可直接调用的运行时启动与更新接口。
 package app
 
 import (

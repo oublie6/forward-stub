@@ -1,3 +1,4 @@
+// kafka.go 实现基于 Sarama 的 Kafka 发送端。
 package sender
 
 import (

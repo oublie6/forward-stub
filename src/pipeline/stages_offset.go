@@ -1,3 +1,4 @@
+// stages_offset.go 提供按偏移匹配字节等基础 stage 实现。
 package pipeline
 
 import (

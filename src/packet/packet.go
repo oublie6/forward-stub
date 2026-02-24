@@ -1,3 +1,4 @@
+// packet.go 定义统一报文结构与复制、释放等方法。
 package packet
 
 type Proto uint8

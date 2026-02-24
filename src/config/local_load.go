@@ -1,3 +1,4 @@
+// local_load.go 负责从本地 JSON 文件读取并反序列化配置。
 package config
 
 import (

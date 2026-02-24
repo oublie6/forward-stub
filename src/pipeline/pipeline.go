@@ -1,3 +1,4 @@
+// pipeline.go 定义处理链抽象与按顺序执行的核心逻辑。
 package pipeline
 
 import "forword-stub/src/packet"
