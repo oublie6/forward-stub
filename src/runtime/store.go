@@ -49,7 +49,16 @@ func (s *Store) setDispatchSubs(m map[string][]*TaskState) {
 func (s *Store) getDispatchTasks(receiver string) []*TaskState {
 	v := s.dispatchSubs.Load()
 	if v == nil {
-		return nil
+		s.mu.RLock()
+		sub := s.subs[receiver]
+		tasks := make([]*TaskState, 0, len(sub))
+		for tn := range sub {
+			if ts := s.tasks[tn]; ts != nil {
+				tasks = append(tasks, ts)
+			}
+		}
+		s.mu.RUnlock()
+		return tasks
 	}
 	return v.(map[string][]*TaskState)[receiver]
 }

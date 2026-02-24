@@ -43,7 +43,6 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	st.tasks = make(map[string]*TaskState)
 	st.pipelines = compiled
 	st.subs = make(map[string]map[string]struct{})
-	st.setDispatchSubs(nil)
 	st.version = cfg.Version
 	st.mu.Unlock()
 
@@ -104,7 +103,22 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		st.mu.Unlock()
 	}
 
-	// 3) 构建并启动 receivers：消息入口最终回调 dispatch。
+	// 3) 先生成 dispatch 只读快照，再启动 receivers，避免热更新窗口漏转。
+	dispatchSubs := make(map[string][]*TaskState, len(st.subs))
+	st.mu.RLock()
+	for rn, sub := range st.subs {
+		tasks := make([]*TaskState, 0, len(sub))
+		for tn := range sub {
+			if ts := st.tasks[tn]; ts != nil {
+				tasks = append(tasks, ts)
+			}
+		}
+		dispatchSubs[rn] = tasks
+	}
+	st.mu.RUnlock()
+	st.setDispatchSubs(dispatchSubs)
+
+	// 4) 构建并启动 receivers：消息入口最终回调 dispatch。
 	for name, rc := range cfg.Receivers {
 		r, err := buildReceiver(name, rc, cfg.Logging.Level)
 		if err != nil {
@@ -124,21 +138,6 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 			}
 		}(r, name)
 	}
-
-	// 4) 生成 dispatch 的只读快照，避免热路径每包加锁。
-	dispatchSubs := make(map[string][]*TaskState, len(st.subs))
-	st.mu.RLock()
-	for rn, sub := range st.subs {
-		tasks := make([]*TaskState, 0, len(sub))
-		for tn := range sub {
-			if ts := st.tasks[tn]; ts != nil {
-				tasks = append(tasks, ts)
-			}
-		}
-		dispatchSubs[rn] = tasks
-	}
-	st.mu.RUnlock()
-	st.setDispatchSubs(dispatchSubs)
 
 	// 给 gnet 一个很短的启动时间，避免立即 Stop/Update 时边界问题。
 	time.Sleep(10 * time.Millisecond)

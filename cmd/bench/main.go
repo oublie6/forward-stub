@@ -9,6 +9,8 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -46,7 +48,10 @@ func main() {
 	payloadSize := flag.Int("payload-size", 512, "payload size in bytes")
 	workers := flag.Int("workers", max(1, runtime.NumCPU()/2), "number of generator workers")
 	ppsPerWorker := flag.Int("pps-per-worker", 0, "send rate limit per worker (0 means unbounded)")
+	ppsSweep := flag.String("pps-sweep", "", "comma-separated pps-per-worker list, e.g. 1000,2000,4000")
 	multicore := flag.Bool("multicore", true, "whether receivers use gnet multicore")
+	udpSinkReaders := flag.Int("udp-sink-readers", max(1, runtime.NumCPU()/2), "number of concurrent UDP sink readers")
+	udpSinkReadBuf := flag.Int("udp-sink-read-buf", 16<<20, "UDP sink socket read buffer bytes")
 	flag.Parse()
 
 	if *payloadSize <= 0 || *payloadSize > 65535 {
@@ -65,13 +70,25 @@ func main() {
 	defer func() { _ = logx.Sync() }()
 
 	ctx := context.Background()
-	benchRun := func(proto string) {
-		res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, *ppsPerWorker, *multicore)
+	rates := []int{*ppsPerWorker}
+	if strings.TrimSpace(*ppsSweep) != "" {
+		parsed, err := parseSweep(*ppsSweep)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[%s] benchmark failed: %v\n", proto, err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "invalid pps-sweep: %v\n", err)
+			os.Exit(2)
 		}
-		printResult(res)
+		rates = parsed
+	}
+
+	benchRun := func(proto string) {
+		for _, rate := range rates {
+			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[%s] benchmark failed: %v\n", proto, err)
+				os.Exit(1)
+			}
+			printResult(res)
+		}
 	}
 
 	switch *mode {
@@ -86,7 +103,27 @@ func main() {
 	}
 }
 
-func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool) (*result, error) {
+func parseSweep(in string) ([]int, error) {
+	parts := strings.Split(in, ",")
+	out := make([]int, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		v, err := strconv.Atoi(p)
+		if err != nil || v < 0 {
+			return nil, fmt.Errorf("invalid value %q", p)
+		}
+		out = append(out, v)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("empty sweep")
+	}
+	return out, nil
+}
+
+func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int) (*result, error) {
 	m := &metrics{}
 	basePort := map[string]int{"udp": 19100, "tcp": 19200}[proto]
 	if basePort == 0 {
@@ -101,7 +138,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 
 	switch proto {
 	case "udp":
-		sinkAddr, stopSink, err = startUDPSink(basePort+1, m)
+		sinkAddr, stopSink, err = startUDPSink(basePort+1, m, udpSinkReaders, udpSinkReadBuf)
 	case "tcp":
 		sinkAddr, stopSink, err = startTCPSink(basePort+1, m)
 	}
@@ -219,32 +256,40 @@ func benchConfig(proto string, basePort int, sinkAddr string, multicore bool) co
 	}
 }
 
-func startUDPSink(port int, m *metrics) (string, func() error, error) {
+func startUDPSink(port int, m *metrics, readers, readBuf int) (string, func() error, error) {
 	pc, err := net.ListenPacket("udp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		return "", nil, err
 	}
+	if uc, ok := pc.(*net.UDPConn); ok && readBuf > 0 {
+		_ = uc.SetReadBuffer(readBuf)
+	}
 	stop := make(chan struct{})
-	go func() {
-		buf := make([]byte, 65535)
-		for {
-			_ = pc.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
-			n, _, err := pc.ReadFrom(buf)
-			if err != nil {
-				if ne, ok := err.(net.Error); ok && ne.Timeout() {
-					select {
-					case <-stop:
-						return
-					default:
-						continue
+	if readers <= 0 {
+		readers = 1
+	}
+	for i := 0; i < readers; i++ {
+		go func() {
+			buf := make([]byte, 65535)
+			for {
+				_ = pc.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+				n, _, err := pc.ReadFrom(buf)
+				if err != nil {
+					if ne, ok := err.(net.Error); ok && ne.Timeout() {
+						select {
+						case <-stop:
+							return
+						default:
+							continue
+						}
 					}
+					return
 				}
-				return
+				atomic.AddUint64(&m.recvPackets, 1)
+				atomic.AddUint64(&m.recvBytes, uint64(n))
 			}
-			atomic.AddUint64(&m.recvPackets, 1)
-			atomic.AddUint64(&m.recvBytes, uint64(n))
-		}
-	}()
+		}()
+	}
 	return fmt.Sprintf("127.0.0.1:%d", port), func() error {
 		close(stop)
 		return pc.Close()
