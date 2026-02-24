@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: forword-stub-udp
+spec:
+  selector:
+    app: forword-stub
+  ports:
+    - name: udp-in
+      protocol: UDP
+      port: 19000
+      targetPort: 19000
+  type: ClusterIP

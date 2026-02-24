@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forword-stub-config
+data:
+  config.json: |
+    {
+      "version": 1,
+      "logging": {"level": "info", "file": ""},
+      "receivers": {
+        "in": {"type": "udp_gnet", "listen": "udp://0.0.0.0:19000", "multicore": true}
+      },
+      "senders": {
+        "out": {"type": "udp_unicast", "local_ip": "0.0.0.0", "local_port": 19001, "remote": "127.0.0.1:19002"}
+      },
+      "pipelines": {"p": []},
+      "tasks": {
+        "t": {
+          "pool_size": 1024,
+          "fast_path": true,
+          "receivers": ["in"],
+          "pipelines": ["p"],
+          "senders": ["out"]
+        }
+      }
+    }
