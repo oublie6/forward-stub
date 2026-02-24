@@ -282,6 +282,11 @@ A：传入 `-log-file /path/to/app.log`，系统会自动按大小滚动。
 ### Q4：如何观察配置热更新效果
 A：关注 `updating runtime cache` 与 `runtime cache updated` 两条 info 日志，查看版本与耗时。
 
+### Q5：为何没有区分 UDP 单播/组播 receiver
+A：当前 receiver 侧采用统一的 `udp_gnet`。单播/组播差异主要体现在 sender 侧：
+- `udp_unicast`：点对点发送到单个目标地址。
+- `udp_multicast`：发送到组播地址，并可设置 `iface` / `ttl` / `loop`。
+
 ---
 
 ## 12. 后续可演进方向
