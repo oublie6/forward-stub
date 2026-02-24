@@ -15,7 +15,7 @@ import (
 //  2. UpdateCache 在重建时整体替换 map，Store 提供“快照后异步处理”的能力；
 //  3. 停机阶段使用并发关闭，缩短 receiver/sender 数量较多场景下的整体停机耗时。
 type Store struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	version int64
 
