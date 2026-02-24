@@ -185,6 +185,8 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 			return nil, fmt.Errorf("receiver %s unknown frame %s", name, rc.Frame)
 		}
 		return receiver.NewGnetTCP(name, rc.Listen, rc.Multicore, fr, gnetLogLevel), nil
+	case "kafka":
+		return receiver.NewKafkaReceiver(name, rc.Listen, rc.Topic, rc.GroupID)
 	default:
 		return nil, fmt.Errorf("receiver %s unknown type %s", name, rc.Type)
 	}
@@ -212,7 +214,7 @@ func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (send
 		with := sc.Frame == "u16be"
 		return sender.NewGnetTCPSender(name, sc.Remote, with, conc, gnetLogLevel)
 	case "kafka":
-		return sender.NewKafkaSender(name, sc.Topic), nil
+		return sender.NewKafkaSender(name, sc.Remote, sc.Topic)
 	default:
 		return nil, fmt.Errorf("sender %s unknown type %s", name, sc.Type)
 	}

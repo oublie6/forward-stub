@@ -9,6 +9,7 @@ import (
 
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/logging"
+	"go.uber.org/zap/zapcore"
 )
 
 type GnetUDP struct {
@@ -21,6 +22,7 @@ type GnetUDP struct {
 
 	stopMu sync.Mutex
 	stopFn func(context.Context) error
+	stats  *logx.TrafficCounter
 }
 
 func NewGnetUDP(name, listen string, multicore bool, gnetLogLevel string) *GnetUDP {
@@ -32,6 +34,20 @@ func (r *GnetUDP) Key() string  { return "udp_gnet|" + r.listen }
 
 func (r *GnetUDP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
+	if logx.Enabled(zapcore.InfoLevel) {
+		r.stats = logx.AcquireTrafficCounter(
+			"receiver traffic stats",
+			"receiver", r.Name(),
+			"receiver_key", r.Key(),
+			"proto", "udp",
+		)
+	}
+	defer func() {
+		if r.stats != nil {
+			r.stats.Close()
+			r.stats = nil
+		}
+	}()
 	return gnet.Run(
 		&udpHandler{recv: r},
 		r.listen,
@@ -47,7 +63,15 @@ func (r *GnetUDP) Stop(ctx context.Context) error {
 	fn := r.stopFn
 	r.stopMu.Unlock()
 	if fn != nil {
+		if r.stats != nil {
+			r.stats.Close()
+			r.stats = nil
+		}
 		return fn(ctx)
+	}
+	if r.stats != nil {
+		r.stats.Close()
+		r.stats = nil
 	}
 	return nil
 }
@@ -68,6 +92,9 @@ func (h *udpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	in, _ := c.Next(-1)
 	if len(in) == 0 {
 		return gnet.None
+	}
+	if h.recv.stats != nil {
+		h.recv.stats.AddBytes(len(in))
 	}
 	payload, rel := packet.CopyFrom(in)
 	h.recv.onPacket(&packet.Packet{
