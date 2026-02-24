@@ -15,22 +15,30 @@ import (
 )
 
 type KafkaReceiver struct {
-	name    string
+	// name: 逻辑名称，对应配置 receivers 的 key。
+	name string
+	// brokers: Kafka broker 列表，来自配置 listen（CSV）。
 	brokers []string
-	topic   string
+	// topic: 消费主题。
+	topic string
+	// groupID: 消费组，用于分区负载均衡与位点管理。
 	groupID string
 
 	onPacket func(*packet.Packet)
 
-	mu     sync.Mutex
+	mu sync.Mutex
+	// client: franz-go 客户端；Start 创建，Stop/退出时关闭。
 	client *kgo.Client
+	// cancel: 用于中断 PollFetches。
 	cancel context.CancelFunc
-	done   chan struct{}
+	// done: Start 退出信号，供 Stop 等待优雅结束。
+	done chan struct{}
 
 	stats *logx.TrafficCounter
 }
 
 func NewKafkaReceiver(name, brokers, topic, groupID string) (*KafkaReceiver, error) {
+	// topic 与 brokers 是必填。groupID 允许空并自动生成，便于开箱即用。
 	if strings.TrimSpace(topic) == "" {
 		return nil, errors.New("kafka receiver requires topic")
 	}
@@ -52,6 +60,11 @@ func (r *KafkaReceiver) Key() string {
 func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
 
+	// 消费参数说明：
+	// - ConsumerGroup + ConsumeTopics: 使用 group 消费模型，支持重平衡。
+	// - FetchMinBytes(1): 低流量时尽快返回，降低端到端延迟。
+	// - FetchMaxBytes(16MiB): 提高批量拉取上限，提升吞吐。
+	// - FetchMaxWait(100ms): 服务端最长等待窗口，平衡延迟与批量效率。
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(r.brokers...),
 		kgo.ConsumerGroup(r.groupID),
@@ -102,6 +115,7 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 	}()
 
 	for {
+		// PollFetches 为阻塞拉取；被 rctx cancel 时会尽快返回。
 		fetches := cli.PollFetches(rctx)
 		if err := fetches.Err0(); err != nil {
 			if errors.Is(err, context.Canceled) {
@@ -119,6 +133,8 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 			if r.stats != nil {
 				r.stats.AddBytes(len(rec.Value))
 			}
+			// 数据生命周期约定：
+			// 从 franz-go record 拷贝到 packet 池化内存，避免上游复用/释放导致悬挂引用。
 			payload, rel := packet.CopyFrom(rec.Value)
 			r.onPacket(&packet.Packet{
 				Payload: payload,
@@ -131,12 +147,15 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 			})
 		})
 		if anyRecord {
+			// 告知客户端此批次处理完成，允许参与重平衡进程。
 			cli.AllowRebalance()
 		}
 	}
 }
 
 func (r *KafkaReceiver) Stop(ctx context.Context) error {
+	// Stop 只负责触发 cancel 并等待 Start 退出，不直接关闭 client；
+	// client 关闭由 Start defer 统一执行，避免并发 close。
 	r.mu.Lock()
 	cancel := r.cancel
 	done := r.done

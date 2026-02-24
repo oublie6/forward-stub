@@ -132,6 +132,17 @@ go run . -api http://127.0.0.1:8080/config -timeout 5 -log-level info
 - `group_id`：`kafka` receiver 消费组（可选，不填将自动生成）
 - `listen`：`kafka` receiver 的 broker 列表（逗号分隔，如 `127.0.0.1:9092,127.0.0.1:9093`）
 
+Kafka receiver 示例：
+
+```json
+{
+  "type": "kafka",
+  "listen": "127.0.0.1:9092,127.0.0.1:9093",
+  "topic": "input-topic",
+  "group_id": "forword-stub-g1"
+}
+```
+
 ### 6.3 senders
 
 `type` 支持：
@@ -149,6 +160,16 @@ go run . -api http://127.0.0.1:8080/config -timeout 5 -log-level info
 - `topic`：Kafka topic
 - `local_ip` / `local_port`：UDP 绑定地址
 - `iface` / `ttl` / `loop`：组播参数
+
+Kafka sender 示例：
+
+```json
+{
+  "type": "kafka",
+  "remote": "127.0.0.1:9092,127.0.0.1:9093",
+  "topic": "output-topic"
+}
+```
 
 ### 6.4 pipelines
 

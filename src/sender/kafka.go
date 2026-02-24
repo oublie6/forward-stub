@@ -15,15 +15,20 @@ import (
 )
 
 type KafkaSender struct {
-	name    string
+	// name: 逻辑名称，对应配置 senders 的 key。
+	name string
+	// brokers: Kafka broker 列表，来自配置 remote（CSV）。
 	brokers []string
-	topic   string
+	// topic: 目标主题。
+	topic string
 
-	mu     sync.Mutex
+	mu sync.Mutex
+	// client: franz-go producer 客户端，实例级复用以减少连接与元数据开销。
 	client *kgo.Client
 }
 
 func NewKafkaSender(name, brokers, topic string) (*KafkaSender, error) {
+	// topic 与 brokers 必填。
 	if strings.TrimSpace(topic) == "" {
 		return nil, errors.New("kafka sender requires topic")
 	}
@@ -31,6 +36,11 @@ func NewKafkaSender(name, brokers, topic string) (*KafkaSender, error) {
 	if len(brs) == 0 {
 		return nil, errors.New("kafka sender requires brokers in remote/listen")
 	}
+	// 生产参数说明：
+	// - RequiredAcks(AllISRAcks): 可靠性优先，避免 leader-only ack 导致数据风险。
+	// - StickyKeyPartitioner: 对无 key 流量提升批量聚合效率，提升吞吐。
+	// - ProducerBatchMaxBytes(1MiB): 放大单批次上限，减少请求次数。
+	// - ProducerLinger(1ms): 微小聚合窗口，兼顾吞吐与低延迟。
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(brs...),
 		kgo.RequiredAcks(kgo.AllISRAcks()),
@@ -55,6 +65,9 @@ func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
 	if cli == nil {
 		return errors.New("kafka sender closed")
 	}
+	// 这里使用 ProduceSync：
+	// - 优点：调用侧语义简单，错误可即时反馈到任务链路；
+	// - 代价：吞吐上限通常低于纯异步生产（若后续需要极限吞吐可演进）。
 	rec := &kgo.Record{Topic: s.topic, Value: p.Payload}
 	res := cli.ProduceSync(ctx, rec)
 	if err := res.FirstErr(); err != nil {
