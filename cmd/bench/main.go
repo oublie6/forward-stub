@@ -50,8 +50,6 @@ func main() {
 	ppsPerWorker := flag.Int("pps-per-worker", 0, "send rate limit per worker (0 means unbounded)")
 	ppsSweep := flag.String("pps-sweep", "", "comma-separated pps-per-worker list, e.g. 1000,2000,4000")
 	multicore := flag.Bool("multicore", true, "whether receivers use gnet multicore")
-	taskFastPath := flag.Bool("task-fast-path", false, "task processing mode: true=inline low-latency, false=worker-pool high-throughput")
-	taskPoolSize := flag.Int("task-pool-size", 4096, "task worker pool size when fast-path is disabled")
 	udpSinkReaders := flag.Int("udp-sink-readers", max(1, runtime.NumCPU()/2), "number of concurrent UDP sink readers")
 	udpSinkReadBuf := flag.Int("udp-sink-read-buf", 16<<20, "UDP sink socket read buffer bytes")
 	flag.Parse()
@@ -84,7 +82,7 @@ func main() {
 
 	benchRun := func(proto string) {
 		for _, rate := range rates {
-			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *taskFastPath, *taskPoolSize, *udpSinkReaders, *udpSinkReadBuf)
+			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[%s] benchmark failed: %v\n", proto, err)
 				os.Exit(1)
@@ -125,7 +123,7 @@ func parseSweep(in string) ([]int, error) {
 	return out, nil
 }
 
-func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore, taskFastPath bool, taskPoolSize, udpSinkReaders, udpSinkReadBuf int) (*result, error) {
+func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int) (*result, error) {
 	m := &metrics{}
 	basePort := map[string]int{"udp": 19100, "tcp": 19200}[proto]
 	if basePort == 0 {
