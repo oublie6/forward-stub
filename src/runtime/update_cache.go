@@ -139,7 +139,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 //  2. 第一个任务复用原始包，后续任务再 Clone，减少一次不必要复制；
 //  3. 没有订阅者时立即释放，避免内存泄漏。
 func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.Packet) {
-	st.mu.Lock()
+	st.mu.RLock()
 	sub := st.subs[receiverName]
 	tasks := make([]*TaskState, 0, len(sub))
 	for tn := range sub {
@@ -147,7 +147,7 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 			tasks = append(tasks, ts)
 		}
 	}
-	st.mu.Unlock()
+	st.mu.RUnlock()
 
 	if len(tasks) == 0 {
 		pkt.Release()
