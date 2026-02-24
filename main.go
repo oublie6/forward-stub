@@ -1,3 +1,4 @@
+// main.go 负责解析启动参数、加载配置来源并驱动运行时生命周期。
 package main
 
 import (

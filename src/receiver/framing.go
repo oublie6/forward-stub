@@ -1,3 +1,4 @@
+// framing.go 定义流式帧解码接口与 u16be 分帧实现。
 package receiver
 
 import "encoding/binary"

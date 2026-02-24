@@ -1,3 +1,4 @@
+// kafka.go 实现基于 Sarama consumer group 的 Kafka 接收端。
 package receiver
 
 import (

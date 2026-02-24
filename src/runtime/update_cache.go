@@ -1,3 +1,4 @@
+// update_cache.go 实现运行时缓存的全量替换流程。
 package runtime
 
 import (

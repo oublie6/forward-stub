@@ -1,3 +1,4 @@
+// udp_unicast_gnet.go 实现 UDP 单播发送端。
 package sender
 
 import (

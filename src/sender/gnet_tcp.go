@@ -1,3 +1,4 @@
+// gnet_tcp.go 实现基于 gnet 的 TCP 发送端。
 package sender
 
 import (

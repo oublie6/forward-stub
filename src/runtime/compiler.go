@@ -1,3 +1,4 @@
+// compiler.go 负责把配置编译为 receiver/pipeline/task/sender 运行对象。
 package runtime
 
 import (

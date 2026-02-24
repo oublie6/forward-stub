@@ -1,3 +1,4 @@
+// logx.go 初始化全局日志器并提供等级判断辅助函数。
 package logx
 
 import (

@@ -1,3 +1,4 @@
+// traffic_agg.go 提供流量统计聚合器并定期输出指标日志。
 package logx
 
 import (

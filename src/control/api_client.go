@@ -1,3 +1,4 @@
+// api_client.go 提供远端配置 API 拉取客户端。
 package control
 
 import (

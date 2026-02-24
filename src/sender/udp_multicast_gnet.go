@@ -1,3 +1,4 @@
+// udp_multicast_gnet.go 实现 UDP 组播发送端。
 package sender
 
 import (

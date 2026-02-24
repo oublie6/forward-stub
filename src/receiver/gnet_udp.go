@@ -1,3 +1,4 @@
+// gnet_udp.go 实现基于 gnet 的 UDP 接收端。
 package receiver
 
 import (

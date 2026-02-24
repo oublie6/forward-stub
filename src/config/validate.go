@@ -1,3 +1,4 @@
+// validate.go 校验配置完整性、参数合法性与引用关系。
 package config
 
 import (

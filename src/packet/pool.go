@@ -1,3 +1,4 @@
+// pool.go 封装 payload 缓冲池，减少高频内存分配。
 package packet
 
 import "github.com/valyala/bytebufferpool"

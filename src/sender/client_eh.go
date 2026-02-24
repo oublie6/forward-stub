@@ -1,3 +1,4 @@
+// client_eh.go 定义 gnet 客户端事件处理器的最小实现。
 package sender
 
 import "github.com/panjf2000/gnet/v2"

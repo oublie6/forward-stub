@@ -1,3 +1,4 @@
+// receiver.go 声明接收端统一接口与公共回调定义。
 package receiver
 
 import (

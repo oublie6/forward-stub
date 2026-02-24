@@ -1,3 +1,4 @@
+// bench main 提供本地 UDP/TCP 转发链路的压测入口。
 package main
 
 import (

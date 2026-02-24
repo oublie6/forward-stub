@@ -1,3 +1,4 @@
+// store.go 维护当前生效配置及组件集合，并提供安全切换能力。
 package runtime
 
 import (
