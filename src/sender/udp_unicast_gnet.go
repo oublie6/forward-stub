@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 
 	"forword-stub/src/packet"
 )
@@ -19,7 +20,7 @@ type UDPUnicastSender struct {
 	local  *net.UDPAddr
 
 	mu   sync.Mutex
-	conn *net.UDPConn
+	conn atomic.Pointer[net.UDPConn]
 }
 
 func NewUDPUnicastSender(name, localIP string, localPort int, remote string) (*UDPUnicastSender, error) {
@@ -49,20 +50,24 @@ func (s *UDPUnicastSender) Key() string {
 }
 
 func (s *UDPUnicastSender) Send(ctx context.Context, p *packet.Packet) error {
-	c, err := s.getConn()
-	if err != nil {
-		return err
+	c := s.conn.Load()
+	if c == nil {
+		var err error
+		c, err = s.getConn()
+		if err != nil {
+			return err
+		}
 	}
-	_, err = c.Write(p.Payload)
+	_, err := c.Write(p.Payload)
 	return err
 }
 
 func (s *UDPUnicastSender) Close(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.conn != nil {
-		_ = s.conn.Close()
-		s.conn = nil
+	if c := s.conn.Load(); c != nil {
+		_ = c.Close()
+		s.conn.Store(nil)
 	}
 	return nil
 }
@@ -70,13 +75,13 @@ func (s *UDPUnicastSender) Close(ctx context.Context) error {
 func (s *UDPUnicastSender) getConn() (*net.UDPConn, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.conn != nil {
-		return s.conn, nil
+	if c := s.conn.Load(); c != nil {
+		return c, nil
 	}
 	if err := s.ensureConnLocked(); err != nil {
 		return nil, err
 	}
-	return s.conn, nil
+	return s.conn.Load(), nil
 }
 
 func (s *UDPUnicastSender) ensureConn() error {
@@ -86,7 +91,7 @@ func (s *UDPUnicastSender) ensureConn() error {
 }
 
 func (s *UDPUnicastSender) ensureConnLocked() error {
-	if s.conn != nil {
+	if s.conn.Load() != nil {
 		return nil
 	}
 	c, err := net.DialUDP("udp", s.local, s.remote)
@@ -94,6 +99,6 @@ func (s *UDPUnicastSender) ensureConnLocked() error {
 		return err
 	}
 	_ = c.SetWriteBuffer(4 << 20)
-	s.conn = c
+	s.conn.Store(c)
 	return nil
 }
