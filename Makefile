@@ -1,7 +1,7 @@
 APP_NAME ?= forword-stub
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: build test vet package package-all docker-image clean
+.PHONY: build test vet package package-all clean
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o bin/$(APP_NAME) .
@@ -17,9 +17,6 @@ package:
 
 package-all:
 	APP_NAME=$(APP_NAME) VERSION=$(VERSION) TARGETS="linux/amd64 linux/arm64 windows/amd64" ./scripts/package.sh
-
-docker-image: build
-	docker build -t $(APP_NAME):$(VERSION) --build-arg BIN_PATH=bin/$(APP_NAME) .
 
 clean:
 	rm -rf bin dist
