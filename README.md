@@ -340,3 +340,31 @@ APP_NAME=forword-stub VERSION=v1.0.0 TARGETS="linux/amd64 linux/arm64" ./scripts
 ```
 
 可通过 `-ldflags "-X main.version=..."` 注入版本号（`make package` 已内置）。
+
+---
+
+## 12. Docker / Kubernetes 部署建议（二进制外部构建）
+
+为避免在 Docker 构建阶段重新拉依赖与编译，推荐先在宿主机产出 Linux 二进制，再在 Dockerfile 中仅拷贝二进制到最小运行时镜像。
+
+### 12.1 先在宿主机编译 Linux 二进制
+
+```bash
+./scripts/build-linux.sh
+```
+
+默认输出文件：`dist/linux/forword-stub`。
+
+### 12.2 构建运行时镜像（仅拷贝二进制）
+
+```bash
+docker build --build-arg BINARY_PATH=dist/linux/forword-stub -t forword-stub:latest .
+```
+
+也可直接使用：
+
+```bash
+make docker-build
+```
+
+该流程与 `deploy/k8s/deployment.yaml` 中的启动参数兼容（`-config /app/config/config.json` 由 ConfigMap 挂载提供）。

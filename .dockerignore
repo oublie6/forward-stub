@@ -1,6 +1,9 @@
 .git
 .gitignore
 bin
-dist
+# keep dist excluded by default, then selectively include prebuilt runtime binary
+/dist/*
+!/dist/linux/
+!/dist/linux/forword-stub
 .idea
 *.log
