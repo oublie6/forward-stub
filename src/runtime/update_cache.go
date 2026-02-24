@@ -43,6 +43,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	st.tasks = make(map[string]*TaskState)
 	st.pipelines = compiled
 	st.subs = make(map[string]map[string]struct{})
+	st.setDispatchSubs(nil)
 	st.version = cfg.Version
 	st.mu.Unlock()
 
@@ -124,6 +125,21 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		}(r, name)
 	}
 
+	// 4) 生成 dispatch 的只读快照，避免热路径每包加锁。
+	dispatchSubs := make(map[string][]*TaskState, len(st.subs))
+	st.mu.RLock()
+	for rn, sub := range st.subs {
+		tasks := make([]*TaskState, 0, len(sub))
+		for tn := range sub {
+			if ts := st.tasks[tn]; ts != nil {
+				tasks = append(tasks, ts)
+			}
+		}
+		dispatchSubs[rn] = tasks
+	}
+	st.mu.RUnlock()
+	st.setDispatchSubs(dispatchSubs)
+
 	// 给 gnet 一个很短的启动时间，避免立即 Stop/Update 时边界问题。
 	time.Sleep(10 * time.Millisecond)
 	if logx.Enabled(zapcore.InfoLevel) {
@@ -139,15 +155,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 //  2. 第一个任务复用原始包，后续任务再 Clone，减少一次不必要复制；
 //  3. 没有订阅者时立即释放，避免内存泄漏。
 func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.Packet) {
-	st.mu.RLock()
-	sub := st.subs[receiverName]
-	tasks := make([]*TaskState, 0, len(sub))
-	for tn := range sub {
-		if ts := st.tasks[tn]; ts != nil {
-			tasks = append(tasks, ts)
-		}
-	}
-	st.mu.RUnlock()
+	tasks := st.getDispatchTasks(receiverName)
 
 	if len(tasks) == 0 {
 		pkt.Release()
