@@ -30,7 +30,8 @@ type Task struct {
 	PoolSize int
 	FastPath bool
 
-	pool *ants.Pool
+	pool  *ants.Pool
+	stats *logx.TrafficCounter
 
 	accepting atomic.Bool
 	inflight  sync.WaitGroup
@@ -54,6 +55,12 @@ func (t *Task) Start() error {
 	}
 	t.pool = p
 	t.accepting.Store(true)
+	if logx.Enabled(zapcore.InfoLevel) {
+		t.stats = logx.AcquireTrafficCounter(
+			"sender traffic stats",
+			"task", t.Name,
+		)
+	}
 	return nil
 }
 
@@ -95,6 +102,10 @@ func (t *Task) StopGraceful() {
 		t.pool.Release()
 		t.pool = nil
 	}
+	if t.stats != nil {
+		t.stats.Close()
+		t.stats = nil
+	}
 }
 
 // processAndSend 依次执行 pipeline，再将结果发送到所有 sender。
@@ -105,6 +116,9 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 		}
 	}
 	for _, s := range t.Senders {
+		if t.stats != nil {
+			t.stats.AddBytes(len(pkt.Payload))
+		}
 		if err := s.Send(ctx, pkt); err != nil && logx.Enabled(zapcore.WarnLevel) {
 			logx.L().Warnw("sender send failed", "task", t.Name, "error", err)
 		}

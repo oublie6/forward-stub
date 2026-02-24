@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 	"go.uber.org/zap"
@@ -15,8 +16,9 @@ import (
 
 // Options 为日志初始化参数。
 type Options struct {
-	Level string
-	File  string
+	Level                string
+	File                 string
+	TrafficStatsInterval time.Duration
 }
 
 var (
@@ -53,6 +55,7 @@ func Init(opts Options) error {
 	}
 
 	atomicLevel.SetLevel(lvl)
+	SetTrafficStatsInterval(opts.TrafficStatsInterval)
 	core := zapcore.NewCore(encoder, ws, atomicLevel)
 	z := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 	next := z.Sugar()

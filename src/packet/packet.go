@@ -3,8 +3,9 @@ package packet
 type Proto uint8
 
 const (
-	ProtoUDP Proto = 1
-	ProtoTCP Proto = 2
+	ProtoUDP   Proto = 1
+	ProtoTCP   Proto = 2
+	ProtoKafka Proto = 3
 )
 
 type Meta struct {
