@@ -103,7 +103,22 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		st.mu.Unlock()
 	}
 
-	// 3) 构建并启动 receivers：消息入口最终回调 dispatch。
+	// 3) 先生成 dispatch 只读快照，再启动 receivers，避免热更新窗口漏转。
+	dispatchSubs := make(map[string][]*TaskState, len(st.subs))
+	st.mu.RLock()
+	for rn, sub := range st.subs {
+		tasks := make([]*TaskState, 0, len(sub))
+		for tn := range sub {
+			if ts := st.tasks[tn]; ts != nil {
+				tasks = append(tasks, ts)
+			}
+		}
+		dispatchSubs[rn] = tasks
+	}
+	st.mu.RUnlock()
+	st.setDispatchSubs(dispatchSubs)
+
+	// 4) 构建并启动 receivers：消息入口最终回调 dispatch。
 	for name, rc := range cfg.Receivers {
 		r, err := buildReceiver(name, rc, cfg.Logging.Level)
 		if err != nil {
@@ -139,15 +154,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 //  2. 第一个任务复用原始包，后续任务再 Clone，减少一次不必要复制；
 //  3. 没有订阅者时立即释放，避免内存泄漏。
 func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.Packet) {
-	st.mu.RLock()
-	sub := st.subs[receiverName]
-	tasks := make([]*TaskState, 0, len(sub))
-	for tn := range sub {
-		if ts := st.tasks[tn]; ts != nil {
-			tasks = append(tasks, ts)
-		}
-	}
-	st.mu.RUnlock()
+	tasks := st.getDispatchTasks(receiverName)
 
 	if len(tasks) == 0 {
 		pkt.Release()
