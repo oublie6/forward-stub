@@ -13,13 +13,21 @@ import (
 	"forword-stub/src/logx"
 )
 
+var version = "dev"
+
 func main() {
 	localPath := flag.String("config", "", "local config json path (optional)")
 	apiURL := flag.String("api", "", "java config service url (optional)")
 	timeoutSec := flag.Int("timeout", 5, "api timeout seconds")
 	logLevel := flag.String("log-level", "info", "log level: debug|info|warn|error")
 	logFile := flag.String("log-file", "", "optional log file path (stdout when empty)")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		_, _ = os.Stdout.WriteString(version + "\n")
+		return
+	}
 
 	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile}); err != nil {
 		_, _ = os.Stderr.WriteString("init logger error: " + err.Error() + "\n")

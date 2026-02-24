@@ -148,7 +148,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	defer func() { _ = stopSink() }()
 
 	rt := app.NewRuntime()
-	cfg := benchConfig(proto, basePort, sinkAddr, multicore)
+	cfg := benchConfig(proto, basePort, sinkAddr, multicore, taskFastPath, taskPoolSize)
 	if err := rt.UpdateCache(ctx, cfg); err != nil {
 		return nil, fmt.Errorf("update cache: %w", err)
 	}
@@ -212,7 +212,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	}, nil
 }
 
-func benchConfig(proto string, basePort int, sinkAddr string, multicore bool) config.Config {
+func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize int) config.Config {
 	rc := config.ReceiverConfig{Multicore: multicore}
 	sc := config.SenderConfig{Concurrency: 1}
 	switch proto {
@@ -246,8 +246,8 @@ func benchConfig(proto string, basePort int, sinkAddr string, multicore bool) co
 		},
 		Tasks: map[string]config.TaskConfig{
 			"t": {
-				PoolSize:  1024,
-				FastPath:  true,
+				PoolSize:  taskPoolSize,
+				FastPath:  taskFastPath,
 				Receivers: []string{"in"},
 				Pipelines: []string{"p"},
 				Senders:   []string{"out"},
