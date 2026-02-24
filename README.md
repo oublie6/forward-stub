@@ -236,6 +236,32 @@ go test ./...
 
 > 当前仓库暂无 `_test.go` 文件，`go test` 主要用于验证可编译与包初始化正确性。
 
+
+### 10.3 本地压测工具（UDP/TCP 转发）
+
+仓库提供了一个可直接运行的经验压测工具：`cmd/bench/main.go`。
+
+```bash
+go run ./cmd/bench -mode both -duration 8s -warmup 2s -payload-size 512 -workers 4
+```
+
+参数说明：
+
+- `-mode`: `udp` / `tcp` / `both`
+- `-duration`: 统计窗口时长
+- `-warmup`: 预热时长（预热后会清零计数）
+- `-payload-size`: 业务负载字节数（TCP 模式会自动附加 `u16be` 长度头）
+- `-workers`: 发送协程数
+- `-pps-per-worker`: 每个发送协程的限速（pps，`0` 表示不限速）
+- `-multicore`: 是否启用 receiver 的 gnet multicore
+
+输出指标：
+
+- `throughput`: 收到端口统计得到的 `pps` 与 `Mbps`
+- `loss`: 以生成端发送包数与接收端收到包数估算的丢包率
+
+> 说明：该工具采用本机 loopback 链路，结果主要用于版本对比和参数调优，不等同于真实网卡/跨机房生产带宽上限。
+
 ---
 
 ## 11. 常见问题（FAQ）
