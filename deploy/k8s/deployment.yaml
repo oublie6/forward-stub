@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forword-stub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: forword-stub
+  template:
+    metadata:
+      labels:
+        app: forword-stub
+    spec:
+      containers:
+        - name: forword-stub
+          image: forword-stub:latest
+          imagePullPolicy: IfNotPresent
+          args: ["-config", "/app/config/config.json", "-log-level", "info"]
+          ports:
+            - name: udp-in
+              containerPort: 19000
+              protocol: UDP
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: forword-stub-config
