@@ -44,9 +44,7 @@
       "receivers": [
         "udp_in"
       ],
-      "pipelines": [
-        "p1"
-      ],
+      "pipelines": [],
       "senders": [
         "udp_uni_out"
       ]

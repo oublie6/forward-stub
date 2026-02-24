@@ -26,9 +26,9 @@ func (c *Config) Validate() error {
 		if len(t.Receivers) == 0 {
 			return fmt.Errorf("task %s has no receivers", tn)
 		}
-		if len(t.Pipelines) == 0 {
-			return fmt.Errorf("task %s has no pipelines", tn)
-		}
+		//if len(t.Pipelines) == 0 {
+		//	return fmt.Errorf("task %s has no pipelines", tn)
+		//}
 		if len(t.Senders) == 0 {
 			return fmt.Errorf("task %s has no senders", tn)
 		}
