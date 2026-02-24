@@ -12,6 +12,10 @@ require (
 )
 
 require (
+	github.com/klauspost/compress v1.17.8 // indirect
+	github.com/pierrec/lz4/v4 v4.1.21 // indirect
+	github.com/twmb/franz-go v1.18.0 // indirect
+	github.com/twmb/franz-go/pkg/kmsg v1.9.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/sys v0.36.0 // indirect

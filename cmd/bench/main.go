@@ -52,6 +52,11 @@ func main() {
 	multicore := flag.Bool("multicore", true, "whether receivers use gnet multicore")
 	udpSinkReaders := flag.Int("udp-sink-readers", max(1, runtime.NumCPU()/2), "number of concurrent UDP sink readers")
 	udpSinkReadBuf := flag.Int("udp-sink-read-buf", 16<<20, "UDP sink socket read buffer bytes")
+	taskFastPath := flag.Bool("task-fast-path", false, "whether benchmark task uses fast_path")
+	taskPoolSize := flag.Int("task-pool-size", 2048, "benchmark task worker pool size when fast_path=false")
+	logLevel := flag.String("log-level", "warn", "benchmark runtime log level: debug|info|warn|error")
+	logFile := flag.String("log-file", "", "optional benchmark runtime log file")
+	trafficStatsInterval := flag.Duration("traffic-stats-interval", time.Second, "aggregated traffic stats log interval (e.g. 5s, 10s)")
 	flag.Parse()
 
 	if *payloadSize <= 0 || *payloadSize > 65535 {
@@ -63,11 +68,12 @@ func main() {
 		os.Exit(2)
 	}
 
-	if err := logx.Init(logx.Options{Level: "warn"}); err != nil {
+	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile}); err != nil {
 		fmt.Fprintf(os.Stderr, "log init failed: %v\n", err)
 		os.Exit(1)
 	}
 	defer func() { _ = logx.Sync() }()
+	logx.SetTrafficStatsInterval(*trafficStatsInterval)
 
 	ctx := context.Background()
 	rates := []int{*ppsPerWorker}
@@ -82,7 +88,7 @@ func main() {
 
 	benchRun := func(proto string) {
 		for _, rate := range rates {
-			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf)
+			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf, *taskFastPath, *taskPoolSize)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[%s] benchmark failed: %v\n", proto, err)
 				os.Exit(1)
@@ -123,7 +129,7 @@ func parseSweep(in string) ([]int, error) {
 	return out, nil
 }
 
-func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int) (*result, error) {
+func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int, taskFastPath bool, taskPoolSize int) (*result, error) {
 	m := &metrics{}
 	basePort := map[string]int{"udp": 19100, "tcp": 19200}[proto]
 	if basePort == 0 {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/logging"
+	"go.uber.org/zap/zapcore"
 )
 
 type GnetTCP struct {
@@ -22,6 +23,7 @@ type GnetTCP struct {
 
 	stopMu sync.Mutex
 	stopFn func(context.Context) error
+	stats  *logx.TrafficCounter
 }
 
 func NewGnetTCP(name, listen string, multicore bool, framer Framer, gnetLogLevel string) *GnetTCP {
@@ -39,6 +41,20 @@ func (r *GnetTCP) Key() string  { return "tcp_gnet|" + r.listen }
 
 func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
+	if logx.Enabled(zapcore.InfoLevel) {
+		r.stats = logx.AcquireTrafficCounter(
+			"receiver traffic stats",
+			"receiver", r.Name(),
+			"receiver_key", r.Key(),
+			"proto", "tcp",
+		)
+	}
+	defer func() {
+		if r.stats != nil {
+			r.stats.Close()
+			r.stats = nil
+		}
+	}()
 	return gnet.Run(
 		&tcpHandler{recv: r},
 		r.listen,
@@ -54,7 +70,15 @@ func (r *GnetTCP) Stop(ctx context.Context) error {
 	fn := r.stopFn
 	r.stopMu.Unlock()
 	if fn != nil {
+		if r.stats != nil {
+			r.stats.Close()
+			r.stats = nil
+		}
 		return fn(ctx)
+	}
+	if r.stats != nil {
+		r.stats.Close()
+		r.stats = nil
 	}
 	return nil
 }
@@ -95,6 +119,9 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	cs.buf = append(cs.buf, in...)
 
 	if h.recv.framer == nil {
+		if h.recv.stats != nil {
+			h.recv.stats.AddBytes(len(cs.buf))
+		}
 		payload, rel := packet.CopyFrom(cs.buf)
 		cs.buf = cs.buf[:0]
 		h.recv.onPacket(&packet.Packet{
@@ -116,6 +143,9 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	cs.buf = append(cs.buf[:0], remain...)
 
 	for _, fr := range frames {
+		if h.recv.stats != nil {
+			h.recv.stats.AddBytes(len(fr))
+		}
 		payload, rel := packet.CopyFrom(fr)
 		h.recv.onPacket(&packet.Packet{
 			Payload: payload,

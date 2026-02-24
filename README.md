@@ -122,11 +122,15 @@ go run . -api http://127.0.0.1:8080/config -timeout 5 -log-level info
 - `type`：
   - `udp_gnet`
   - `tcp_gnet`
+  - `kafka`
 - `listen`：监听地址（如 `udp://0.0.0.0:9000`）
 - `multicore`：是否启用 gnet multicore。
 - `frame`：仅 TCP 生效，目前支持：
   - `""`：原始流
   - `"u16be"`：2 字节大端长度帧
+- `topic`：`kafka` receiver 消费 topic
+- `group_id`：`kafka` receiver 消费组（可选，不填将自动生成）
+- `listen`：`kafka` receiver 的 broker 列表（逗号分隔，如 `127.0.0.1:9092,127.0.0.1:9093`）
 
 ### 6.3 senders
 
@@ -277,6 +281,11 @@ A：传入 `-log-file /path/to/app.log`，系统会自动按大小滚动。
 
 ### Q4：如何观察配置热更新效果
 A：关注 `updating runtime cache` 与 `runtime cache updated` 两条 info 日志，查看版本与耗时。
+
+### Q5：为何没有区分 UDP 单播/组播 receiver
+A：当前 receiver 侧采用统一的 `udp_gnet`。单播/组播差异主要体现在 sender 侧：
+- `udp_unicast`：点对点发送到单个目标地址。
+- `udp_multicast`：发送到组播地址，并可设置 `iface` / `ttl` / `loop`。
 
 ---
 

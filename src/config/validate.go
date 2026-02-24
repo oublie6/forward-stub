@@ -48,5 +48,35 @@ func (c *Config) Validate() error {
 			}
 		}
 	}
+
+	for rn, r := range c.Receivers {
+		switch r.Type {
+		case "udp_gnet", "tcp_gnet":
+		case "kafka":
+			if r.Listen == "" {
+				return fmt.Errorf("receiver %s kafka requires listen as brokers csv", rn)
+			}
+			if r.Topic == "" {
+				return fmt.Errorf("receiver %s kafka requires topic", rn)
+			}
+		default:
+			return fmt.Errorf("receiver %s unknown type %s", rn, r.Type)
+		}
+	}
+
+	for sn, s := range c.Senders {
+		switch s.Type {
+		case "udp_unicast", "udp_multicast", "tcp_gnet":
+		case "kafka":
+			if s.Remote == "" {
+				return fmt.Errorf("sender %s kafka requires remote as brokers csv", sn)
+			}
+			if s.Topic == "" {
+				return fmt.Errorf("sender %s kafka requires topic", sn)
+			}
+		default:
+			return fmt.Errorf("sender %s unknown type %s", sn, s.Type)
+		}
+	}
 	return nil
 }
