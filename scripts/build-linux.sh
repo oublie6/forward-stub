@@ -13,6 +13,8 @@ GOOS=${GOOS:-linux}
 GOARCH=${GOARCH:-arm64}
 # MAIN_PKG: 主包路径。
 MAIN_PKG=${MAIN_PKG:-.}
+# GOFLAGS: 默认强制使用 vendor 目录，离线构建更稳定。
+GOFLAGS=${GOFLAGS:--mod=vendor}
 # OUT_DIR: 输出目录。
 OUT_DIR=${OUT_DIR:-dist/linux}
 # BINARY_NAME: 输出文件名，默认等于 APP_NAME。
@@ -27,7 +29,7 @@ OUT_FILE="${OUT_DIR}/${BINARY_NAME}"
 echo "Building ${APP_NAME} (${GOOS}/${GOARCH}) version=${VERSION}"
 # 关闭 CGO 让二进制更易部署到精简运行时镜像（如 distroless）。
 CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
-  go build -trimpath -ldflags "${LDFLAGS}" -o "${OUT_FILE}" "${MAIN_PKG}"
+  GOFLAGS="${GOFLAGS}" go build -trimpath -ldflags "${LDFLAGS}" -o "${OUT_FILE}" "${MAIN_PKG}"
 
 # 确保输出文件可执行。
 chmod +x "${OUT_FILE}"
