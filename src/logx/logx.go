@@ -19,6 +19,10 @@ import (
 type Options struct {
 	Level                    string
 	File                     string
+	MaxSizeMB                int
+	MaxBackups               int
+	MaxAgeDays               int
+	Compress                 bool
 	TrafficStatsInterval     time.Duration
 	TrafficStatsSampleEvery  int
 	TrafficStatsEnableSender bool
@@ -40,6 +44,15 @@ func Init(opts Options) error {
 	if err != nil {
 		return err
 	}
+	if opts.MaxSizeMB <= 0 {
+		opts.MaxSizeMB = 100
+	}
+	if opts.MaxBackups <= 0 {
+		opts.MaxBackups = 5
+	}
+	if opts.MaxAgeDays <= 0 {
+		opts.MaxAgeDays = 30
+	}
 
 	cfg := zap.NewProductionEncoderConfig()
 	cfg.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -50,10 +63,10 @@ func Init(opts Options) error {
 	if opts.File != "" {
 		ws = zapcore.AddSync(&lumberjack.Logger{
 			Filename:   opts.File,
-			MaxSize:    100,
-			MaxBackups: 5,
-			MaxAge:     30,
-			Compress:   true,
+			MaxSize:    opts.MaxSizeMB,
+			MaxBackups: opts.MaxBackups,
+			MaxAge:     opts.MaxAgeDays,
+			Compress:   opts.Compress,
 		})
 	}
 
