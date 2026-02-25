@@ -15,6 +15,8 @@ OUT_DIR=${OUT_DIR:-dist}
 TARGETS=${TARGETS:-linux/arm64}
 # MAIN_PKG: go build 的主包路径，默认当前目录。
 MAIN_PKG=${MAIN_PKG:-.}
+# GOFLAGS: 默认强制使用 vendor 目录，离线构建更稳定。
+GOFLAGS=${GOFLAGS:--mod=vendor}
 
 # 通过 ldflags 注入版本并裁剪符号信息，减小二进制体积。
 LDFLAGS="-s -w -X main.version=${VERSION}"
@@ -38,7 +40,7 @@ for target in ${TARGETS}; do
   echo "-> building ${GOOS}/${GOARCH}"
   # 关闭 CGO 以提升可移植性，产出静态友好的发布二进制。
   CGO_ENABLED=0 GOOS=${GOOS} GOARCH=${GOARCH} \
-    go build -trimpath -ldflags "${LDFLAGS}" -o "${WORK_DIR}/${BIN_NAME}" "${MAIN_PKG}"
+    GOFLAGS="${GOFLAGS}" go build -trimpath -ldflags "${LDFLAGS}" -o "${WORK_DIR}/${BIN_NAME}" "${MAIN_PKG}"
 
   # 附带基础文档和示例配置，降低使用方上手成本。
   cp -f README.md "${WORK_DIR}/"
