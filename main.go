@@ -25,6 +25,8 @@ func main() {
 	logLevel := flag.String("log-level", "info", "log level: debug|info|warn|error")
 	logFile := flag.String("log-file", "", "optional log file path (stdout when empty)")
 	trafficStatsInterval := flag.Duration("traffic-stats-interval", time.Second, "aggregated traffic stats log interval (e.g. 5s, 10s)")
+	trafficStatsSampleEvery := flag.Int("traffic-stats-sample-every", 1, "traffic stats sampling ratio N (record 1 every N packets)")
+	trafficStatsEnableSender := flag.Bool("traffic-stats-enable-sender", true, "enable sender-dimension traffic stats")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -33,7 +35,13 @@ func main() {
 		return
 	}
 
-	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile, TrafficStatsInterval: *trafficStatsInterval}); err != nil {
+	if err := logx.Init(logx.Options{
+		Level:                    *logLevel,
+		File:                     *logFile,
+		TrafficStatsInterval:     *trafficStatsInterval,
+		TrafficStatsSampleEvery:  *trafficStatsSampleEvery,
+		TrafficStatsEnableSender: *trafficStatsEnableSender,
+	}); err != nil {
 		_, _ = os.Stderr.WriteString("init logger error: " + err.Error() + "\n")
 		os.Exit(1)
 	}
@@ -76,6 +84,12 @@ func main() {
 			os.Exit(1)
 		}
 		logx.SetTrafficStatsInterval(d)
+	}
+	if cfg.Logging.TrafficStatsSampleEvery > 0 {
+		logx.SetTrafficStatsSampleEvery(cfg.Logging.TrafficStatsSampleEvery)
+	}
+	if cfg.Logging.TrafficStatsEnableSender != nil {
+		logx.SetTrafficStatsEnableSender(*cfg.Logging.TrafficStatsEnableSender)
 	}
 
 	rt := app.NewRuntime()

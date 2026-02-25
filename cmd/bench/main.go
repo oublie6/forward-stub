@@ -70,7 +70,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile}); err != nil {
+	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile, TrafficStatsEnableSender: true, TrafficStatsSampleEvery: 1}); err != nil {
 		fmt.Fprintf(os.Stderr, "log init failed: %v\n", err)
 		os.Exit(1)
 	}

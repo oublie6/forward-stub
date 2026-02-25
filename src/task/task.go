@@ -31,9 +31,9 @@ type Task struct {
 	PoolSize int
 	FastPath bool
 
-	pool  *ants.Pool
-	stats *logx.TrafficCounter
-	sout  map[string]*logx.TrafficCounter
+	pool        *ants.Pool
+	stats       *logx.TrafficCounter
+	senderStats []*logx.TrafficCounter
 
 	accepting atomic.Bool
 	inflight  sync.WaitGroup
@@ -63,14 +63,16 @@ func (t *Task) Start() error {
 			"role", "task",
 			"task", t.Name,
 		)
-		t.sout = make(map[string]*logx.TrafficCounter, len(t.Senders))
-		for _, s := range t.Senders {
-			t.sout[s.Name()] = logx.AcquireTrafficCounter(
-				"sender traffic stats",
-				"role", "sender",
-				"sender", s.Name(),
-				"sender_key", s.Key(),
-			)
+		if logx.TrafficStatsEnableSender() {
+			t.senderStats = make([]*logx.TrafficCounter, len(t.Senders))
+			for i, s := range t.Senders {
+				t.senderStats[i] = logx.AcquireTrafficCounter(
+					"sender traffic stats",
+					"role", "sender",
+					"sender", s.Name(),
+					"sender_key", s.Key(),
+				)
+			}
 		}
 	}
 	return nil
@@ -118,12 +120,12 @@ func (t *Task) StopGraceful() {
 		t.stats.Close()
 		t.stats = nil
 	}
-	for _, st := range t.sout {
+	for _, st := range t.senderStats {
 		if st != nil {
 			st.Close()
 		}
 	}
-	t.sout = nil
+	t.senderStats = nil
 }
 
 // processAndSend 依次执行 pipeline，再将结果发送到所有 sender。
@@ -133,12 +135,12 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 			return
 		}
 	}
-	for _, s := range t.Senders {
+	for i, s := range t.Senders {
 		if t.stats != nil {
 			t.stats.AddBytes(len(pkt.Payload))
 		}
-		if t.sout != nil {
-			if st := t.sout[s.Name()]; st != nil {
+		if t.senderStats != nil {
+			if st := t.senderStats[i]; st != nil {
 				st.AddBytes(len(pkt.Payload))
 			}
 		}

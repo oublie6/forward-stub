@@ -10,10 +10,14 @@ import (
 )
 
 var trafficStatsIntervalNanos atomic.Int64
+var trafficStatsSampleEvery atomic.Int64
+var trafficStatsEnableSender atomic.Bool
 
 // init 负责该函数对应的核心逻辑，详见实现细节。
 func init() {
 	trafficStatsIntervalNanos.Store(int64(time.Second))
+	trafficStatsSampleEvery.Store(1)
+	trafficStatsEnableSender.Store(true)
 }
 
 // SetTrafficStatsInterval 负责该函数对应的核心逻辑，详见实现细节。
@@ -22,6 +26,32 @@ func SetTrafficStatsInterval(d time.Duration) {
 		d = time.Second
 	}
 	trafficStatsIntervalNanos.Store(int64(d))
+}
+
+// SetTrafficStatsSampleEvery 设置流量统计采样倍率（N=1 表示不采样）。
+func SetTrafficStatsSampleEvery(n int) {
+	if n <= 0 {
+		n = 1
+	}
+	trafficStatsSampleEvery.Store(int64(n))
+}
+
+func trafficStatsSampleN() uint64 {
+	v := trafficStatsSampleEvery.Load()
+	if v <= 0 {
+		return 1
+	}
+	return uint64(v)
+}
+
+// SetTrafficStatsEnableSender 控制是否开启 sender 维度统计。
+func SetTrafficStatsEnableSender(enabled bool) {
+	trafficStatsEnableSender.Store(enabled)
+}
+
+// TrafficStatsEnableSender 返回 sender 维度统计是否开启。
+func TrafficStatsEnableSender() bool {
+	return trafficStatsEnableSender.Load()
 }
 
 // trafficStatsInterval 负责该函数对应的核心逻辑，详见实现细节。
@@ -39,10 +69,12 @@ type trafficCounter struct {
 	role   string
 	name   string
 	key    string
+	sample uint64
 
 	packets atomic.Uint64
 	bytes   atomic.Uint64
 	refs    atomic.Int64
+	seen    atomic.Uint64
 }
 
 type TrafficCounter struct {
@@ -56,8 +88,12 @@ func (tc *TrafficCounter) AddBytes(n int) {
 	if tc == nil || tc.c == nil || n <= 0 {
 		return
 	}
-	tc.c.packets.Add(1)
-	tc.c.bytes.Add(uint64(n))
+	seq := tc.c.seen.Add(1)
+	if seq%tc.c.sample != 0 {
+		return
+	}
+	tc.c.packets.Add(tc.c.sample)
+	tc.c.bytes.Add(uint64(n) * tc.c.sample)
 }
 
 // Close 负责该函数对应的核心逻辑，详见实现细节。
@@ -102,6 +138,7 @@ func (h *trafficStatsHub) acquire(msg string, fields ...any) *TrafficCounter {
 	}
 	c := &trafficCounter{msg: msg, fields: append([]any(nil), fields...)}
 	c.role, c.name, c.key = parseTrafficMeta(fields)
+	c.sample = trafficStatsSampleN()
 	c.refs.Store(1)
 	h.counters[key] = c
 	return &TrafficCounter{hub: h, key: key, c: c}
