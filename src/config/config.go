@@ -1,3 +1,4 @@
+// config.go 定义系统配置结构体以及各模块配置字段。
 package config
 
 type Config struct {
@@ -10,15 +11,18 @@ type Config struct {
 }
 
 type LoggingConfig struct {
-	Level string `json:"level"`
-	File  string `json:"file"`
+	Level                string `json:"level"`
+	File                 string `json:"file"`
+	TrafficStatsInterval string `json:"traffic_stats_interval,omitempty"`
 }
 
 type ReceiverConfig struct {
-	Type      string `json:"type"` // udp_gnet | tcp_gnet
+	Type      string `json:"type"` // udp_gnet | tcp_gnet | kafka
 	Listen    string `json:"listen"`
 	Multicore bool   `json:"multicore"`
 	Frame     string `json:"frame"` // "" | "u16be" (TCP)
+	Topic     string `json:"topic,omitempty"`
+	GroupID   string `json:"group_id,omitempty"`
 }
 
 type SenderConfig struct {

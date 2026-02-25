@@ -1,3 +1,4 @@
+// gnet_tcp.go 实现基于 gnet 的 TCP 发送端。
 package sender
 
 import (
@@ -29,6 +30,7 @@ type GnetTCPSender struct {
 	rr      uint64
 }
 
+// NewGnetTCPSender 负责该函数对应的核心逻辑，详见实现细节。
 func NewGnetTCPSender(name, remote string, withU16BELen bool, concurrency int, gnetLogLevel string) (*GnetTCPSender, error) {
 	if concurrency <= 0 {
 		concurrency = 1
@@ -46,9 +48,13 @@ func NewGnetTCPSender(name, remote string, withU16BELen bool, concurrency int, g
 	return s, nil
 }
 
+// Name 负责该函数对应的核心逻辑，详见实现细节。
 func (s *GnetTCPSender) Name() string { return s.name }
-func (s *GnetTCPSender) Key() string  { return "tcp_gnet|" + s.remote }
 
+// Key 负责该函数对应的核心逻辑，详见实现细节。
+func (s *GnetTCPSender) Key() string { return "tcp_gnet|" + s.remote }
+
+// Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *GnetTCPSender) Send(ctx context.Context, p *packet.Packet) error {
 	c := s.pickConn()
 	if c == nil {
@@ -78,6 +84,7 @@ func (s *GnetTCPSender) Send(ctx context.Context, p *packet.Packet) error {
 	return nil
 }
 
+// Close 负责该函数对应的核心逻辑，详见实现细节。
 func (s *GnetTCPSender) Close(ctx context.Context) error {
 	s.connsMu.Lock()
 	for _, c := range s.conns {
@@ -95,6 +102,7 @@ func (s *GnetTCPSender) Close(ctx context.Context) error {
 	return nil
 }
 
+// ensureClientAndDial 负责该函数对应的核心逻辑，详见实现细节。
 func (s *GnetTCPSender) ensureClientAndDial() error {
 	s.cliMu.Lock()
 	defer s.cliMu.Unlock()
@@ -135,6 +143,7 @@ func (s *GnetTCPSender) ensureClientAndDial() error {
 	return nil
 }
 
+// pickConn 负责该函数对应的核心逻辑，详见实现细节。
 func (s *GnetTCPSender) pickConn() gnet.Conn {
 	s.connsMu.RLock()
 	defer s.connsMu.RUnlock()

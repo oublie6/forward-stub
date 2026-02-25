@@ -1,3 +1,4 @@
+// validate.go 校验配置完整性、参数合法性与引用关系。
 package config
 
 import (
@@ -5,6 +6,7 @@ import (
 	"fmt"
 )
 
+// Validate 负责该函数对应的核心逻辑，详见实现细节。
 func (c *Config) Validate() error {
 	if c.Tasks == nil || len(c.Tasks) == 0 {
 		return errors.New("no tasks")
@@ -46,6 +48,36 @@ func (c *Config) Validate() error {
 			if _, ok := c.Senders[sn]; !ok {
 				return fmt.Errorf("task %s sender %s not found", tn, sn)
 			}
+		}
+	}
+
+	for rn, r := range c.Receivers {
+		switch r.Type {
+		case "udp_gnet", "tcp_gnet":
+		case "kafka":
+			if r.Listen == "" {
+				return fmt.Errorf("receiver %s kafka requires listen as brokers csv", rn)
+			}
+			if r.Topic == "" {
+				return fmt.Errorf("receiver %s kafka requires topic", rn)
+			}
+		default:
+			return fmt.Errorf("receiver %s unknown type %s", rn, r.Type)
+		}
+	}
+
+	for sn, s := range c.Senders {
+		switch s.Type {
+		case "udp_unicast", "udp_multicast", "tcp_gnet":
+		case "kafka":
+			if s.Remote == "" {
+				return fmt.Errorf("sender %s kafka requires remote as brokers csv", sn)
+			}
+			if s.Topic == "" {
+				return fmt.Errorf("sender %s kafka requires topic", sn)
+			}
+		default:
+			return fmt.Errorf("sender %s unknown type %s", sn, s.Type)
 		}
 	}
 	return nil

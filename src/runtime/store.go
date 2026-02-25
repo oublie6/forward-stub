@@ -1,3 +1,4 @@
+// store.go 维护当前生效配置及组件集合，并提供安全切换能力。
 package runtime
 
 import (
@@ -32,6 +33,7 @@ type Store struct {
 	dispatchSubs atomic.Value // map[string][]*TaskState
 }
 
+// NewStore 负责该函数对应的核心逻辑，详见实现细节。
 func NewStore() *Store {
 	return &Store{
 		receivers: make(map[string]*ReceiverState),
@@ -42,10 +44,12 @@ func NewStore() *Store {
 	}
 }
 
+// setDispatchSubs 负责该函数对应的核心逻辑，详见实现细节。
 func (s *Store) setDispatchSubs(m map[string][]*TaskState) {
 	s.dispatchSubs.Store(m)
 }
 
+// getDispatchTasks 负责该函数对应的核心逻辑，详见实现细节。
 func (s *Store) getDispatchTasks(receiver string) []*TaskState {
 	v := s.dispatchSubs.Load()
 	if v == nil {

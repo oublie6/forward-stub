@@ -1,3 +1,4 @@
+// main.go 负责解析启动参数、加载配置来源并驱动运行时生命周期。
 package main
 
 import (
@@ -6,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"forword-stub/src/app"
 	"forword-stub/src/config"
@@ -15,6 +17,7 @@ import (
 
 var version = "dev"
 
+// main 负责该函数对应的核心逻辑，详见实现细节。
 func main() {
 	localPath := flag.String("config", "", "local config json path (optional)")
 	apiURL := flag.String("api", "", "java config service url (optional)")
@@ -64,6 +67,14 @@ func main() {
 	}
 	if cfg.Logging.File == "" {
 		cfg.Logging.File = *logFile
+	}
+	if cfg.Logging.TrafficStatsInterval != "" {
+		d, err := time.ParseDuration(cfg.Logging.TrafficStatsInterval)
+		if err != nil {
+			lg.Errorf("invalid traffic_stats_interval: %v", err)
+			os.Exit(1)
+		}
+		logx.SetTrafficStatsInterval(d)
 	}
 
 	rt := app.NewRuntime()

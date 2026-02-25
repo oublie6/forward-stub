@@ -1,3 +1,4 @@
+// types.go 定义运行时内部使用的关键聚合类型。
 package runtime
 
 import (

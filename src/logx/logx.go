@@ -1,3 +1,4 @@
+// logx.go 初始化全局日志器并提供等级判断辅助函数。
 package logx
 
 import (
@@ -6,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 	"go.uber.org/zap"
@@ -15,8 +17,9 @@ import (
 
 // Options 为日志初始化参数。
 type Options struct {
-	Level string
-	File  string
+	Level                string
+	File                 string
+	TrafficStatsInterval time.Duration
 }
 
 var (
@@ -53,6 +56,7 @@ func Init(opts Options) error {
 	}
 
 	atomicLevel.SetLevel(lvl)
+	SetTrafficStatsInterval(opts.TrafficStatsInterval)
 	core := zapcore.NewCore(encoder, ws, atomicLevel)
 	z := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 	next := z.Sugar()
@@ -82,10 +86,12 @@ func Sync() error {
 	return logger.Sync()
 }
 
+// Enabled 负责该函数对应的核心逻辑，详见实现细节。
 func Enabled(level zapcore.Level) bool {
 	return atomicLevel.Enabled(level)
 }
 
+// parseLevel 负责该函数对应的核心逻辑，详见实现细节。
 func parseLevel(level string) (zapcore.Level, error) {
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case "", "info":

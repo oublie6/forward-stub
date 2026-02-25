@@ -1,3 +1,4 @@
+// gnet_tcp.go 实现基于 gnet 的 TCP 接收端。
 package receiver
 
 import (
@@ -9,6 +10,7 @@ import (
 
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/logging"
+	"go.uber.org/zap/zapcore"
 )
 
 type GnetTCP struct {
@@ -22,8 +24,10 @@ type GnetTCP struct {
 
 	stopMu sync.Mutex
 	stopFn func(context.Context) error
+	stats  *logx.TrafficCounter
 }
 
+// NewGnetTCP 负责该函数对应的核心逻辑，详见实现细节。
 func NewGnetTCP(name, listen string, multicore bool, framer Framer, gnetLogLevel string) *GnetTCP {
 	return &GnetTCP{
 		name:         name,
@@ -34,11 +38,29 @@ func NewGnetTCP(name, listen string, multicore bool, framer Framer, gnetLogLevel
 	}
 }
 
+// Name 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetTCP) Name() string { return r.name }
-func (r *GnetTCP) Key() string  { return "tcp_gnet|" + r.listen }
 
+// Key 负责该函数对应的核心逻辑，详见实现细节。
+func (r *GnetTCP) Key() string { return "tcp_gnet|" + r.listen }
+
+// Start 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
+	if logx.Enabled(zapcore.InfoLevel) {
+		r.stats = logx.AcquireTrafficCounter(
+			"receiver traffic stats",
+			"receiver", r.Name(),
+			"receiver_key", r.Key(),
+			"proto", "tcp",
+		)
+	}
+	defer func() {
+		if r.stats != nil {
+			r.stats.Close()
+			r.stats = nil
+		}
+	}()
 	return gnet.Run(
 		&tcpHandler{recv: r},
 		r.listen,
@@ -49,12 +71,21 @@ func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) erro
 	)
 }
 
+// Stop 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetTCP) Stop(ctx context.Context) error {
 	r.stopMu.Lock()
 	fn := r.stopFn
 	r.stopMu.Unlock()
 	if fn != nil {
+		if r.stats != nil {
+			r.stats.Close()
+			r.stats = nil
+		}
 		return fn(ctx)
+	}
+	if r.stats != nil {
+		r.stats.Close()
+		r.stats = nil
 	}
 	return nil
 }
@@ -70,6 +101,7 @@ type tcpHandler struct {
 	recv *GnetTCP
 }
 
+// OnBoot 负责该函数对应的核心逻辑，详见实现细节。
 func (h *tcpHandler) OnBoot(eng gnet.Engine) (action gnet.Action) {
 	h.recv.stopMu.Lock()
 	h.recv.stopFn = eng.Stop
@@ -77,6 +109,7 @@ func (h *tcpHandler) OnBoot(eng gnet.Engine) (action gnet.Action) {
 	return gnet.None
 }
 
+// OnOpen 负责该函数对应的核心逻辑，详见实现细节。
 func (h *tcpHandler) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 	c.SetContext(&connState{
 		buf:    make([]byte, 0, 4096),
@@ -86,6 +119,7 @@ func (h *tcpHandler) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 	return nil, gnet.None
 }
 
+// OnTraffic 负责该函数对应的核心逻辑，详见实现细节。
 func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	in, _ := c.Next(-1)
 	if len(in) == 0 {
@@ -95,6 +129,9 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	cs.buf = append(cs.buf, in...)
 
 	if h.recv.framer == nil {
+		if h.recv.stats != nil {
+			h.recv.stats.AddBytes(len(cs.buf))
+		}
 		payload, rel := packet.CopyFrom(cs.buf)
 		cs.buf = cs.buf[:0]
 		h.recv.onPacket(&packet.Packet{
@@ -116,6 +153,9 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	cs.buf = append(cs.buf[:0], remain...)
 
 	for _, fr := range frames {
+		if h.recv.stats != nil {
+			h.recv.stats.AddBytes(len(fr))
+		}
 		payload, rel := packet.CopyFrom(fr)
 		h.recv.onPacket(&packet.Packet{
 			Payload: payload,
