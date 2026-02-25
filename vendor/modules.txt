@@ -1,0 +1,57 @@
+# github.com/panjf2000/ants/v2 v2.11.3
+## explicit; go 1.18
+github.com/panjf2000/ants/v2
+github.com/panjf2000/ants/v2/pkg/sync
+# github.com/panjf2000/gnet/v2 v2.9.7
+## explicit; go 1.20
+github.com/panjf2000/gnet/v2
+github.com/panjf2000/gnet/v2/internal/gfd
+github.com/panjf2000/gnet/v2/pkg/bs
+github.com/panjf2000/gnet/v2/pkg/buffer/elastic
+github.com/panjf2000/gnet/v2/pkg/buffer/linkedlist
+github.com/panjf2000/gnet/v2/pkg/buffer/ring
+github.com/panjf2000/gnet/v2/pkg/errors
+github.com/panjf2000/gnet/v2/pkg/io
+github.com/panjf2000/gnet/v2/pkg/logging
+github.com/panjf2000/gnet/v2/pkg/math
+github.com/panjf2000/gnet/v2/pkg/netpoll
+github.com/panjf2000/gnet/v2/pkg/pool/bytebuffer
+github.com/panjf2000/gnet/v2/pkg/pool/byteslice
+github.com/panjf2000/gnet/v2/pkg/pool/goroutine
+github.com/panjf2000/gnet/v2/pkg/pool/ringbuffer
+github.com/panjf2000/gnet/v2/pkg/queue
+github.com/panjf2000/gnet/v2/pkg/socket
+# github.com/valyala/bytebufferpool v1.0.0
+## explicit
+github.com/valyala/bytebufferpool
+# go.uber.org/multierr v1.11.0
+## explicit; go 1.19
+go.uber.org/multierr
+# go.uber.org/zap v1.27.0
+## explicit; go 1.19
+go.uber.org/zap
+go.uber.org/zap/buffer
+go.uber.org/zap/internal
+go.uber.org/zap/internal/bufferpool
+go.uber.org/zap/internal/color
+go.uber.org/zap/internal/exit
+go.uber.org/zap/internal/pool
+go.uber.org/zap/internal/stacktrace
+go.uber.org/zap/zapcore
+# golang.org/x/net v0.44.0
+## explicit; go 1.24.0
+golang.org/x/net/bpf
+golang.org/x/net/internal/iana
+golang.org/x/net/internal/socket
+golang.org/x/net/ipv4
+golang.org/x/net/ipv6
+# golang.org/x/sync v0.11.0
+## explicit; go 1.18
+golang.org/x/sync/errgroup
+# golang.org/x/sys v0.36.0
+## explicit; go 1.24.0
+golang.org/x/sys/unix
+golang.org/x/sys/windows
+# gopkg.in/natefinch/lumberjack.v2 v2.2.1
+## explicit; go 1.13
+gopkg.in/natefinch/lumberjack.v2
