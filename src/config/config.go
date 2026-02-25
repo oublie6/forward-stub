@@ -3,11 +3,17 @@ package config
 
 type Config struct {
 	Version   int64                     `json:"version"`
+	Control   ControlConfig             `json:"control,omitempty"`
 	Logging   LoggingConfig             `json:"logging"`
 	Receivers map[string]ReceiverConfig `json:"receivers"`
 	Senders   map[string]SenderConfig   `json:"senders"`
 	Pipelines map[string][]StageConfig  `json:"pipelines"`
 	Tasks     map[string]TaskConfig     `json:"tasks"`
+}
+
+type ControlConfig struct {
+	API        string `json:"api,omitempty"`
+	TimeoutSec int    `json:"timeout_sec,omitempty"`
 }
 
 type LoggingConfig struct {
