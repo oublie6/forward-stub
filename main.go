@@ -28,13 +28,16 @@ func main() {
 		return
 	}
 
-	defaultLogLevel := "info"
 	if err := logx.Init(logx.Options{
-		Level:                    defaultLogLevel,
+		Level:                    config.DefaultLogLevel,
 		File:                     "",
+		MaxSizeMB:                config.DefaultLogRotateMaxSizeMB,
+		MaxBackups:               config.DefaultLogRotateMaxBackups,
+		MaxAgeDays:               config.DefaultLogRotateMaxAgeDays,
+		Compress:                 config.DefaultLogRotateCompress,
 		TrafficStatsInterval:     time.Second,
-		TrafficStatsSampleEvery:  1,
-		TrafficStatsEnableSender: true,
+		TrafficStatsSampleEvery:  config.DefaultTrafficStatsSampleEvery,
+		TrafficStatsEnableSender: config.DefaultTrafficStatsEnableSender,
 	}); err != nil {
 		_, _ = os.Stderr.WriteString("init logger error: " + err.Error() + "\n")
 		os.Exit(1)
@@ -55,51 +58,41 @@ func main() {
 		lg.Errorf("load config error: %v", err)
 		os.Exit(1)
 	}
+	cfg.ApplyDefaults()
 	if cfg.Control.API != "" {
-		to := cfg.Control.TimeoutSec
-		if to <= 0 {
-			to = 5
-		}
-		cli := control.NewConfigAPIClient(cfg.Control.API, to)
+		cli := control.NewConfigAPIClient(cfg.Control.API, cfg.Control.TimeoutSec)
 		cfg, err = cli.FetchConfig(context.Background())
 		if err != nil {
 			lg.Errorf("fetch config from api error: %v", err)
 			os.Exit(1)
 		}
+		cfg.ApplyDefaults()
 	}
 	if err := cfg.Validate(); err != nil {
 		lg.Errorf("config validate error: %v", err)
 		os.Exit(1)
 	}
 
-	if cfg.Logging.Level == "" {
-		cfg.Logging.Level = defaultLogLevel
+	trafficStatsInterval, err := time.ParseDuration(cfg.Logging.TrafficStatsInterval)
+	if err != nil {
+		lg.Errorf("invalid traffic_stats_interval: %v", err)
+		os.Exit(1)
 	}
 	if err := logx.Init(logx.Options{
 		Level:                    cfg.Logging.Level,
 		File:                     cfg.Logging.File,
-		TrafficStatsInterval:     time.Second,
-		TrafficStatsSampleEvery:  1,
-		TrafficStatsEnableSender: true,
+		MaxSizeMB:                cfg.Logging.MaxSizeMB,
+		MaxBackups:               cfg.Logging.MaxBackups,
+		MaxAgeDays:               cfg.Logging.MaxAgeDays,
+		Compress:                 *cfg.Logging.Compress,
+		TrafficStatsInterval:     trafficStatsInterval,
+		TrafficStatsSampleEvery:  cfg.Logging.TrafficStatsSampleEvery,
+		TrafficStatsEnableSender: *cfg.Logging.TrafficStatsEnableSender,
 	}); err != nil {
 		_, _ = os.Stderr.WriteString("re-init logger error: " + err.Error() + "\n")
 		os.Exit(1)
 	}
 	lg = logx.L()
-	if cfg.Logging.TrafficStatsInterval != "" {
-		d, err := time.ParseDuration(cfg.Logging.TrafficStatsInterval)
-		if err != nil {
-			lg.Errorf("invalid traffic_stats_interval: %v", err)
-			os.Exit(1)
-		}
-		logx.SetTrafficStatsInterval(d)
-	}
-	if cfg.Logging.TrafficStatsSampleEvery > 0 {
-		logx.SetTrafficStatsSampleEvery(cfg.Logging.TrafficStatsSampleEvery)
-	}
-	if cfg.Logging.TrafficStatsEnableSender != nil {
-		logx.SetTrafficStatsEnableSender(*cfg.Logging.TrafficStatsEnableSender)
-	}
 
 	rt := app.NewRuntime()
 	if err := rt.UpdateCache(context.Background(), cfg); err != nil {
