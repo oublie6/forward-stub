@@ -17,9 +17,11 @@ import (
 
 // Options 为日志初始化参数。
 type Options struct {
-	Level                string
-	File                 string
-	TrafficStatsInterval time.Duration
+	Level                    string
+	File                     string
+	TrafficStatsInterval     time.Duration
+	TrafficStatsSampleEvery  int
+	TrafficStatsEnableSender bool
 }
 
 var (
@@ -57,6 +59,8 @@ func Init(opts Options) error {
 
 	atomicLevel.SetLevel(lvl)
 	SetTrafficStatsInterval(opts.TrafficStatsInterval)
+	SetTrafficStatsSampleEvery(opts.TrafficStatsSampleEvery)
+	SetTrafficStatsEnableSender(opts.TrafficStatsEnableSender)
 	core := zapcore.NewCore(encoder, ws, atomicLevel)
 	z := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 	next := z.Sugar()

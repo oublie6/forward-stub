@@ -92,6 +92,7 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 	if logx.Enabled(zapcore.InfoLevel) {
 		r.stats = logx.AcquireTrafficCounter(
 			"receiver traffic stats",
+			"role", "receiver",
 			"receiver", r.Name(),
 			"receiver_key", r.Key(),
 			"proto", "kafka",

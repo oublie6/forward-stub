@@ -35,13 +35,15 @@ type Store struct {
 
 // NewStore 负责该函数对应的核心逻辑，详见实现细节。
 func NewStore() *Store {
-	return &Store{
+	s := &Store{
 		receivers: make(map[string]*ReceiverState),
 		senders:   make(map[string]*SenderState),
 		tasks:     make(map[string]*TaskState),
 		pipelines: make(map[string]*CompiledPipeline),
 		subs:      make(map[string]map[string]struct{}),
 	}
+	s.dispatchSubs.Store(map[string][]*TaskState{})
+	return s
 }
 
 // setDispatchSubs 负责该函数对应的核心逻辑，详见实现细节。
@@ -53,16 +55,7 @@ func (s *Store) setDispatchSubs(m map[string][]*TaskState) {
 func (s *Store) getDispatchTasks(receiver string) []*TaskState {
 	v := s.dispatchSubs.Load()
 	if v == nil {
-		s.mu.RLock()
-		sub := s.subs[receiver]
-		tasks := make([]*TaskState, 0, len(sub))
-		for tn := range sub {
-			if ts := s.tasks[tn]; ts != nil {
-				tasks = append(tasks, ts)
-			}
-		}
-		s.mu.RUnlock()
-		return tasks
+		return nil
 	}
 	return v.(map[string][]*TaskState)[receiver]
 }

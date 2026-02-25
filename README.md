@@ -79,6 +79,9 @@ go run . -api http://127.0.0.1:8080/config -timeout 5 -log-level info
 | `-timeout` | API 拉取配置超时（秒） | `5` |
 | `-log-level` | 日志级别：`debug` / `info` / `warn` / `error` | `info` |
 | `-log-file` | 日志文件路径（空则 stdout） | `""` |
+| `-traffic-stats-interval` | 统一流量统计输出周期（如 `5s` / `10s`） | `1s` |
+| `-traffic-stats-sample-every` | 流量统计采样倍率 N（每 N 个包计 1 次并按倍率折算） | `1` |
+| `-traffic-stats-enable-sender` | 是否开启 sender 维度统计 | `true` |
 
 ## 6. 配置文件说明
 
@@ -89,7 +92,10 @@ go run . -api http://127.0.0.1:8080/config -timeout 5 -log-level info
   "version": 5,
   "logging": {
     "level": "info",
-    "file": ""
+    "file": "",
+    "traffic_stats_interval": "5s",
+    "traffic_stats_sample_every": 1,
+    "traffic_stats_enable_sender": true
   },
   "receivers": {},
   "senders": {},

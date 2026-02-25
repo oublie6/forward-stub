@@ -46,6 +46,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	st.subs = make(map[string]map[string]struct{})
 	st.version = cfg.Version
 	st.mu.Unlock()
+	st.setDispatchSubs(map[string][]*TaskState{})
 
 	// 1) 构建 senders：任务阶段需要引用 sender 实例。
 	for name, sc := range cfg.Senders {

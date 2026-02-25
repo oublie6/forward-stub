@@ -11,9 +11,11 @@ type Config struct {
 }
 
 type LoggingConfig struct {
-	Level                string `json:"level"`
-	File                 string `json:"file"`
-	TrafficStatsInterval string `json:"traffic_stats_interval,omitempty"`
+	Level                    string `json:"level"`
+	File                     string `json:"file"`
+	TrafficStatsInterval     string `json:"traffic_stats_interval,omitempty"`
+	TrafficStatsSampleEvery  int    `json:"traffic_stats_sample_every,omitempty"`
+	TrafficStatsEnableSender *bool  `json:"traffic_stats_enable_sender,omitempty"`
 }
 
 type ReceiverConfig struct {
