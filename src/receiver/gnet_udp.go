@@ -99,10 +99,13 @@ func (h *udpHandler) OnBoot(eng gnet.Engine) (action gnet.Action) {
 
 // OnTraffic 负责该函数对应的核心逻辑，详见实现细节。
 func (h *udpHandler) OnTraffic(c gnet.Conn) gnet.Action {
-	in, _ := c.Next(-1)
+	// 对 UDP 场景优先 Peek + Discard，避免在 Linux epoll 模式下直接 Next
+	// 触发底层读指针推进后再复制所带来的边界差异（表现为上层“像是丢头”）。
+	in, _ := c.Peek(-1)
 	if len(in) == 0 {
 		return gnet.None
 	}
+	_, _ = c.Discard(len(in))
 	if h.recv.stats != nil {
 		h.recv.stats.AddBytes(len(in))
 	}

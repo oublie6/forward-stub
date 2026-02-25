@@ -122,10 +122,12 @@ func (h *tcpHandler) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 
 // OnTraffic 负责该函数对应的核心逻辑，详见实现细节。
 func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
-	in, _ := c.Next(-1)
+	// 与 UDP 侧保持一致：先 Peek 再 Discard，规避不同平台/事件循环下读取游标推进时机差异。
+	in, _ := c.Peek(-1)
 	if len(in) == 0 {
 		return gnet.None
 	}
+	_, _ = c.Discard(len(in))
 	cs := c.Context().(*connState)
 	cs.buf = append(cs.buf, in...)
 
