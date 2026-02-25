@@ -189,7 +189,7 @@ A：receiver 侧统一 `udp_gnet`；单播/组播差异在 sender 侧。
 
 ## 12. 一键打包与部署
 
-### 12.1 单平台打包
+### 12.1 单平台打包（默认 linux/arm64，aarch64）
 
 ```bash
 make package
@@ -201,7 +201,7 @@ make package
 make package-all
 ```
 
-### 12.3 Docker 构建
+### 12.3 Docker 构建（默认基于 linux/arm64 产物）
 
 ```bash
 ./scripts/build-linux.sh

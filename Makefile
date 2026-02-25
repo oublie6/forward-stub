@@ -9,9 +9,9 @@ VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o bin/$(APP_NAME) .
 
-# build-linux: 调用脚本输出 linux/amd64 二进制到 dist/linux。
+# build-linux: 调用脚本输出 linux/arm64 二进制到 dist/linux。
 build-linux:
-	APP_NAME=$(APP_NAME) VERSION=$(VERSION) GOOS=linux GOARCH=amd64 OUT_DIR=dist/linux ./scripts/build-linux.sh
+	APP_NAME=$(APP_NAME) VERSION=$(VERSION) GOOS=linux GOARCH=arm64 OUT_DIR=dist/linux ./scripts/build-linux.sh
 
 # test: 执行全部 Go 包测试（当前主要用于可编译性验证）。
 test:
@@ -21,13 +21,13 @@ test:
 vet:
 	go vet ./...
 
-# package: 仅打包 linux/amd64 平台。
+# package: 仅打包 linux/arm64（aarch64）平台。
 package:
-	APP_NAME=$(APP_NAME) VERSION=$(VERSION) TARGETS="linux/amd64" ./scripts/package.sh
+	APP_NAME=$(APP_NAME) VERSION=$(VERSION) TARGETS="linux/arm64" ./scripts/package.sh
 
 # package-all: 一次性打包多平台制品。
 package-all:
-	APP_NAME=$(APP_NAME) VERSION=$(VERSION) TARGETS="linux/amd64 linux/arm64 windows/amd64" ./scripts/package.sh
+	APP_NAME=$(APP_NAME) VERSION=$(VERSION) TARGETS="linux/arm64 linux/amd64 windows/amd64" ./scripts/package.sh
 
 # docker-build: 先构建 Linux 二进制，再制作运行时镜像。
 docker-build: build-linux

@@ -8,9 +8,9 @@ set -euo pipefail
 APP_NAME=${APP_NAME:-forword-stub}
 # VERSION: 注入 main.version 的版本号。
 VERSION=${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}
-# GOOS/GOARCH: 默认构建 linux/amd64，可按需覆盖。
+# GOOS/GOARCH: 默认构建 linux/arm64（aarch64），可按需覆盖。
 GOOS=${GOOS:-linux}
-GOARCH=${GOARCH:-amd64}
+GOARCH=${GOARCH:-arm64}
 # MAIN_PKG: 主包路径。
 MAIN_PKG=${MAIN_PKG:-.}
 # OUT_DIR: 输出目录。

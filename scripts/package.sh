@@ -12,7 +12,7 @@ VERSION=${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo de
 # OUT_DIR: 打包输出目录。
 OUT_DIR=${OUT_DIR:-dist}
 # TARGETS: 目标平台列表，格式为 "GOOS/GOARCH"，可配置多个目标。
-TARGETS=${TARGETS:-linux/amd64}
+TARGETS=${TARGETS:-linux/arm64}
 # MAIN_PKG: go build 的主包路径，默认当前目录。
 MAIN_PKG=${MAIN_PKG:-.}
 
