@@ -36,6 +36,9 @@ func trafficStatsInterval() time.Duration {
 type trafficCounter struct {
 	msg    string
 	fields []any
+	role   string
+	name   string
+	key    string
 
 	packets atomic.Uint64
 	bytes   atomic.Uint64
@@ -98,6 +101,7 @@ func (h *trafficStatsHub) acquire(msg string, fields ...any) *TrafficCounter {
 		return &TrafficCounter{hub: h, key: key, c: c}
 	}
 	c := &trafficCounter{msg: msg, fields: append([]any(nil), fields...)}
+	c.role, c.name, c.key = parseTrafficMeta(fields)
 	c.refs.Store(1)
 	h.counters[key] = c
 	return &TrafficCounter{hub: h, key: key, c: c}
@@ -145,23 +149,87 @@ func (h *trafficStatsHub) flush(interval time.Duration) {
 		return
 	}
 	sec := interval.Seconds()
+	summary := newTrafficSummary(interval)
 	for _, c := range cs {
 		pkts := c.packets.Swap(0)
 		b := c.bytes.Swap(0)
 		if pkts == 0 {
 			continue
 		}
-		args := make([]any, 0, len(c.fields)+10)
-		args = append(args, c.fields...)
-		args = append(args,
-			"interval", interval.String(),
-			"packets", pkts,
-			"bytes", b,
-			"pps", float64(pkts)/sec,
-			"mbps", float64(b*8)/sec/1_000_000,
-		)
-		L().Infow(c.msg, args...)
+		summary.add(c, pkts, b, sec)
 	}
+	if summary.hasData() {
+		L().Infow("traffic stats summary", summary.fields()...)
+	}
+}
+
+type trafficSummary struct {
+	interval string
+	receiver []string
+	task     []string
+	sender   []string
+	other    []string
+}
+
+func newTrafficSummary(interval time.Duration) *trafficSummary {
+	return &trafficSummary{interval: interval.String()}
+}
+
+func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, sec float64) {
+	line := fmt.Sprintf("%s|key=%s|packets=%d|bytes=%d|pps=%.2f|mbps=%.2f", c.name, c.key, packets, bytes, float64(packets)/sec, float64(bytes*8)/sec/1_000_000)
+	if c.name == "" {
+		line = fmt.Sprintf("%s|packets=%d|bytes=%d|pps=%.2f|mbps=%.2f", c.msg, packets, bytes, float64(packets)/sec, float64(bytes*8)/sec/1_000_000)
+	}
+	switch c.role {
+	case "receiver":
+		s.receiver = append(s.receiver, line)
+	case "task":
+		s.task = append(s.task, line)
+	case "sender":
+		s.sender = append(s.sender, line)
+	default:
+		s.other = append(s.other, line)
+	}
+}
+
+func (s *trafficSummary) hasData() bool {
+	return len(s.receiver) > 0 || len(s.task) > 0 || len(s.sender) > 0 || len(s.other) > 0
+}
+
+func (s *trafficSummary) fields() []any {
+	args := []any{"interval", s.interval}
+	if len(s.receiver) > 0 {
+		args = append(args, "receivers", s.receiver)
+	}
+	if len(s.task) > 0 {
+		args = append(args, "tasks", s.task)
+	}
+	if len(s.sender) > 0 {
+		args = append(args, "senders", s.sender)
+	}
+	if len(s.other) > 0 {
+		args = append(args, "others", s.other)
+	}
+	return args
+}
+
+func parseTrafficMeta(fields []any) (role string, name string, key string) {
+	for i := 0; i < len(fields)-1; i += 2 {
+		k, ok := fields[i].(string)
+		if !ok {
+			continue
+		}
+		v := fmt.Sprint(fields[i+1])
+		switch k {
+		case "role":
+			role = v
+		case "receiver", "task", "sender":
+			name = v
+		case "receiver_key", "sender_key":
+			key = v
+		}
+	}
+	return role, name, key
 }
 
 // buildTrafficKey 负责该函数对应的核心逻辑，详见实现细节。

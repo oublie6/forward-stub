@@ -50,6 +50,7 @@ func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) erro
 	if logx.Enabled(zapcore.InfoLevel) {
 		r.stats = logx.AcquireTrafficCounter(
 			"receiver traffic stats",
+			"role", "receiver",
 			"receiver", r.Name(),
 			"receiver_key", r.Key(),
 			"proto", "tcp",
