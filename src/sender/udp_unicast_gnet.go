@@ -1,3 +1,4 @@
+// udp_unicast_gnet.go 实现 UDP 单播发送端。
 package sender
 
 import (
@@ -23,6 +24,7 @@ type UDPUnicastSender struct {
 	conn atomic.Pointer[net.UDPConn]
 }
 
+// NewUDPUnicastSender 负责该函数对应的核心逻辑，详见实现细节。
 func NewUDPUnicastSender(name, localIP string, localPort int, remote string) (*UDPUnicastSender, error) {
 	raddr, err := net.ResolveUDPAddr("udp", remote)
 	if err != nil {
@@ -44,11 +46,15 @@ func NewUDPUnicastSender(name, localIP string, localPort int, remote string) (*U
 	return s, nil
 }
 
+// Name 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPUnicastSender) Name() string { return s.name }
+
+// Key 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPUnicastSender) Key() string {
 	return fmt.Sprintf("udp_unicast|%s->%s", s.local.String(), s.remote.String())
 }
 
+// Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPUnicastSender) Send(ctx context.Context, p *packet.Packet) error {
 	c := s.conn.Load()
 	if c == nil {
@@ -62,6 +68,7 @@ func (s *UDPUnicastSender) Send(ctx context.Context, p *packet.Packet) error {
 	return err
 }
 
+// Close 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPUnicastSender) Close(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -72,6 +79,7 @@ func (s *UDPUnicastSender) Close(ctx context.Context) error {
 	return nil
 }
 
+// getConn 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPUnicastSender) getConn() (*net.UDPConn, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -84,12 +92,14 @@ func (s *UDPUnicastSender) getConn() (*net.UDPConn, error) {
 	return s.conn.Load(), nil
 }
 
+// ensureConn 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPUnicastSender) ensureConn() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.ensureConnLocked()
 }
 
+// ensureConnLocked 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPUnicastSender) ensureConnLocked() error {
 	if s.conn.Load() != nil {
 		return nil

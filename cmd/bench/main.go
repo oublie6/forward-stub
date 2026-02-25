@@ -1,3 +1,4 @@
+// bench main 提供本地 UDP/TCP 转发链路的压测入口。
 package main
 
 import (
@@ -41,6 +42,7 @@ type result struct {
 	mbps           float64
 }
 
+// main 负责该函数对应的核心逻辑，详见实现细节。
 func main() {
 	mode := flag.String("mode", "both", "benchmark mode: udp|tcp|both")
 	duration := flag.Duration("duration", 8*time.Second, "measure duration")
@@ -109,6 +111,7 @@ func main() {
 	}
 }
 
+// parseSweep 负责该函数对应的核心逻辑，详见实现细节。
 func parseSweep(in string) ([]int, error) {
 	parts := strings.Split(in, ",")
 	out := make([]int, 0, len(parts))
@@ -129,6 +132,7 @@ func parseSweep(in string) ([]int, error) {
 	return out, nil
 }
 
+// runForwardBenchmark 负责该函数对应的核心逻辑，详见实现细节。
 func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int, taskFastPath bool, taskPoolSize int) (*result, error) {
 	m := &metrics{}
 	basePort := map[string]int{"udp": 19100, "tcp": 19200}[proto]
@@ -218,6 +222,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	}, nil
 }
 
+// benchConfig 负责该函数对应的核心逻辑，详见实现细节。
 func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize int) config.Config {
 	rc := config.ReceiverConfig{Multicore: multicore}
 	sc := config.SenderConfig{Concurrency: 1}
@@ -262,6 +267,7 @@ func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFas
 	}
 }
 
+// startUDPSink 负责该函数对应的核心逻辑，详见实现细节。
 func startUDPSink(port int, m *metrics, readers, readBuf int) (string, func() error, error) {
 	pc, err := net.ListenPacket("udp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
@@ -302,6 +308,7 @@ func startUDPSink(port int, m *metrics, readers, readBuf int) (string, func() er
 	}, nil
 }
 
+// startTCPSink 负责该函数对应的核心逻辑，详见实现细节。
 func startTCPSink(port int, m *metrics) (string, func() error, error) {
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
@@ -333,6 +340,7 @@ func startTCPSink(port int, m *metrics) (string, func() error, error) {
 	}, nil
 }
 
+// readU16Framed 负责该函数对应的核心逻辑，详见实现细节。
 func readU16Framed(conn net.Conn, m *metrics) {
 	defer conn.Close()
 	hdr := make([]byte, 2)
@@ -350,6 +358,7 @@ func readU16Framed(conn net.Conn, m *metrics) {
 	}
 }
 
+// udpGenerate 负责该函数对应的核心逻辑，详见实现细节。
 func udpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan struct{}) {
 	conn, err := net.Dial("udp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
@@ -378,6 +387,7 @@ func udpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 	}
 }
 
+// tcpGenerate 负责该函数对应的核心逻辑，详见实现细节。
 func tcpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan struct{}) {
 	dial := func() net.Conn {
 		for {
@@ -425,6 +435,7 @@ func tcpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 	}
 }
 
+// throttle 负责该函数对应的核心逻辑，详见实现细节。
 func throttle(pps int) {
 	if pps <= 0 {
 		return
@@ -432,6 +443,7 @@ func throttle(pps int) {
 	time.Sleep(time.Second / time.Duration(pps))
 }
 
+// printResult 负责该函数对应的核心逻辑，详见实现细节。
 func printResult(r *result) {
 	fmt.Printf("\n=== %s forward benchmark ===\n", r.proto)
 	fmt.Printf("duration=%s payload=%dB workers=%d\n", r.duration.Round(time.Millisecond), r.payloadSize, r.senderWorkers)
@@ -441,6 +453,7 @@ func printResult(r *result) {
 	fmt.Printf("throughput: %.0f pps, %.2f Mbps\n", r.pps, r.mbps)
 }
 
+// max 负责该函数对应的核心逻辑，详见实现细节。
 func max(a, b int) int {
 	if a > b {
 		return a

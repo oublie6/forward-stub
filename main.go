@@ -1,3 +1,4 @@
+// main.go 负责解析启动参数、加载配置来源并驱动运行时生命周期。
 package main
 
 import (
@@ -16,6 +17,7 @@ import (
 
 var version = "dev"
 
+// main 负责该函数对应的核心逻辑，详见实现细节。
 func main() {
 	localPath := flag.String("config", "", "local config json path (optional)")
 	apiURL := flag.String("api", "", "java config service url (optional)")

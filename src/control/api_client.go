@@ -1,3 +1,4 @@
+// api_client.go 提供远端配置 API 拉取客户端。
 package control
 
 import (
@@ -15,6 +16,7 @@ type ConfigAPIClient struct {
 	client  *http.Client
 }
 
+// NewConfigAPIClient 负责该函数对应的核心逻辑，详见实现细节。
 func NewConfigAPIClient(baseURL string, timeoutSeconds int) *ConfigAPIClient {
 	return &ConfigAPIClient{
 		baseURL: baseURL,
@@ -22,6 +24,7 @@ func NewConfigAPIClient(baseURL string, timeoutSeconds int) *ConfigAPIClient {
 	}
 }
 
+// FetchConfig 负责该函数对应的核心逻辑，详见实现细节。
 func (c *ConfigAPIClient) FetchConfig(ctx context.Context) (config.Config, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL, nil)
 	if err != nil {
