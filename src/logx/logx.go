@@ -86,10 +86,12 @@ func Sync() error {
 	return logger.Sync()
 }
 
+// Enabled 负责该函数对应的核心逻辑，详见实现细节。
 func Enabled(level zapcore.Level) bool {
 	return atomicLevel.Enabled(level)
 }
 
+// parseLevel 负责该函数对应的核心逻辑，详见实现细节。
 func parseLevel(level string) (zapcore.Level, error) {
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case "", "info":

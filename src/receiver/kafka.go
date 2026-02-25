@@ -38,6 +38,7 @@ type KafkaReceiver struct {
 	stats *logx.TrafficCounter
 }
 
+// NewKafkaReceiver 负责该函数对应的核心逻辑，详见实现细节。
 func NewKafkaReceiver(name, brokers, topic, groupID string) (*KafkaReceiver, error) {
 	// topic 与 brokers 是必填。groupID 允许空并自动生成，便于开箱即用。
 	if strings.TrimSpace(topic) == "" {
@@ -53,11 +54,15 @@ func NewKafkaReceiver(name, brokers, topic, groupID string) (*KafkaReceiver, err
 	return &KafkaReceiver{name: name, brokers: brs, topic: topic, groupID: groupID}, nil
 }
 
+// Name 负责该函数对应的核心逻辑，详见实现细节。
 func (r *KafkaReceiver) Name() string { return r.name }
+
+// Key 负责该函数对应的核心逻辑，详见实现细节。
 func (r *KafkaReceiver) Key() string {
 	return "kafka|" + strings.Join(r.brokers, ",") + "|" + r.groupID + "|" + r.topic
 }
 
+// Start 负责该函数对应的核心逻辑，详见实现细节。
 func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
 
@@ -154,6 +159,7 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 	}
 }
 
+// Stop 负责该函数对应的核心逻辑，详见实现细节。
 func (r *KafkaReceiver) Stop(ctx context.Context) error {
 	// Stop 只负责触发 cancel 并等待 Start 退出，不直接关闭 client；
 	// client 关闭由 Start defer 统一执行，避免并发 close。
@@ -175,6 +181,7 @@ func (r *KafkaReceiver) Stop(ctx context.Context) error {
 	}
 }
 
+// splitCSV 负责该函数对应的核心逻辑，详见实现细节。
 func splitCSV(v string) []string {
 	parts := strings.Split(v, ",")
 	out := make([]string, 0, len(parts))

@@ -11,10 +11,12 @@ import (
 
 var trafficStatsIntervalNanos atomic.Int64
 
+// init 负责该函数对应的核心逻辑，详见实现细节。
 func init() {
 	trafficStatsIntervalNanos.Store(int64(time.Second))
 }
 
+// SetTrafficStatsInterval 负责该函数对应的核心逻辑，详见实现细节。
 func SetTrafficStatsInterval(d time.Duration) {
 	if d <= 0 {
 		d = time.Second
@@ -22,6 +24,7 @@ func SetTrafficStatsInterval(d time.Duration) {
 	trafficStatsIntervalNanos.Store(int64(d))
 }
 
+// trafficStatsInterval 负责该函数对应的核心逻辑，详见实现细节。
 func trafficStatsInterval() time.Duration {
 	n := trafficStatsIntervalNanos.Load()
 	if n <= 0 {
@@ -45,6 +48,7 @@ type TrafficCounter struct {
 	c   *trafficCounter
 }
 
+// AddBytes 负责该函数对应的核心逻辑，详见实现细节。
 func (tc *TrafficCounter) AddBytes(n int) {
 	if tc == nil || tc.c == nil || n <= 0 {
 		return
@@ -53,6 +57,7 @@ func (tc *TrafficCounter) AddBytes(n int) {
 	tc.c.bytes.Add(uint64(n))
 }
 
+// Close 负责该函数对应的核心逻辑，详见实现细节。
 func (tc *TrafficCounter) Close() {
 	if tc == nil || tc.hub == nil || tc.key == "" {
 		return
@@ -76,10 +81,12 @@ var globalTrafficHub = &trafficStatsHub{
 	stopCh:   make(chan struct{}),
 }
 
+// AcquireTrafficCounter 负责该函数对应的核心逻辑，详见实现细节。
 func AcquireTrafficCounter(msg string, fields ...any) *TrafficCounter {
 	return globalTrafficHub.acquire(msg, fields...)
 }
 
+// acquire 负责该函数对应的核心逻辑，详见实现细节。
 func (h *trafficStatsHub) acquire(msg string, fields ...any) *TrafficCounter {
 	h.startOnce.Do(func() { go h.loop() })
 	key := buildTrafficKey(msg, fields)
@@ -96,6 +103,7 @@ func (h *trafficStatsHub) acquire(msg string, fields ...any) *TrafficCounter {
 	return &TrafficCounter{hub: h, key: key, c: c}
 }
 
+// release 负责该函数对应的核心逻辑，详见实现细节。
 func (h *trafficStatsHub) release(key string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -108,6 +116,7 @@ func (h *trafficStatsHub) release(key string) {
 	}
 }
 
+// loop 负责该函数对应的核心逻辑，详见实现细节。
 func (h *trafficStatsHub) loop() {
 	for {
 		interval := trafficStatsInterval()
@@ -124,6 +133,7 @@ func (h *trafficStatsHub) loop() {
 	}
 }
 
+// flush 负责该函数对应的核心逻辑，详见实现细节。
 func (h *trafficStatsHub) flush(interval time.Duration) {
 	h.mu.RLock()
 	cs := make([]*trafficCounter, 0, len(h.counters))
@@ -154,6 +164,7 @@ func (h *trafficStatsHub) flush(interval time.Duration) {
 	}
 }
 
+// buildTrafficKey 负责该函数对应的核心逻辑，详见实现细节。
 func buildTrafficKey(msg string, fields []any) string {
 	var sb strings.Builder
 	sb.WriteString(msg)

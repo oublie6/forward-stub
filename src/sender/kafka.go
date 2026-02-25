@@ -28,6 +28,7 @@ type KafkaSender struct {
 	client *kgo.Client
 }
 
+// NewKafkaSender 负责该函数对应的核心逻辑，详见实现细节。
 func NewKafkaSender(name, brokers, topic string) (*KafkaSender, error) {
 	// topic 与 brokers 必填。
 	if strings.TrimSpace(topic) == "" {
@@ -56,9 +57,13 @@ func NewKafkaSender(name, brokers, topic string) (*KafkaSender, error) {
 	return &KafkaSender{name: name, brokers: brs, topic: topic, client: cli}, nil
 }
 
+// Name 负责该函数对应的核心逻辑，详见实现细节。
 func (s *KafkaSender) Name() string { return s.name }
-func (s *KafkaSender) Key() string  { return "kafka|" + strings.Join(s.brokers, ",") + "|" + s.topic }
 
+// Key 负责该函数对应的核心逻辑，详见实现细节。
+func (s *KafkaSender) Key() string { return "kafka|" + strings.Join(s.brokers, ",") + "|" + s.topic }
+
+// Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
 	s.mu.Lock()
 	cli := s.client
@@ -80,6 +85,7 @@ func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
 	return nil
 }
 
+// Close 负责该函数对应的核心逻辑，详见实现细节。
 func (s *KafkaSender) Close(ctx context.Context) error {
 	s.mu.Lock()
 	cli := s.client
@@ -91,6 +97,7 @@ func (s *KafkaSender) Close(ctx context.Context) error {
 	return nil
 }
 
+// splitCSV 负责该函数对应的核心逻辑，详见实现细节。
 func splitCSV(v string) []string {
 	parts := strings.Split(v, ",")
 	out := make([]string, 0, len(parts))

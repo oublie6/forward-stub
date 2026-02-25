@@ -9,6 +9,7 @@ type Framer interface {
 
 type U16BEFramer struct{}
 
+// Feed 负责该函数对应的核心逻辑，详见实现细节。
 func (f U16BEFramer) Feed(in []byte) ([][]byte, []byte, error) {
 	var frames [][]byte
 	buf := in

@@ -27,6 +27,7 @@ type GnetTCP struct {
 	stats  *logx.TrafficCounter
 }
 
+// NewGnetTCP 负责该函数对应的核心逻辑，详见实现细节。
 func NewGnetTCP(name, listen string, multicore bool, framer Framer, gnetLogLevel string) *GnetTCP {
 	return &GnetTCP{
 		name:         name,
@@ -37,9 +38,13 @@ func NewGnetTCP(name, listen string, multicore bool, framer Framer, gnetLogLevel
 	}
 }
 
+// Name 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetTCP) Name() string { return r.name }
-func (r *GnetTCP) Key() string  { return "tcp_gnet|" + r.listen }
 
+// Key 负责该函数对应的核心逻辑，详见实现细节。
+func (r *GnetTCP) Key() string { return "tcp_gnet|" + r.listen }
+
+// Start 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
 	if logx.Enabled(zapcore.InfoLevel) {
@@ -66,6 +71,7 @@ func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) erro
 	)
 }
 
+// Stop 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetTCP) Stop(ctx context.Context) error {
 	r.stopMu.Lock()
 	fn := r.stopFn
@@ -95,6 +101,7 @@ type tcpHandler struct {
 	recv *GnetTCP
 }
 
+// OnBoot 负责该函数对应的核心逻辑，详见实现细节。
 func (h *tcpHandler) OnBoot(eng gnet.Engine) (action gnet.Action) {
 	h.recv.stopMu.Lock()
 	h.recv.stopFn = eng.Stop
@@ -102,6 +109,7 @@ func (h *tcpHandler) OnBoot(eng gnet.Engine) (action gnet.Action) {
 	return gnet.None
 }
 
+// OnOpen 负责该函数对应的核心逻辑，详见实现细节。
 func (h *tcpHandler) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 	c.SetContext(&connState{
 		buf:    make([]byte, 0, 4096),
@@ -111,6 +119,7 @@ func (h *tcpHandler) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 	return nil, gnet.None
 }
 
+// OnTraffic 负责该函数对应的核心逻辑，详见实现细节。
 func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	in, _ := c.Next(-1)
 	if len(in) == 0 {

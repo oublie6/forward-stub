@@ -9,6 +9,7 @@ import (
 	"forword-stub/src/pipeline"
 )
 
+// CompilePipelines 负责该函数对应的核心逻辑，详见实现细节。
 func CompilePipelines(cfg map[string][]config.StageConfig) (map[string]*CompiledPipeline, error) {
 	out := make(map[string]*CompiledPipeline, len(cfg))
 	for name, stagesCfg := range cfg {
@@ -25,6 +26,7 @@ func CompilePipelines(cfg map[string][]config.StageConfig) (map[string]*Compiled
 	return out, nil
 }
 
+// compileStage 负责该函数对应的核心逻辑，详见实现细节。
 func compileStage(sc config.StageConfig) (pipeline.StageFunc, error) {
 	switch sc.Type {
 	case "match_offset_bytes":
@@ -46,6 +48,7 @@ func compileStage(sc config.StageConfig) (pipeline.StageFunc, error) {
 	}
 }
 
+// flagFromName 负责该函数对应的核心逻辑，详见实现细节。
 func flagFromName(s string) uint32 {
 	switch s {
 	case "", "none":

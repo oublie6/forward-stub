@@ -30,6 +30,7 @@ type UDPMulticastSender struct {
 	conn atomic.Pointer[net.UDPConn]
 }
 
+// NewUDPMulticastSender 负责该函数对应的核心逻辑，详见实现细节。
 func NewUDPMulticastSender(name, localIP string, localPort int, group string, ifaceName string, ttl int, loop bool) (*UDPMulticastSender, error) {
 	gaddr, err := net.ResolveUDPAddr("udp", group)
 	if err != nil {
@@ -57,11 +58,15 @@ func NewUDPMulticastSender(name, localIP string, localPort int, group string, if
 	return s, nil
 }
 
+// Name 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPMulticastSender) Name() string { return s.name }
+
+// Key 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPMulticastSender) Key() string {
 	return fmt.Sprintf("udp_multicast|%s->%s", s.local.String(), s.group.String())
 }
 
+// Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPMulticastSender) Send(ctx context.Context, p *packet.Packet) error {
 	c := s.conn.Load()
 	if c == nil {
@@ -75,6 +80,7 @@ func (s *UDPMulticastSender) Send(ctx context.Context, p *packet.Packet) error {
 	return err
 }
 
+// Close 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPMulticastSender) Close(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -85,6 +91,7 @@ func (s *UDPMulticastSender) Close(ctx context.Context) error {
 	return nil
 }
 
+// getConn 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPMulticastSender) getConn() (*net.UDPConn, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -97,12 +104,14 @@ func (s *UDPMulticastSender) getConn() (*net.UDPConn, error) {
 	return s.conn.Load(), nil
 }
 
+// ensureConn 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPMulticastSender) ensureConn() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.ensureConnLocked()
 }
 
+// ensureConnLocked 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPMulticastSender) ensureConnLocked() error {
 	if s.conn.Load() != nil {
 		return nil

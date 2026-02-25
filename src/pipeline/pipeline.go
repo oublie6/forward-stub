@@ -10,6 +10,7 @@ type Pipeline struct {
 	Stages []StageFunc
 }
 
+// Process 负责该函数对应的核心逻辑，详见实现细节。
 func (pl *Pipeline) Process(p *packet.Packet) bool {
 	for _, st := range pl.Stages {
 		if !st(p) {
