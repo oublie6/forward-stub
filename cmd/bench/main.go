@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -42,8 +43,27 @@ type result struct {
 	mbps           float64
 }
 
+type benchFileConfig struct {
+	Mode                 string `json:"mode,omitempty"`
+	Duration             string `json:"duration,omitempty"`
+	Warmup               string `json:"warmup,omitempty"`
+	PayloadSize          *int   `json:"payload_size,omitempty"`
+	Workers              *int   `json:"workers,omitempty"`
+	PPSPerWorker         *int   `json:"pps_per_worker,omitempty"`
+	PPSSweep             string `json:"pps_sweep,omitempty"`
+	Multicore            *bool  `json:"multicore,omitempty"`
+	UDPSinkReaders       *int   `json:"udp_sink_readers,omitempty"`
+	UDPSinkReadBuf       *int   `json:"udp_sink_read_buf,omitempty"`
+	TaskFastPath         *bool  `json:"task_fast_path,omitempty"`
+	TaskPoolSize         *int   `json:"task_pool_size,omitempty"`
+	LogLevel             string `json:"log_level,omitempty"`
+	LogFile              string `json:"log_file,omitempty"`
+	TrafficStatsInterval string `json:"traffic_stats_interval,omitempty"`
+}
+
 // main 负责该函数对应的核心逻辑，详见实现细节。
 func main() {
+	benchConfigPath := flag.String("bench-config", "", "benchmark config json path (optional)")
 	mode := flag.String("mode", "both", "benchmark mode: udp|tcp|both")
 	duration := flag.Duration("duration", 8*time.Second, "measure duration")
 	warmup := flag.Duration("warmup", 2*time.Second, "warmup duration before measure")
@@ -61,6 +81,13 @@ func main() {
 	trafficStatsInterval := flag.Duration("traffic-stats-interval", time.Second, "aggregated traffic stats log interval (e.g. 5s, 10s)")
 	flag.Parse()
 
+	if *benchConfigPath != "" {
+		if err := applyBenchConfigFile(*benchConfigPath, mode, duration, warmup, payloadSize, workers, ppsPerWorker, ppsSweep, multicore, udpSinkReaders, udpSinkReadBuf, taskFastPath, taskPoolSize, logLevel, logFile, trafficStatsInterval); err != nil {
+			fmt.Fprintf(os.Stderr, "load bench config failed: %v\n", err)
+			os.Exit(2)
+		}
+	}
+
 	if *payloadSize <= 0 || *payloadSize > 65535 {
 		fmt.Fprintf(os.Stderr, "invalid payload-size: %d\n", *payloadSize)
 		os.Exit(2)
@@ -70,7 +97,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile}); err != nil {
+	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile, TrafficStatsEnableSender: true, TrafficStatsSampleEvery: 1}); err != nil {
 		fmt.Fprintf(os.Stderr, "log init failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -109,6 +136,75 @@ func main() {
 		fmt.Fprintf(os.Stderr, "invalid mode: %s\n", *mode)
 		os.Exit(2)
 	}
+}
+
+func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Duration, payloadSize, workers, ppsPerWorker *int, ppsSweep *string, multicore *bool, udpSinkReaders, udpSinkReadBuf *int, taskFastPath *bool, taskPoolSize *int, logLevel, logFile *string, trafficStatsInterval *time.Duration) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var cfg benchFileConfig
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		return err
+	}
+	if cfg.Mode != "" {
+		*mode = cfg.Mode
+	}
+	if cfg.Duration != "" {
+		d, err := time.ParseDuration(cfg.Duration)
+		if err != nil {
+			return fmt.Errorf("invalid duration: %w", err)
+		}
+		*duration = d
+	}
+	if cfg.Warmup != "" {
+		d, err := time.ParseDuration(cfg.Warmup)
+		if err != nil {
+			return fmt.Errorf("invalid warmup: %w", err)
+		}
+		*warmup = d
+	}
+	if cfg.PayloadSize != nil {
+		*payloadSize = *cfg.PayloadSize
+	}
+	if cfg.Workers != nil {
+		*workers = *cfg.Workers
+	}
+	if cfg.PPSPerWorker != nil {
+		*ppsPerWorker = *cfg.PPSPerWorker
+	}
+	if cfg.PPSSweep != "" {
+		*ppsSweep = cfg.PPSSweep
+	}
+	if cfg.Multicore != nil {
+		*multicore = *cfg.Multicore
+	}
+	if cfg.UDPSinkReaders != nil {
+		*udpSinkReaders = *cfg.UDPSinkReaders
+	}
+	if cfg.UDPSinkReadBuf != nil {
+		*udpSinkReadBuf = *cfg.UDPSinkReadBuf
+	}
+	if cfg.TaskFastPath != nil {
+		*taskFastPath = *cfg.TaskFastPath
+	}
+	if cfg.TaskPoolSize != nil {
+		*taskPoolSize = *cfg.TaskPoolSize
+	}
+	if cfg.LogLevel != "" {
+		*logLevel = cfg.LogLevel
+	}
+	if cfg.LogFile != "" {
+		*logFile = cfg.LogFile
+	}
+	if cfg.TrafficStatsInterval != "" {
+		d, err := time.ParseDuration(cfg.TrafficStatsInterval)
+		if err != nil {
+			return fmt.Errorf("invalid traffic_stats_interval: %w", err)
+		}
+		*trafficStatsInterval = d
+	}
+	return nil
 }
 
 // parseSweep 负责该函数对应的核心逻辑，详见实现细节。

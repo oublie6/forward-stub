@@ -19,11 +19,7 @@ var version = "dev"
 
 // main 负责该函数对应的核心逻辑，详见实现细节。
 func main() {
-	localPath := flag.String("config", "", "local config json path (optional)")
-	apiURL := flag.String("api", "", "java config service url (optional)")
-	timeoutSec := flag.Int("timeout", 5, "api timeout seconds")
-	logLevel := flag.String("log-level", "info", "log level: debug|info|warn|error")
-	logFile := flag.String("log-file", "", "optional log file path (stdout when empty)")
+	localPath := flag.String("config", "", "local config json path")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -32,7 +28,14 @@ func main() {
 		return
 	}
 
-	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile}); err != nil {
+	defaultLogLevel := "info"
+	if err := logx.Init(logx.Options{
+		Level:                    defaultLogLevel,
+		File:                     "",
+		TrafficStatsInterval:     time.Second,
+		TrafficStatsSampleEvery:  1,
+		TrafficStatsEnableSender: true,
+	}); err != nil {
 		_, _ = os.Stderr.WriteString("init logger error: " + err.Error() + "\n")
 		os.Exit(1)
 	}
@@ -42,20 +45,27 @@ func main() {
 	var cfg config.Config
 	var err error
 
-	switch {
-	case *localPath != "":
-		cfg, err = config.LoadLocal(*localPath)
-	case *apiURL != "":
-		cli := control.NewConfigAPIClient(*apiURL, *timeoutSec)
-		cfg, err = cli.FetchConfig(context.Background())
-	default:
-		lg.Error("must provide -config or -api")
+	if *localPath == "" {
+		lg.Error("must provide -config")
 		os.Exit(1)
 	}
+	cfg, err = config.LoadLocal(*localPath)
 
 	if err != nil {
 		lg.Errorf("load config error: %v", err)
 		os.Exit(1)
+	}
+	if cfg.Control.API != "" {
+		to := cfg.Control.TimeoutSec
+		if to <= 0 {
+			to = 5
+		}
+		cli := control.NewConfigAPIClient(cfg.Control.API, to)
+		cfg, err = cli.FetchConfig(context.Background())
+		if err != nil {
+			lg.Errorf("fetch config from api error: %v", err)
+			os.Exit(1)
+		}
 	}
 	if err := cfg.Validate(); err != nil {
 		lg.Errorf("config validate error: %v", err)
@@ -63,11 +73,19 @@ func main() {
 	}
 
 	if cfg.Logging.Level == "" {
-		cfg.Logging.Level = *logLevel
+		cfg.Logging.Level = defaultLogLevel
 	}
-	if cfg.Logging.File == "" {
-		cfg.Logging.File = *logFile
+	if err := logx.Init(logx.Options{
+		Level:                    cfg.Logging.Level,
+		File:                     cfg.Logging.File,
+		TrafficStatsInterval:     time.Second,
+		TrafficStatsSampleEvery:  1,
+		TrafficStatsEnableSender: true,
+	}); err != nil {
+		_, _ = os.Stderr.WriteString("re-init logger error: " + err.Error() + "\n")
+		os.Exit(1)
 	}
+	lg = logx.L()
 	if cfg.Logging.TrafficStatsInterval != "" {
 		d, err := time.ParseDuration(cfg.Logging.TrafficStatsInterval)
 		if err != nil {
@@ -75,6 +93,12 @@ func main() {
 			os.Exit(1)
 		}
 		logx.SetTrafficStatsInterval(d)
+	}
+	if cfg.Logging.TrafficStatsSampleEvery > 0 {
+		logx.SetTrafficStatsSampleEvery(cfg.Logging.TrafficStatsSampleEvery)
+	}
+	if cfg.Logging.TrafficStatsEnableSender != nil {
+		logx.SetTrafficStatsEnableSender(*cfg.Logging.TrafficStatsEnableSender)
 	}
 
 	rt := app.NewRuntime()

@@ -3,6 +3,7 @@ package config
 
 type Config struct {
 	Version   int64                     `json:"version"`
+	Control   ControlConfig             `json:"control,omitempty"`
 	Logging   LoggingConfig             `json:"logging"`
 	Receivers map[string]ReceiverConfig `json:"receivers"`
 	Senders   map[string]SenderConfig   `json:"senders"`
@@ -10,10 +11,17 @@ type Config struct {
 	Tasks     map[string]TaskConfig     `json:"tasks"`
 }
 
+type ControlConfig struct {
+	API        string `json:"api,omitempty"`
+	TimeoutSec int    `json:"timeout_sec,omitempty"`
+}
+
 type LoggingConfig struct {
-	Level                string `json:"level"`
-	File                 string `json:"file"`
-	TrafficStatsInterval string `json:"traffic_stats_interval,omitempty"`
+	Level                    string `json:"level"`
+	File                     string `json:"file"`
+	TrafficStatsInterval     string `json:"traffic_stats_interval,omitempty"`
+	TrafficStatsSampleEvery  int    `json:"traffic_stats_sample_every,omitempty"`
+	TrafficStatsEnableSender *bool  `json:"traffic_stats_enable_sender,omitempty"`
 }
 
 type ReceiverConfig struct {

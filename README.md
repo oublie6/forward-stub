@@ -61,24 +61,24 @@ go mod download
 ### 4.3 本地配置启动
 
 ```bash
-go run . -config ./configs/example.json -log-level info
+go run . -config ./configs/example.json
 ```
 
 ### 4.4 从配置 API 启动
 
+在 `config` 文件内配置 `control.api` 与 `control.timeout_sec`，程序会先加载本地文件，再按该地址拉取远端配置。
+
 ```bash
-go run . -api http://127.0.0.1:8080/config -timeout 5 -log-level info
+go run . -config ./configs/example.json
 ```
 
 ## 5. 启动参数
 
 | 参数 | 说明 | 默认值 |
 |---|---|---|
-| `-config` | 本地 JSON 配置文件路径，与 `-api` 二选一 | `""` |
-| `-api` | 远端配置服务 URL，与 `-config` 二选一 | `""` |
-| `-timeout` | API 拉取配置超时（秒） | `5` |
-| `-log-level` | 日志级别：`debug` / `info` / `warn` / `error` | `info` |
-| `-log-file` | 日志文件路径（空则 stdout） | `""` |
+| `-config` | 本地 JSON 配置文件路径（必填） | `""` |
+
+> 说明：`control`、`logging` 以及流量统计相关参数统一从配置文件读取（不再提供独立启动参数）。
 
 ## 6. 配置文件说明
 
@@ -87,9 +87,16 @@ go run . -api http://127.0.0.1:8080/config -timeout 5 -log-level info
 ```json
 {
   "version": 5,
+  "control": {
+    "api": "",
+    "timeout_sec": 5
+  },
   "logging": {
     "level": "info",
-    "file": ""
+    "file": "",
+    "traffic_stats_interval": "5s",
+    "traffic_stats_sample_every": 1,
+    "traffic_stats_enable_sender": true
   },
   "receivers": {},
   "senders": {},
@@ -101,6 +108,7 @@ go run . -api http://127.0.0.1:8080/config -timeout 5 -log-level info
 ### 6.1 顶层字段
 
 - `version`：配置版本号。
+- `control`：配置中心拉取配置参数（可选）。
 - `logging`：日志级别与日志文件。
 - `receivers`：输入端定义。
 - `senders`：输出端定义。
@@ -170,16 +178,24 @@ go test ./...
 go run ./cmd/bench -mode both -duration 8s -warmup 2s -payload-size 512 -workers 4
 ```
 
+也支持将压测参数收敛到 JSON 配置，避免长命令行：
+
+```bash
+go run ./cmd/bench -bench-config ./configs/bench.example.json
+```
+
+`configs/bench.example.json` 已覆盖 bench 常用可配置项（如 `workers`、`task_pool_size`、`pps_per_worker`、`pps_sweep`、`traffic_stats_interval` 等），可按机器规模直接调参复用。
+
 ## 11. 常见问题（FAQ）
 
-### Q1：启动时报 `must provide -config or -api`
-A：必须二选一提供配置来源。
+### Q1：启动时报 `must provide -config`
+A：必须提供本地配置文件路径。
 
 ### Q2：`udp_unicast/udp_multicast` 报错 requires local_port
 A：当前实现要求显式配置 `local_port`。
 
 ### Q3：如何把日志写到文件
-A：传入 `-log-file /path/to/app.log`。
+A：在配置文件设置 `logging.file`，例如：`"file":"/path/to/app.log"`。
 
 ### Q4：如何观察配置热更新效果
 A：关注 `updating runtime cache` 与 `runtime cache updated` 两条日志。
