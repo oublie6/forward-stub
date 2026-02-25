@@ -31,9 +31,9 @@ type Task struct {
 	PoolSize int
 	FastPath bool
 
-	pool        *ants.Pool
-	stats       *logx.TrafficCounter
-	senderStats []*logx.TrafficCounter
+	pool      *ants.Pool
+	recvStats *logx.TrafficCounter
+	sendStats *logx.TrafficCounter
 
 	accepting atomic.Bool
 	inflight  sync.WaitGroup
@@ -58,22 +58,18 @@ func (t *Task) Start() error {
 	t.pool = p
 	t.accepting.Store(true)
 	if logx.Enabled(zapcore.InfoLevel) {
-		t.stats = logx.AcquireTrafficCounter(
-			"task traffic stats",
+		t.recvStats = logx.AcquireTrafficCounter(
+			"task recv traffic stats",
 			"role", "task",
 			"task", t.Name,
+			"direction", "recv",
 		)
-		if logx.TrafficStatsEnableSender() {
-			t.senderStats = make([]*logx.TrafficCounter, len(t.Senders))
-			for i, s := range t.Senders {
-				t.senderStats[i] = logx.AcquireTrafficCounter(
-					"sender traffic stats",
-					"role", "sender",
-					"sender", s.Name(),
-					"sender_key", s.Key(),
-				)
-			}
-		}
+		t.sendStats = logx.AcquireTrafficCounter(
+			"task send traffic stats",
+			"role", "task",
+			"task", t.Name,
+			"direction", "send",
+		)
 	}
 	return nil
 }
@@ -116,33 +112,29 @@ func (t *Task) StopGraceful() {
 		t.pool.Release()
 		t.pool = nil
 	}
-	if t.stats != nil {
-		t.stats.Close()
-		t.stats = nil
+	if t.recvStats != nil {
+		t.recvStats.Close()
+		t.recvStats = nil
 	}
-	for _, st := range t.senderStats {
-		if st != nil {
-			st.Close()
-		}
+	if t.sendStats != nil {
+		t.sendStats.Close()
+		t.sendStats = nil
 	}
-	t.senderStats = nil
 }
 
 // processAndSend 依次执行 pipeline，再将结果发送到所有 sender。
 func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
+	if t.recvStats != nil {
+		t.recvStats.AddBytes(len(pkt.Payload))
+	}
 	for _, pl := range t.Pipelines {
 		if !pl.Process(pkt) {
 			return
 		}
 	}
-	for i, s := range t.Senders {
-		if t.stats != nil {
-			t.stats.AddBytes(len(pkt.Payload))
-		}
-		if t.senderStats != nil {
-			if st := t.senderStats[i]; st != nil {
-				st.AddBytes(len(pkt.Payload))
-			}
+	for _, s := range t.Senders {
+		if t.sendStats != nil {
+			t.sendStats.AddBytes(len(pkt.Payload))
 		}
 		if err := s.Send(ctx, pkt); err != nil && logx.Enabled(zapcore.WarnLevel) {
 			logx.L().Warnw("sender send failed", "task", t.Name, "error", err)

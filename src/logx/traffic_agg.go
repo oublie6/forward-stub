@@ -202,10 +202,7 @@ func (h *trafficStatsHub) flush(interval time.Duration) {
 
 type trafficSummary struct {
 	interval string
-	receiver []string
 	task     []string
-	sender   []string
-	other    []string
 }
 
 func newTrafficSummary(interval time.Duration) *trafficSummary {
@@ -218,34 +215,19 @@ func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, sec float
 		line = fmt.Sprintf("%s|packets=%d|bytes=%d|pps=%.2f|mbps=%.2f", c.msg, packets, bytes, float64(packets)/sec, float64(bytes*8)/sec/1_000_000)
 	}
 	switch c.role {
-	case "receiver":
-		s.receiver = append(s.receiver, line)
 	case "task":
 		s.task = append(s.task, line)
-	case "sender":
-		s.sender = append(s.sender, line)
-	default:
-		s.other = append(s.other, line)
 	}
 }
 
 func (s *trafficSummary) hasData() bool {
-	return len(s.receiver) > 0 || len(s.task) > 0 || len(s.sender) > 0 || len(s.other) > 0
+	return len(s.task) > 0
 }
 
 func (s *trafficSummary) fields() []any {
 	args := []any{"interval", s.interval}
-	if len(s.receiver) > 0 {
-		args = append(args, "receivers", s.receiver)
-	}
 	if len(s.task) > 0 {
 		args = append(args, "tasks", s.task)
-	}
-	if len(s.sender) > 0 {
-		args = append(args, "senders", s.sender)
-	}
-	if len(s.other) > 0 {
-		args = append(args, "others", s.other)
 	}
 	return args
 }
@@ -262,7 +244,7 @@ func parseTrafficMeta(fields []any) (role string, name string, key string) {
 			role = v
 		case "receiver", "task", "sender":
 			name = v
-		case "receiver_key", "sender_key":
+		case "receiver_key", "sender_key", "direction":
 			key = v
 		}
 	}
