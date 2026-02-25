@@ -1,3 +1,4 @@
+// task.go 定义单条处理任务，串联 pipeline 执行与 sender 分发。
 package task
 
 import (

@@ -1,3 +1,4 @@
+// validate.go 校验配置完整性、参数合法性与引用关系。
 package config
 
 import (
@@ -5,6 +6,7 @@ import (
 	"fmt"
 )
 
+// Validate 负责该函数对应的核心逻辑，详见实现细节。
 func (c *Config) Validate() error {
 	if c.Tasks == nil || len(c.Tasks) == 0 {
 		return errors.New("no tasks")

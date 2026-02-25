@@ -1,3 +1,4 @@
+// config.go 定义系统配置结构体以及各模块配置字段。
 package config
 
 type Config struct {

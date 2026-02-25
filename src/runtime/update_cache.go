@@ -1,3 +1,4 @@
+// update_cache.go 实现运行时缓存的全量替换流程。
 package runtime
 
 import (
@@ -170,6 +171,7 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 	}
 }
 
+// buildReceiver 负责该函数对应的核心逻辑，详见实现细节。
 func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (receiver.Receiver, error) {
 	switch rc.Type {
 	case "udp_gnet":
@@ -192,6 +194,7 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 	}
 }
 
+// buildSender 负责该函数对应的核心逻辑，详见实现细节。
 func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (sender.Sender, error) {
 	conc := sc.Concurrency
 	if conc <= 0 {

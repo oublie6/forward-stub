@@ -1,3 +1,4 @@
+// sender.go 声明发送端统一接口与工厂构建入口。
 package sender
 
 import (

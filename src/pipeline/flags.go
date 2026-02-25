@@ -1,3 +1,4 @@
+// flags.go 定义 pipeline 在处理过程中使用的位标记。
 package pipeline
 
 const (
