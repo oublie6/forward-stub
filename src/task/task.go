@@ -33,6 +33,7 @@ type Task struct {
 
 	pool  *ants.Pool
 	stats *logx.TrafficCounter
+	sout  map[string]*logx.TrafficCounter
 
 	accepting atomic.Bool
 	inflight  sync.WaitGroup
@@ -58,9 +59,19 @@ func (t *Task) Start() error {
 	t.accepting.Store(true)
 	if logx.Enabled(zapcore.InfoLevel) {
 		t.stats = logx.AcquireTrafficCounter(
-			"sender traffic stats",
+			"task traffic stats",
+			"role", "task",
 			"task", t.Name,
 		)
+		t.sout = make(map[string]*logx.TrafficCounter, len(t.Senders))
+		for _, s := range t.Senders {
+			t.sout[s.Name()] = logx.AcquireTrafficCounter(
+				"sender traffic stats",
+				"role", "sender",
+				"sender", s.Name(),
+				"sender_key", s.Key(),
+			)
+		}
 	}
 	return nil
 }
@@ -107,6 +118,12 @@ func (t *Task) StopGraceful() {
 		t.stats.Close()
 		t.stats = nil
 	}
+	for _, st := range t.sout {
+		if st != nil {
+			st.Close()
+		}
+	}
+	t.sout = nil
 }
 
 // processAndSend 依次执行 pipeline，再将结果发送到所有 sender。
@@ -119,6 +136,11 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 	for _, s := range t.Senders {
 		if t.stats != nil {
 			t.stats.AddBytes(len(pkt.Payload))
+		}
+		if t.sout != nil {
+			if st := t.sout[s.Name()]; st != nil {
+				st.AddBytes(len(pkt.Payload))
+			}
 		}
 		if err := s.Send(ctx, pkt); err != nil && logx.Enabled(zapcore.WarnLevel) {
 			logx.L().Warnw("sender send failed", "task", t.Name, "error", err)

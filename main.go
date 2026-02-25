@@ -24,6 +24,7 @@ func main() {
 	timeoutSec := flag.Int("timeout", 5, "api timeout seconds")
 	logLevel := flag.String("log-level", "info", "log level: debug|info|warn|error")
 	logFile := flag.String("log-file", "", "optional log file path (stdout when empty)")
+	trafficStatsInterval := flag.Duration("traffic-stats-interval", time.Second, "aggregated traffic stats log interval (e.g. 5s, 10s)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -32,7 +33,7 @@ func main() {
 		return
 	}
 
-	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile}); err != nil {
+	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile, TrafficStatsInterval: *trafficStatsInterval}); err != nil {
 		_, _ = os.Stderr.WriteString("init logger error: " + err.Error() + "\n")
 		os.Exit(1)
 	}
