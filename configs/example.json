@@ -12,24 +12,27 @@
       "num_event_loop": 0,
       "read_buffer_cap": 0,
       "frame": ""
+    },
+    "udp_in2": {
+      "type": "udp_gnet",
+      "listen": "udp://0.0.0.0:9001",
+      "multicore": true,
+      "frame": ""
     }
   },
   "senders": {
     "udp_uni_out": {
       "type": "udp_unicast",
-      "remote": "127.0.0.1:9001",
+      "remote": "127.0.0.1:9100",
       "local_ip": "0.0.0.0",
       "local_port": 50000,
       "concurrency": 1
     },
-    "udp_mcast_out": {
-      "type": "udp_multicast",
-      "remote": "239.1.2.3:9002",
+    "udp_uni_out2": {
+      "type": "udp_unicast",
+      "remote": "127.0.0.1:9101",
       "local_ip": "0.0.0.0",
-      "local_port": 50001,
-      "iface": "",
-      "ttl": 8,
-      "loop": false,
+      "local_port": 50000,
       "concurrency": 1
     }
   },
@@ -61,13 +64,11 @@
       "pool_size": 64,
       "fast_path": false,
       "receivers": [
-        "udp_in"
+        "udp_in2"
       ],
-      "pipelines": [
-        "p1"
-      ],
+      "pipelines": [],
       "senders": [
-        "udp_mcast_out"
+        "udp_uni_out2"
       ]
     }
   },
