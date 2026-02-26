@@ -15,6 +15,7 @@ import (
 	"forward-stub/src/config"
 	"forward-stub/src/control"
 	"forward-stub/src/logx"
+	"forward-stub/src/packet"
 )
 
 var version = "dev"
@@ -74,6 +75,8 @@ func main() {
 		lg.Errorf("config validate error: %v", err)
 		os.Exit(1)
 	}
+
+	packet.ConfigurePayloadPool(cfg.Runtime.PayloadPoolSize, cfg.Runtime.PayloadMaxReuseBytes)
 
 	trafficStatsInterval, err := time.ParseDuration(cfg.Logging.TrafficStatsInterval)
 	if err != nil {

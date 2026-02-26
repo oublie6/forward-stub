@@ -26,6 +26,12 @@ type Config struct {
 	Tasks     map[string]TaskConfig     `json:"tasks"`
 }
 
+type RuntimeConfig struct {
+	DefaultTaskPoolSize  int `json:"default_task_pool_size,omitempty"`
+	PayloadPoolSize      int `json:"payload_pool_size,omitempty"`
+	PayloadMaxReuseBytes int `json:"payload_max_reuse_bytes,omitempty"`
+}
+
 type ControlConfig struct {
 	API        string `json:"api,omitempty"`
 	TimeoutSec int    `json:"timeout_sec,omitempty"`
