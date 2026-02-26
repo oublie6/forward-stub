@@ -61,6 +61,12 @@ func (c *Config) Validate() error {
 			if r.Topic == "" {
 				return fmt.Errorf("receiver %s kafka requires topic", rn)
 			}
+			if r.StartOffset != "" && r.StartOffset != "earliest" && r.StartOffset != "latest" {
+				return fmt.Errorf("receiver %s kafka start_offset must be earliest/latest", rn)
+			}
+			if err := validateKafkaAuth("receiver", rn, r.SASLMechanism, r.Username, r.Password); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("receiver %s unknown type %s", rn, r.Type)
 		}
@@ -76,9 +82,28 @@ func (c *Config) Validate() error {
 			if s.Topic == "" {
 				return fmt.Errorf("sender %s kafka requires topic", sn)
 			}
+			if s.Compression != "" && s.Compression != "none" && s.Compression != "gzip" && s.Compression != "snappy" && s.Compression != "lz4" && s.Compression != "zstd" {
+				return fmt.Errorf("sender %s kafka compression unsupported: %s", sn, s.Compression)
+			}
+			if err := validateKafkaAuth("sender", sn, s.SASLMechanism, s.Username, s.Password); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("sender %s unknown type %s", sn, s.Type)
 		}
 	}
 	return nil
+}
+
+func validateKafkaAuth(kind, name, mechanism, username, password string) error {
+	if mechanism == "" && username == "" && password == "" {
+		return nil
+	}
+	if username == "" || password == "" {
+		return fmt.Errorf("%s %s kafka auth requires both username and password", kind, name)
+	}
+	if mechanism == "" || mechanism == "PLAIN" || mechanism == "plain" {
+		return nil
+	}
+	return fmt.Errorf("%s %s kafka unsupported sasl_mechanism %s", kind, name, mechanism)
 }
