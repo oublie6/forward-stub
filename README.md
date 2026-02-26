@@ -137,6 +137,56 @@ pipeline 是 stage 数组，按顺序执行。例如：`match_offset_bytes`。
 
 一个 task 绑定：`receivers`、`pipelines`、`senders`，并可配置 `pool_size` 与 `fast_path`。
 
+### 6.6 Kafka receiver / sender 配置示例
+
+下面给出一个最小可用示例：从 Kafka topic 消费报文，经过任务处理后再写入另一个 Kafka topic。
+
+```json
+{
+  "version": 5,
+  "logging": {
+    "level": "info",
+    "traffic_stats_interval": "5s",
+    "traffic_stats_sample_every": 1,
+    "traffic_stats_enable_sender": true
+  },
+  "receivers": {
+    "kafka_in": {
+      "type": "kafka",
+      "listen": "127.0.0.1:9092,127.0.0.1:9093",
+      "topic": "demo.input",
+      "group_id": "forward-stub-group"
+    }
+  },
+  "senders": {
+    "kafka_out": {
+      "type": "kafka",
+      "remote": "127.0.0.1:9092,127.0.0.1:9093",
+      "topic": "demo.output",
+      "concurrency": 2
+    }
+  },
+  "pipelines": {
+    "pass": []
+  },
+  "tasks": {
+    "kafka_forward": {
+      "receivers": ["kafka_in"],
+      "pipelines": ["pass"],
+      "senders": ["kafka_out"],
+      "pool_size": 128,
+      "fast_path": false
+    }
+  }
+}
+```
+
+说明：
+
+- Kafka receiver 使用 `listen` 作为 broker 列表（逗号分隔），并配合 `topic`、`group_id` 消费。
+- Kafka sender 使用 `remote` 作为 broker 列表（逗号分隔），并通过 `topic` 指定目标主题。
+- `pipelines` 可先配置为空数组（透传），后续再按需追加 stage。
+
 ## 7. 运行时流程
 
 1. 启动后加载配置（本地文件或远端 API）。

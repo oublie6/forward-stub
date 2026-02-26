@@ -32,7 +32,6 @@ type Task struct {
 	FastPath bool
 
 	pool      *ants.Pool
-	recvStats *logx.TrafficCounter
 	sendStats *logx.TrafficCounter
 
 	accepting atomic.Bool
@@ -58,12 +57,6 @@ func (t *Task) Start() error {
 	t.pool = p
 	t.accepting.Store(true)
 	if logx.Enabled(zapcore.InfoLevel) {
-		t.recvStats = logx.AcquireTrafficCounter(
-			"task recv traffic stats",
-			"role", "task",
-			"task", t.Name,
-			"direction", "recv",
-		)
 		t.sendStats = logx.AcquireTrafficCounter(
 			"task send traffic stats",
 			"role", "task",
@@ -112,10 +105,6 @@ func (t *Task) StopGraceful() {
 		t.pool.Release()
 		t.pool = nil
 	}
-	if t.recvStats != nil {
-		t.recvStats.Close()
-		t.recvStats = nil
-	}
 	if t.sendStats != nil {
 		t.sendStats.Close()
 		t.sendStats = nil
@@ -124,9 +113,6 @@ func (t *Task) StopGraceful() {
 
 // processAndSend 依次执行 pipeline，再将结果发送到所有 sender。
 func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
-	if t.recvStats != nil {
-		t.recvStats.AddBytes(len(pkt.Payload))
-	}
 	for _, pl := range t.Pipelines {
 		if !pl.Process(pkt) {
 			return
