@@ -43,9 +43,6 @@ type Task struct {
 //   - WithNonblocking(true)：池满时立即返回错误，避免调用方阻塞；
 //   - WithPreAlloc(true)：预分配 worker 队列内存，减少高峰时动态扩容抖动。
 func (t *Task) Start() error {
-	if t.PoolSize <= 0 {
-		t.PoolSize = 64
-	}
 	p, err := ants.NewPool(
 		t.PoolSize,
 		ants.WithNonblocking(true),
@@ -72,6 +69,9 @@ func (t *Task) Start() error {
 func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 	if !t.accepting.Load() {
 		pkt.Release()
+		if logx.Enabled(zapcore.WarnLevel) {
+			logx.L().Warnw("task dropped packet because task is not accepting", "task", t.Name)
+		}
 		return
 	}
 
@@ -90,8 +90,8 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 	if err := t.pool.Submit(run); err != nil {
 		t.inflight.Done()
 		pkt.Release()
-		if logx.Enabled(zapcore.DebugLevel) {
-			logx.L().Debugw("task dropped packet due to full worker pool", "task", t.Name, "pool_size", t.PoolSize, "error", err)
+		if logx.Enabled(zapcore.WarnLevel) {
+			logx.L().Warnw("task dropped packet due to full worker pool", "task", t.Name, "pool_size", t.PoolSize, "error", err)
 		}
 		return
 	}

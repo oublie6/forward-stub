@@ -13,6 +13,10 @@ const (
 	DefaultLogRotateCompress        = true
 	DefaultPprofListen              = "127.0.0.1:6060"
 	DefaultKafkaSendTimeoutMS       = 5000
+	DefaultTaskPoolSize             = 64
+	DefaultKafkaTLS                 = false
+	DefaultPayloadPoolSize          = 1024
+	DefaultPayloadMaxReuseBytes     = 0
 )
 
 type Config struct {
@@ -20,10 +24,17 @@ type Config struct {
 	Control   ControlConfig             `json:"control,omitempty"`
 	Logging   LoggingConfig             `json:"logging"`
 	Pprof     PprofConfig               `json:"pprof,omitempty"`
+	Runtime   RuntimeConfig             `json:"runtime,omitempty"`
 	Receivers map[string]ReceiverConfig `json:"receivers"`
 	Senders   map[string]SenderConfig   `json:"senders"`
 	Pipelines map[string][]StageConfig  `json:"pipelines"`
 	Tasks     map[string]TaskConfig     `json:"tasks"`
+}
+
+type RuntimeConfig struct {
+	DefaultTaskPoolSize  int `json:"default_task_pool_size,omitempty"`
+	PayloadPoolSize      int `json:"payload_pool_size,omitempty"`
+	PayloadMaxReuseBytes int `json:"payload_max_reuse_bytes,omitempty"`
 }
 
 type ControlConfig struct {
@@ -147,5 +158,14 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.Pprof.Listen == "" {
 		c.Pprof.Listen = DefaultPprofListen
+	}
+	if c.Runtime.DefaultTaskPoolSize <= 0 {
+		c.Runtime.DefaultTaskPoolSize = DefaultTaskPoolSize
+	}
+	if c.Runtime.PayloadPoolSize <= 0 {
+		c.Runtime.PayloadPoolSize = DefaultPayloadPoolSize
+	}
+	if c.Runtime.PayloadMaxReuseBytes < 0 {
+		c.Runtime.PayloadMaxReuseBytes = DefaultPayloadMaxReuseBytes
 	}
 }

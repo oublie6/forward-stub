@@ -15,6 +15,7 @@ import (
 	"forward-stub/src/config"
 	"forward-stub/src/control"
 	"forward-stub/src/logx"
+	"forward-stub/src/packet"
 )
 
 var version = "dev"
@@ -75,6 +76,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	packet.ConfigurePayloadPool(cfg.Runtime.PayloadPoolSize, cfg.Runtime.PayloadMaxReuseBytes)
+
 	trafficStatsInterval, err := time.ParseDuration(cfg.Logging.TrafficStatsInterval)
 	if err != nil {
 		lg.Errorf("invalid traffic_stats_interval: %v", err)
@@ -120,9 +123,13 @@ func main() {
 
 	if pprofSrv != nil {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		_ = pprofSrv.Shutdown(shutdownCtx)
+		if err := pprofSrv.Shutdown(shutdownCtx); err != nil {
+			lg.Warnw("pprof server shutdown failed", "error", err)
+		}
 		cancel()
 	}
-	_ = rt.Stop(context.Background())
+	if err := rt.Stop(context.Background()); err != nil {
+		lg.Warnw("runtime stop reported error", "error", err)
+	}
 	lg.Info("forward-stub stopped.")
 }
