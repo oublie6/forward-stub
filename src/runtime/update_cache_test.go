@@ -42,6 +42,24 @@ func (s *captureSender) Last() []byte {
 	return s.payload[len(s.payload)-1]
 }
 
+type spyPacketSender struct {
+	name string
+	last *packet.Packet
+}
+
+var _ sender.Sender = (*spyPacketSender)(nil)
+
+func (s *spyPacketSender) Name() string { return s.name }
+
+func (s *spyPacketSender) Key() string { return s.name }
+
+func (s *spyPacketSender) Send(_ context.Context, p *packet.Packet) error {
+	s.last = p
+	return nil
+}
+
+func (s *spyPacketSender) Close(_ context.Context) error { return nil }
+
 func TestDispatchClonesForEveryTaskAndReleasesOriginal(t *testing.T) {
 	ctx := context.Background()
 
@@ -86,5 +104,40 @@ func TestDispatchClonesForEveryTaskAndReleasesOriginal(t *testing.T) {
 	}
 	if released != 1 {
 		t.Fatalf("original packet should be released once, got=%d", released)
+	}
+}
+
+func TestDispatchSingleSubscriberReusesOriginalPacket(t *testing.T) {
+	ctx := context.Background()
+
+	s1 := &spyPacketSender{name: "s1"}
+	t1 := &task.Task{Name: "t1", FastPath: true, Senders: []sender.Sender{s1}}
+	if err := t1.Start(); err != nil {
+		t.Fatalf("t1 start: %v", err)
+	}
+	defer t1.StopGraceful()
+
+	st := NewStore()
+	st.setDispatchSubs(map[string][]*TaskState{
+		"receiver": {
+			{Name: "t1", T: t1},
+		},
+	})
+
+	payload := []byte("single-subscriber")
+	pkt := &packet.Packet{Payload: append([]byte(nil), payload...)}
+	released := 0
+	pkt.ReleaseFn = func() { released++ }
+
+	dispatch(ctx, st, "receiver", pkt)
+
+	if s1.last != pkt {
+		t.Fatalf("single subscriber should receive original packet instance")
+	}
+	if got := string(s1.last.Payload); got != string(payload) {
+		t.Fatalf("task1 payload mismatch: got=%q want=%q", got, string(payload))
+	}
+	if released != 1 {
+		t.Fatalf("original packet should be released once by task, got=%d", released)
 	}
 }
