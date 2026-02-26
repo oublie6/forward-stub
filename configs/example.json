@@ -15,9 +15,24 @@
       "listen": "udp://0.0.0.0:9000",
       "multicore": true,
       "frame": ""
+    },
+    "kafka_in": {
+      "type": "kafka",
+      "listen": "127.0.0.1:9092",
+      "topic": "forward.stub.input",
+      "group_id": "forward-stub-demo",
+      "start_offset": "latest",
+      "client_id": "forward-stub-recv"
     }
   },
   "senders": {
+    "udp_out": {
+      "type": "udp_unicast",
+      "remote": "127.0.0.1:9100",
+      "local_ip": "0.0.0.0",
+      "local_port": 9200,
+      "concurrency": 1
+    },
     "kafka_out": {
       "type": "kafka",
       "remote": "127.0.0.1:9092",
@@ -35,6 +50,17 @@
   },
   "pipelines": {},
   "tasks": {
+    "udp_to_udp": {
+      "pool_size": 0,
+      "fast_path": false,
+      "receivers": [
+        "udp_unicast_in"
+      ],
+      "pipelines": [],
+      "senders": [
+        "udp_out"
+      ]
+    },
     "udp_to_kafka": {
       "pool_size": 0,
       "fast_path": false,
@@ -44,6 +70,17 @@
       "pipelines": [],
       "senders": [
         "kafka_out"
+      ]
+    },
+    "kafka_to_udp": {
+      "pool_size": 0,
+      "fast_path": false,
+      "receivers": [
+        "kafka_in"
+      ],
+      "pipelines": [],
+      "senders": [
+        "udp_out"
       ]
     }
   },
