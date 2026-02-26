@@ -153,8 +153,8 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 //
 // 性能关键点：
 //  1. 在锁内仅完成任务列表快照，避免长时间持锁；
-//  2. 第一个任务复用原始包，后续任务再 Clone，减少一次不必要复制；
-//  3. 没有订阅者时立即释放，避免内存泄漏。
+//  2. 多订阅者时对每个任务都 Clone，彻底隔离任务间生命周期；
+//  3. 单订阅者直接复用原始包，减少一次额外复制。
 func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.Packet) {
 	tasks := st.getDispatchTasks(receiverName)
 
@@ -163,13 +163,18 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 		return
 	}
 
-	for i, ts := range tasks {
-		sendPkt := pkt
-		if i > 0 {
-			sendPkt = pkt.Clone()
-		}
-		ts.T.Handle(ctx, sendPkt)
+	// 仅有一个订阅任务时直接复用原始包，避免无意义二次复制。
+	if len(tasks) == 1 {
+		tasks[0].T.Handle(ctx, pkt)
+		return
 	}
+
+	// 多任务场景下，为避免共享 packet 带来的释放时序竞争，
+	// 每个任务都分配独立副本，原始包由 dispatch 统一释放。
+	for _, ts := range tasks {
+		ts.T.Handle(ctx, pkt.Clone())
+	}
+	pkt.Release()
 }
 
 // buildReceiver 负责该函数对应的核心逻辑，详见实现细节。
