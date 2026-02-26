@@ -150,6 +150,9 @@ go vet ./...
   "client_id": "forward-stub-send",
   "tls": false,
   "tls_skip_verify": false,
+  "sasl_mechanism": "PLAIN",
+  "username": "user",
+  "password": "pass",
   "acks": -1,
   "linger_ms": 1,
   "batch_max_bytes": 1048576,
@@ -197,9 +200,9 @@ go vet ./...
 
 `configs/example.json` 已提供完整示例，特点：
 
-- receiver：`udp_gnet` 监听 `0.0.0.0:9000`
-- sender：`kafka` 发送到 `forward.stub.output`
-- task：`pipelines=[]` 直接透传
+- receiver：`udp_gnet`/`kafka` 示例均包含完整 Kafka 配置（`tls`、`tls_skip_verify`、`sasl_mechanism`、`username`、`password`、消费参数等）
+- sender：`kafka` 示例包含完整认证与生产参数（含 `username`/`password`）
+- task：三个示例任务（`udp_to_udp`、`udp_to_kafka`、`kafka_to_udp`）均使用各自独立 receiver/sender
 
 启动：
 

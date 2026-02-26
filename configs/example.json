@@ -10,42 +10,66 @@
     "payload_max_reuse_bytes": 0
   },
   "receivers": {
-    "udp_unicast_in": {
+    "udp_in_for_udp_to_udp": {
       "type": "udp_gnet",
       "listen": "udp://0.0.0.0:9000",
       "multicore": true,
       "frame": ""
     },
-    "kafka_in": {
+    "udp_in_for_udp_to_kafka": {
+      "type": "udp_gnet",
+      "listen": "udp://0.0.0.0:9001",
+      "multicore": true,
+      "frame": ""
+    },
+    "kafka_in_for_kafka_to_udp": {
       "type": "kafka",
       "listen": "127.0.0.1:9092",
       "topic": "forward.stub.input",
       "group_id": "forward-stub-demo",
+      "tls": false,
+      "tls_skip_verify": false,
+      "sasl_mechanism": "PLAIN",
+      "username": "kafka-user",
+      "password": "kafka-pass",
       "start_offset": "latest",
-      "client_id": "forward-stub-recv"
+      "client_id": "forward-stub-recv",
+      "fetch_min_bytes": 1,
+      "fetch_max_bytes": 16777216,
+      "fetch_max_wait_ms": 100
     }
   },
   "senders": {
-    "udp_out": {
+    "udp_out_for_udp_to_udp": {
       "type": "udp_unicast",
       "remote": "127.0.0.1:9100",
       "local_ip": "0.0.0.0",
       "local_port": 9200,
       "concurrency": 1
     },
-    "kafka_out": {
+    "kafka_out_for_udp_to_kafka": {
       "type": "kafka",
       "remote": "127.0.0.1:9092",
       "topic": "forward.stub.output",
       "concurrency": 1,
       "tls": false,
       "tls_skip_verify": false,
+      "sasl_mechanism": "PLAIN",
+      "username": "kafka-user",
+      "password": "kafka-pass",
       "client_id": "forward-stub-send",
       "acks": -1,
       "linger_ms": 1,
       "batch_max_bytes": 1048576,
       "compression": "none",
       "send_timeout_ms": 5000
+    },
+    "udp_out_for_kafka_to_udp": {
+      "type": "udp_unicast",
+      "remote": "127.0.0.1:9101",
+      "local_ip": "0.0.0.0",
+      "local_port": 9201,
+      "concurrency": 1
     }
   },
   "pipelines": {},
@@ -54,33 +78,33 @@
       "pool_size": 0,
       "fast_path": false,
       "receivers": [
-        "udp_unicast_in"
+        "udp_in_for_udp_to_udp"
       ],
       "pipelines": [],
       "senders": [
-        "udp_out"
+        "udp_out_for_udp_to_udp"
       ]
     },
     "udp_to_kafka": {
       "pool_size": 0,
       "fast_path": false,
       "receivers": [
-        "udp_unicast_in"
+        "udp_in_for_udp_to_kafka"
       ],
       "pipelines": [],
       "senders": [
-        "kafka_out"
+        "kafka_out_for_udp_to_kafka"
       ]
     },
     "kafka_to_udp": {
       "pool_size": 0,
       "fast_path": false,
       "receivers": [
-        "kafka_in"
+        "kafka_in_for_kafka_to_udp"
       ],
       "pipelines": [],
       "senders": [
-        "udp_out"
+        "udp_out_for_kafka_to_udp"
       ]
     }
   },
