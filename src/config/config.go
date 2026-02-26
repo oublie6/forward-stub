@@ -11,12 +11,14 @@ const (
 	DefaultLogRotateMaxBackups      = 5
 	DefaultLogRotateMaxAgeDays      = 30
 	DefaultLogRotateCompress        = true
+	DefaultPprofListen              = "127.0.0.1:6060"
 )
 
 type Config struct {
 	Version   int64                     `json:"version"`
 	Control   ControlConfig             `json:"control,omitempty"`
 	Logging   LoggingConfig             `json:"logging"`
+	Pprof     PprofConfig               `json:"pprof,omitempty"`
 	Receivers map[string]ReceiverConfig `json:"receivers"`
 	Senders   map[string]SenderConfig   `json:"senders"`
 	Pipelines map[string][]StageConfig  `json:"pipelines"`
@@ -38,6 +40,11 @@ type LoggingConfig struct {
 	TrafficStatsInterval     string `json:"traffic_stats_interval,omitempty"`
 	TrafficStatsSampleEvery  int    `json:"traffic_stats_sample_every,omitempty"`
 	TrafficStatsEnableSender *bool  `json:"traffic_stats_enable_sender,omitempty"`
+}
+
+type PprofConfig struct {
+	Enabled bool   `json:"enabled,omitempty"`
+	Listen  string `json:"listen,omitempty"`
 }
 
 type ReceiverConfig struct {
@@ -135,5 +142,8 @@ func (c *Config) ApplyDefaults() {
 	if c.Logging.TrafficStatsEnableSender == nil {
 		v := DefaultTrafficStatsEnableSender
 		c.Logging.TrafficStatsEnableSender = &v
+	}
+	if c.Pprof.Listen == "" {
+		c.Pprof.Listen = DefaultPprofListen
 	}
 }

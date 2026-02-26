@@ -98,6 +98,10 @@ go run . -config ./configs/example.json
     "traffic_stats_sample_every": 1,
     "traffic_stats_enable_sender": true
   },
+  "pprof": {
+    "enabled": false,
+    "listen": "127.0.0.1:6060"
+  },
   "receivers": {},
   "senders": {},
   "pipelines": {},
@@ -111,9 +115,16 @@ go run . -config ./configs/example.json
 - `control`：配置中心拉取配置参数（可选）。
 - `logging`：日志级别与日志文件。
 - `receivers`：输入端定义。
+- `pprof`：pprof 性能分析 HTTP 服务开关与监听地址。
 - `senders`：输出端定义。
 - `pipelines`：处理规则编排（按顺序执行 stage）。
 - `tasks`：把 receiver / pipeline / sender 连接起来的任务定义。
+
+### 6.1.1 pprof
+
+- `enabled`：是否开启 pprof。
+- `listen`：pprof HTTP 监听地址，默认 `127.0.0.1:6060`。
+- 访问路径示例：`/debug/pprof/`、`/debug/pprof/profile`、`/debug/pprof/heap`。
 
 ### 6.2 receivers
 

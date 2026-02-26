@@ -18,7 +18,7 @@ func (c *Config) Validate() error {
 		return errors.New("senders missing")
 	}
 	if c.Pipelines == nil {
-		return errors.New("pipelines missing")
+		c.Pipelines = map[string][]StageConfig{}
 	}
 
 	for tn, t := range c.Tasks {

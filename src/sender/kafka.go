@@ -24,7 +24,7 @@ type KafkaSender struct {
 	brokers []string
 	topic   string
 
-	mu     sync.Mutex
+	mu     sync.RWMutex
 	client *kgo.Client
 }
 
@@ -75,9 +75,9 @@ func (s *KafkaSender) Key() string { return "kafka|" + strings.Join(s.brokers, "
 
 // Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
-	s.mu.Lock()
+	s.mu.RLock()
 	cli := s.client
-	s.mu.Unlock()
+	s.mu.RUnlock()
 	if cli == nil {
 		return errors.New("kafka sender closed")
 	}

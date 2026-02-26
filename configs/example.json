@@ -73,5 +73,9 @@
     "traffic_stats_interval": "5s",
     "traffic_stats_sample_every": 1,
     "traffic_stats_enable_sender": true
+  },
+  "pprof": {
+    "enabled": false,
+    "listen": "127.0.0.1:6060"
   }
 }
