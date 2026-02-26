@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # APP_NAME: 产物名称（同时影响可执行文件名与压缩包前缀）。
-APP_NAME=${APP_NAME:-forword-stub}
+APP_NAME=${APP_NAME:-forward-stub}
 # VERSION: 默认读取 git describe，若仓库无 tag 则回退 dev。
 VERSION=${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}
 # OUT_DIR: 打包输出目录。

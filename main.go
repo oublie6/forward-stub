@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"forword-stub/src/app"
-	"forword-stub/src/config"
-	"forword-stub/src/control"
-	"forword-stub/src/logx"
+	"forward-stub/src/app"
+	"forward-stub/src/config"
+	"forward-stub/src/control"
+	"forward-stub/src/logx"
 )
 
 var version = "dev"
@@ -100,11 +100,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	lg.Info("forword-stub started. Press Ctrl+C to stop.")
+	lg.Info("forward-stub started. Press Ctrl+C to stop.")
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 
 	_ = rt.Stop(context.Background())
-	lg.Info("forword-stub stopped.")
+	lg.Info("forward-stub stopped.")
 }

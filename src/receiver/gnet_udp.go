@@ -5,8 +5,8 @@ import (
 	"context"
 	"sync"
 
-	"forword-stub/src/logx"
-	"forword-stub/src/packet"
+	"forward-stub/src/logx"
+	"forward-stub/src/packet"
 
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/logging"

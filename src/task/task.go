@@ -6,10 +6,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"forword-stub/src/logx"
-	"forword-stub/src/packet"
-	"forword-stub/src/pipeline"
-	"forword-stub/src/sender"
+	"forward-stub/src/logx"
+	"forward-stub/src/packet"
+	"forward-stub/src/pipeline"
+	"forward-stub/src/sender"
 
 	"github.com/panjf2000/ants/v2"
 	"go.uber.org/zap/zapcore"

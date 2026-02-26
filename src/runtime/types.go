@@ -2,11 +2,11 @@
 package runtime
 
 import (
-	"forword-stub/src/config"
-	"forword-stub/src/pipeline"
-	"forword-stub/src/receiver"
-	"forword-stub/src/sender"
-	"forword-stub/src/task"
+	"forward-stub/src/config"
+	"forward-stub/src/pipeline"
+	"forward-stub/src/receiver"
+	"forward-stub/src/sender"
+	"forward-stub/src/task"
 )
 
 type ReceiverState struct {

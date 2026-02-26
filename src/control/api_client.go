@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"forword-stub/src/config"
+	"forward-stub/src/config"
 )
 
 type ConfigAPIClient struct {

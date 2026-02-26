@@ -1,4 +1,4 @@
-module forword-stub
+module forward-stub
 
 go 1.25
 

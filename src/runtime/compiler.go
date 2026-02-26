@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"forword-stub/src/config"
-	"forword-stub/src/pipeline"
+	"forward-stub/src/config"
+	"forward-stub/src/pipeline"
 )
 
 // CompilePipelines 负责该函数对应的核心逻辑，详见实现细节。

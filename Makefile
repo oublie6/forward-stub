@@ -1,6 +1,6 @@
 # Makefile 统一封装项目常用命令：构建、校验、打包、镜像与清理。
 # 通过变量覆盖可在本地和 CI 共享同一套流水线入口。
-APP_NAME ?= forword-stub
+APP_NAME ?= forward-stub
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 GOFLAGS ?= -mod=vendor
 

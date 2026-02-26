@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # APP_NAME: 应用名，仅用于默认二进制命名。
-APP_NAME=${APP_NAME:-forword-stub}
+APP_NAME=${APP_NAME:-forward-stub}
 # VERSION: 注入 main.version 的版本号。
 VERSION=${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}
 # GOOS/GOARCH: 默认构建 linux/arm64（aarch64），可按需覆盖。

@@ -4,8 +4,8 @@ package app
 import (
 	"context"
 
-	"forword-stub/src/config"
-	"forword-stub/src/runtime"
+	"forward-stub/src/config"
+	"forward-stub/src/runtime"
 )
 
 type Runtime struct {

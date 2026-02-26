@@ -8,7 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"forword-stub/src/packet"
+	"forward-stub/src/packet"
 )
 
 // UDPUnicastSender：方向A（最通用）实现

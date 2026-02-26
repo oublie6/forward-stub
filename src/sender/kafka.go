@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"forword-stub/src/logx"
-	"forword-stub/src/packet"
+	"forward-stub/src/logx"
+	"forward-stub/src/packet"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap/zapcore"

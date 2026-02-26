@@ -160,16 +160,21 @@ func (h *trafficStatsHub) release(key string) {
 // loop 负责该函数对应的核心逻辑，详见实现细节。
 func (h *trafficStatsHub) loop() {
 	startedAt := time.Now()
+	interval := trafficStatsInterval()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
 	for {
-		interval := trafficStatsInterval()
-		t := time.NewTimer(interval)
 		select {
-		case <-t.C:
+		case <-ticker.C:
 			h.flush(time.Since(startedAt))
-		case <-h.stopCh:
-			if !t.Stop() {
-				<-t.C
+			nextInterval := trafficStatsInterval()
+			if nextInterval != interval {
+				ticker.Stop()
+				interval = nextInterval
+				ticker = time.NewTicker(interval)
 			}
+		case <-h.stopCh:
 			return
 		}
 	}

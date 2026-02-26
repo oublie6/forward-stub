@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"time"
 
-	"forword-stub/src/config"
-	"forword-stub/src/logx"
-	"forword-stub/src/packet"
-	"forword-stub/src/pipeline"
-	"forword-stub/src/receiver"
-	"forword-stub/src/sender"
-	"forword-stub/src/task"
+	"forward-stub/src/config"
+	"forward-stub/src/logx"
+	"forward-stub/src/packet"
+	"forward-stub/src/pipeline"
+	"forward-stub/src/receiver"
+	"forward-stub/src/sender"
+	"forward-stub/src/task"
 
 	"go.uber.org/zap/zapcore"
 )

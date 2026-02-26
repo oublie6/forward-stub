@@ -4,7 +4,7 @@ package sender
 import (
 	"context"
 
-	"forword-stub/src/packet"
+	"forward-stub/src/packet"
 )
 
 type Sender interface {
