@@ -30,7 +30,9 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		lg.Infow("updating runtime cache", "version", cfg.Version, "receivers", len(cfg.Receivers), "tasks", len(cfg.Tasks), "senders", len(cfg.Senders))
 	}
 
-	_ = st.StopAll(ctx)
+	if err := st.StopAll(ctx); err != nil && logx.Enabled(zapcore.WarnLevel) {
+		lg.Warnw("stop old runtime components reported error", "error", err)
+	}
 
 	compiled, err := CompilePipelines(cfg.Pipelines)
 	if err != nil {
@@ -83,11 +85,15 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		}
 		st.mu.Unlock()
 
+		poolSize := tc.PoolSize
+		if poolSize <= 0 {
+			poolSize = cfg.Runtime.DefaultTaskPoolSize
+		}
 		tk := &task.Task{
 			Name:      name,
 			Pipelines: pipes,
 			Senders:   sends,
-			PoolSize:  tc.PoolSize,
+			PoolSize:  poolSize,
 			FastPath:  tc.FastPath,
 		}
 		if err := tk.Start(); err != nil {
@@ -160,6 +166,9 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 
 	if len(tasks) == 0 {
 		pkt.Release()
+		if logx.Enabled(zapcore.WarnLevel) {
+			logx.L().Warnw("packet dropped because receiver has no subscribed tasks", "receiver", receiverName)
+		}
 		return
 	}
 

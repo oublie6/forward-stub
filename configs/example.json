@@ -1,11 +1,16 @@
 {
-  "version": 5,
+  "version": 6,
   "control": {
     "api": "",
     "timeout_sec": 5
   },
+  "runtime": {
+    "default_task_pool_size": 64,
+    "payload_pool_size": 1024,
+    "payload_max_reuse_bytes": 0
+  },
   "receivers": {
-    "udp_in": {
+    "udp_unicast_in": {
       "type": "udp_gnet",
       "listen": "udp://0.0.0.0:9000",
       "multicore": true,
@@ -13,57 +18,32 @@
     }
   },
   "senders": {
-    "udp_uni_out": {
-      "type": "udp_unicast",
-      "remote": "127.0.0.1:9001",
-      "local_ip": "0.0.0.0",
-      "local_port": 50000,
-      "concurrency": 1
-    },
-    "udp_mcast_out": {
-      "type": "udp_multicast",
-      "remote": "239.1.2.3:9002",
-      "local_ip": "0.0.0.0",
-      "local_port": 50001,
-      "iface": "",
-      "ttl": 8,
-      "loop": false,
-      "concurrency": 1
+    "kafka_out": {
+      "type": "kafka",
+      "remote": "127.0.0.1:9092",
+      "topic": "forward.stub.output",
+      "concurrency": 1,
+      "tls": false,
+      "tls_skip_verify": false,
+      "client_id": "forward-stub-send",
+      "acks": -1,
+      "linger_ms": 1,
+      "batch_max_bytes": 1048576,
+      "compression": "none",
+      "send_timeout_ms": 5000
     }
   },
-  "pipelines": {
-    "p1": [
-      {
-        "type": "match_offset_bytes",
-        "offset": 0,
-        "hex": "AABB",
-        "flag": "matched"
-      }
-    ]
-  },
+  "pipelines": {},
   "tasks": {
-    "udp_task_unicast": {
-      "pool_size": 64,
+    "udp_to_kafka": {
+      "pool_size": 0,
       "fast_path": false,
       "receivers": [
-        "udp_in"
+        "udp_unicast_in"
       ],
       "pipelines": [],
       "senders": [
-        "udp_uni_out"
-      ]
-    },
-    "udp_task_multicast": {
-      "pool_size": 64,
-      "fast_path": false,
-      "receivers": [
-        "udp_in"
-      ],
-      "pipelines": [
-        "p1"
-      ],
-      "senders": [
-        "udp_mcast_out"
+        "kafka_out"
       ]
     }
   },
