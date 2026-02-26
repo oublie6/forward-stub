@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: forword-stub-config
+  name: forward-stub-config
 data:
   config.json: |
     {

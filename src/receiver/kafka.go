@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"forword-stub/src/logx"
-	"forword-stub/src/packet"
+	"forward-stub/src/logx"
+	"forward-stub/src/packet"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap/zapcore"
@@ -45,7 +45,7 @@ func NewKafkaReceiver(name, brokers, topic, groupID string) (*KafkaReceiver, err
 		return nil, errors.New("kafka receiver requires topic")
 	}
 	if strings.TrimSpace(groupID) == "" {
-		groupID = "forword-stub-" + name
+		groupID = "forward-stub-" + name
 	}
 	brs := splitCSV(brokers)
 	if len(brs) == 0 {

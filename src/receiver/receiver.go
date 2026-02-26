@@ -4,7 +4,7 @@ package receiver
 import (
 	"context"
 
-	"forword-stub/src/packet"
+	"forward-stub/src/packet"
 )
 
 type Receiver interface {

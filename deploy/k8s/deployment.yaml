@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: forword-stub
+  name: forward-stub
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: forword-stub
+      app: forward-stub
   template:
     metadata:
       labels:
-        app: forword-stub
+        app: forward-stub
     spec:
       containers:
-        - name: forword-stub
-          image: forword-stub:latest
+        - name: forward-stub
+          image: forward-stub:latest
           imagePullPolicy: IfNotPresent
           args: ["-config", "/app/config/config.json", "-log-level", "info"]
           ports:
@@ -35,4 +35,4 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: forword-stub-config
+            name: forward-stub-config

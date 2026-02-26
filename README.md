@@ -1,4 +1,4 @@
-# forword-stub
+# forward-stub
 
 一个面向高吞吐报文转发场景的 Go 服务：支持多种接收端（UDP/TCP gnet、Kafka）、可编排 pipeline 规则处理，以及多种发送端（UDP 单播/组播、TCP、Kafka）。
 
@@ -6,7 +6,7 @@
 
 ## 1. 项目目标
 
-`forword-stub` 的核心目标：
+`forward-stub` 的核心目标：
 
 - **可配置**：通过本地 JSON 或远端配置 API 驱动运行时拓扑。
 - **高性能**：基于 `gnet` 事件循环与 `ants` 协程池，兼顾吞吐与资源控制。
@@ -221,7 +221,7 @@ make package-all
 
 ```bash
 ./scripts/build-linux.sh
-docker build --build-arg BINARY_PATH=dist/linux/forword-stub -t forword-stub:latest .
+docker build --build-arg BINARY_PATH=dist/linux/forward-stub -t forward-stub:latest .
 ```
 
 ### 12.4 Kubernetes 部署

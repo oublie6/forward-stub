@@ -4,7 +4,7 @@ package pipeline
 import (
 	"bytes"
 
-	"forword-stub/src/packet"
+	"forward-stub/src/packet"
 )
 
 // MatchOffsetBytes 负责该函数对应的核心逻辑，详见实现细节。

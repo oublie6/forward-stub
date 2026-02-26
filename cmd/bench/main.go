@@ -17,9 +17,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"forword-stub/src/app"
-	"forword-stub/src/config"
-	"forword-stub/src/logx"
+	"forward-stub/src/app"
+	"forward-stub/src/config"
+	"forward-stub/src/logx"
 )
 
 type metrics struct {
