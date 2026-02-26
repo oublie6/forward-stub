@@ -20,9 +20,10 @@ import (
 )
 
 type KafkaSender struct {
-	name    string
-	brokers []string
-	topic   string
+	name        string
+	brokers     []string
+	topic       string
+	sendTimeout time.Duration
 
 	mu     sync.RWMutex
 	client *kgo.Client
@@ -64,7 +65,8 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &KafkaSender{name: name, brokers: brs, topic: sc.Topic, client: cli}, nil
+	sendTimeout := time.Duration(kafkaIntDefault(sc.SendTimeoutMS, config.DefaultKafkaSendTimeoutMS)) * time.Millisecond
+	return &KafkaSender{name: name, brokers: brs, topic: sc.Topic, sendTimeout: sendTimeout, client: cli}, nil
 }
 
 // Name 负责该函数对应的核心逻辑，详见实现细节。
@@ -81,8 +83,14 @@ func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
 	if cli == nil {
 		return errors.New("kafka sender closed")
 	}
+	produceCtx := ctx
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline && s.sendTimeout > 0 {
+		var cancel context.CancelFunc
+		produceCtx, cancel = context.WithTimeout(ctx, s.sendTimeout)
+		defer cancel()
+	}
 	rec := &kgo.Record{Topic: s.topic, Value: p.Payload}
-	res := cli.ProduceSync(ctx, rec)
+	res := cli.ProduceSync(produceCtx, rec)
 	if err := res.FirstErr(); err != nil {
 		if logx.Enabled(zapcore.WarnLevel) {
 			logx.L().Warnw("kafka sender produce failed", "sender", s.name, "topic", s.topic, "error", err)

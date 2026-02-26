@@ -139,7 +139,7 @@ go run . -config ./configs/example.json
 
 - `type`：`udp_unicast` / `udp_multicast` / `tcp_gnet` / `kafka`
 - 常见字段：`remote`、`concurrency`、`frame`、`topic`
-- Kafka 扩展字段：`username`、`password`、`sasl_mechanism`（当前支持 `PLAIN`）、`tls`、`tls_skip_verify`、`client_id`、`acks`（`-1/1/0`）、`linger_ms`、`batch_max_bytes`、`compression`（`none/gzip/snappy/lz4/zstd`）
+- Kafka 扩展字段：`username`、`password`、`sasl_mechanism`（当前支持 `PLAIN`）、`tls`、`tls_skip_verify`、`client_id`、`acks`（`-1/1/0`）、`linger_ms`、`batch_max_bytes`、`compression`（`none/gzip/snappy/lz4/zstd`）、`send_timeout_ms`（默认 5000）
 - UDP 扩展字段：`local_ip`、`local_port`、`iface`、`ttl`、`loop`
 
 ### 6.4 pipelines
@@ -196,7 +196,8 @@ pipeline 是 stage 数组，按顺序执行。例如：`match_offset_bytes`。
       "acks": -1,
       "linger_ms": 1,
       "batch_max_bytes": 1048576,
-      "compression": "snappy"
+      "compression": "snappy",
+      "send_timeout_ms": 5000
     }
   },
   "pipelines": {
@@ -220,6 +221,7 @@ pipeline 是 stage 数组，按顺序执行。例如：`match_offset_bytes`。
 - Kafka sender 使用 `remote` 作为 broker 列表（逗号分隔），并通过 `topic` 指定目标主题。
 - 配置了 `username/password` 时，默认按 `PLAIN` SASL 鉴权；也可显式设置 `sasl_mechanism=PLAIN`。
 - `tls=true` 可启用 TLS，测试环境可配 `tls_skip_verify=true`（生产不建议）。
+- `send_timeout_ms` 用于限制单次 `ProduceSync` 最长等待时间，避免异常网络下调用长期阻塞。
 - `pipelines` 可先配置为空数组（透传），后续再按需追加 stage。
 
 ## 7. 运行时流程

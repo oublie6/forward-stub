@@ -85,6 +85,9 @@ func (c *Config) Validate() error {
 			if s.Compression != "" && s.Compression != "none" && s.Compression != "gzip" && s.Compression != "snappy" && s.Compression != "lz4" && s.Compression != "zstd" {
 				return fmt.Errorf("sender %s kafka compression unsupported: %s", sn, s.Compression)
 			}
+			if s.SendTimeoutMS < 0 {
+				return fmt.Errorf("sender %s kafka send_timeout_ms must be >= 0", sn)
+			}
 			if err := validateKafkaAuth("sender", sn, s.SASLMechanism, s.Username, s.Password); err != nil {
 				return err
 			}

@@ -12,6 +12,7 @@ const (
 	DefaultLogRotateMaxAgeDays      = 30
 	DefaultLogRotateCompress        = true
 	DefaultPprofListen              = "127.0.0.1:6060"
+	DefaultKafkaSendTimeoutMS       = 5000
 )
 
 type Config struct {
@@ -86,6 +87,7 @@ type SenderConfig struct {
 	LingerMS      int    `json:"linger_ms,omitempty"`       // 默认 1ms
 	BatchMaxBytes int    `json:"batch_max_bytes,omitempty"` // 默认 1MiB
 	Compression   string `json:"compression,omitempty"`     // none|gzip|snappy|lz4|zstd
+	SendTimeoutMS int    `json:"send_timeout_ms,omitempty"` // Kafka ProduceSync 超时，默认 5000ms
 
 	LocalIP   string `json:"local_ip"`
 	LocalPort int    `json:"local_port"`
