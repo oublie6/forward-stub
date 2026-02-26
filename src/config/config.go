@@ -11,12 +11,15 @@ const (
 	DefaultLogRotateMaxBackups      = 5
 	DefaultLogRotateMaxAgeDays      = 30
 	DefaultLogRotateCompress        = true
+	DefaultPprofListen              = "127.0.0.1:6060"
+	DefaultKafkaSendTimeoutMS       = 5000
 )
 
 type Config struct {
 	Version   int64                     `json:"version"`
 	Control   ControlConfig             `json:"control,omitempty"`
 	Logging   LoggingConfig             `json:"logging"`
+	Pprof     PprofConfig               `json:"pprof,omitempty"`
 	Receivers map[string]ReceiverConfig `json:"receivers"`
 	Senders   map[string]SenderConfig   `json:"senders"`
 	Pipelines map[string][]StageConfig  `json:"pipelines"`
@@ -40,6 +43,11 @@ type LoggingConfig struct {
 	TrafficStatsEnableSender *bool  `json:"traffic_stats_enable_sender,omitempty"`
 }
 
+type PprofConfig struct {
+	Enabled bool   `json:"enabled,omitempty"`
+	Listen  string `json:"listen,omitempty"`
+}
+
 type ReceiverConfig struct {
 	Type      string `json:"type"` // udp_gnet | tcp_gnet | kafka
 	Listen    string `json:"listen"`
@@ -47,6 +55,18 @@ type ReceiverConfig struct {
 	Frame     string `json:"frame"` // "" | "u16be" (TCP)
 	Topic     string `json:"topic,omitempty"`
 	GroupID   string `json:"group_id,omitempty"`
+
+	Username      string `json:"username,omitempty"`
+	Password      string `json:"password,omitempty"`
+	SASLMechanism string `json:"sasl_mechanism,omitempty"` // 当前支持 PLAIN
+	TLS           bool   `json:"tls,omitempty"`
+	TLSSkipVerify bool   `json:"tls_skip_verify,omitempty"`
+	ClientID      string `json:"client_id,omitempty"`
+
+	StartOffset    string `json:"start_offset,omitempty"` // earliest | latest
+	FetchMinBytes  int    `json:"fetch_min_bytes,omitempty"`
+	FetchMaxBytes  int    `json:"fetch_max_bytes,omitempty"`
+	FetchMaxWaitMS int    `json:"fetch_max_wait_ms,omitempty"`
 }
 
 type SenderConfig struct {
@@ -55,6 +75,19 @@ type SenderConfig struct {
 	Frame       string `json:"frame"`
 	Concurrency int    `json:"concurrency"`
 	Topic       string `json:"topic"`
+
+	Username      string `json:"username,omitempty"`
+	Password      string `json:"password,omitempty"`
+	SASLMechanism string `json:"sasl_mechanism,omitempty"` // 当前支持 PLAIN
+	TLS           bool   `json:"tls,omitempty"`
+	TLSSkipVerify bool   `json:"tls_skip_verify,omitempty"`
+	ClientID      string `json:"client_id,omitempty"`
+
+	Acks          int    `json:"acks,omitempty"`            // -1(all) / 1 / 0
+	LingerMS      int    `json:"linger_ms,omitempty"`       // 默认 1ms
+	BatchMaxBytes int    `json:"batch_max_bytes,omitempty"` // 默认 1MiB
+	Compression   string `json:"compression,omitempty"`     // none|gzip|snappy|lz4|zstd
+	SendTimeoutMS int    `json:"send_timeout_ms,omitempty"` // Kafka ProduceSync 超时，默认 5000ms
 
 	LocalIP   string `json:"local_ip"`
 	LocalPort int    `json:"local_port"`
@@ -111,5 +144,8 @@ func (c *Config) ApplyDefaults() {
 	if c.Logging.TrafficStatsEnableSender == nil {
 		v := DefaultTrafficStatsEnableSender
 		c.Logging.TrafficStatsEnableSender = &v
+	}
+	if c.Pprof.Listen == "" {
+		c.Pprof.Listen = DefaultPprofListen
 	}
 }
