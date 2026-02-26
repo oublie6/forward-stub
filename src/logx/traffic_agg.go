@@ -73,6 +73,8 @@ type trafficCounter struct {
 
 	packets atomic.Uint64
 	bytes   atomic.Uint64
+	lastPkt atomic.Uint64
+	lastB   atomic.Uint64
 	refs    atomic.Int64
 	seen    atomic.Uint64
 }
@@ -167,7 +169,7 @@ func (h *trafficStatsHub) loop() {
 	for {
 		select {
 		case <-ticker.C:
-			h.flush(time.Since(startedAt))
+			h.flush(time.Since(startedAt), interval)
 			nextInterval := trafficStatsInterval()
 			if nextInterval != interval {
 				ticker.Stop()
@@ -181,7 +183,7 @@ func (h *trafficStatsHub) loop() {
 }
 
 // flush 负责该函数对应的核心逻辑，详见实现细节。
-func (h *trafficStatsHub) flush(elapsed time.Duration) {
+func (h *trafficStatsHub) flush(elapsed, interval time.Duration) {
 	h.mu.RLock()
 	cs := make([]*trafficCounter, 0, len(h.counters))
 	for _, c := range h.counters {
@@ -198,7 +200,7 @@ func (h *trafficStatsHub) flush(elapsed time.Duration) {
 		if pkts == 0 {
 			continue
 		}
-		summary.add(c, pkts, b)
+		summary.add(c, pkts, b, interval)
 	}
 	if summary.hasData() {
 		L().Infow("traffic stats summary", summary.fields()...)
@@ -214,15 +216,41 @@ func newTrafficSummary(elapsed time.Duration) *trafficSummary {
 	return &trafficSummary{uptime: elapsed.Truncate(time.Millisecond).String()}
 }
 
-func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64) {
-	line := fmt.Sprintf("%s|key=%s|total_packets=%d|total_bytes=%d", c.name, c.key, packets, bytes)
+func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, interval time.Duration) {
+	line := fmt.Sprintf("task=%s dir=%s total_packets=%d total_bytes=%d", c.name, c.key, packets, bytes)
 	if c.name == "" {
-		line = fmt.Sprintf("%s|total_packets=%d|total_bytes=%d", c.msg, packets, bytes)
+		line = fmt.Sprintf("%s total_packets=%d total_bytes=%d", c.msg, packets, bytes)
 	}
+
+	if interval > 0 {
+		lastPackets := c.lastPkt.Swap(packets)
+		lastBytes := c.lastB.Swap(bytes)
+		intervalPackets := diffCounter(packets, lastPackets)
+		intervalBytes := diffCounter(bytes, lastBytes)
+		seconds := interval.Seconds()
+		if seconds > 0 {
+			line = fmt.Sprintf(
+				"%s | interval_packets=%d interval_bytes=%d pps=%.2f bps=%.2f",
+				line,
+				intervalPackets,
+				intervalBytes,
+				float64(intervalPackets)/seconds,
+				float64(intervalBytes)/seconds,
+			)
+		}
+	}
+
 	switch c.role {
 	case "task":
 		s.task = append(s.task, line)
 	}
+}
+
+func diffCounter(cur, prev uint64) uint64 {
+	if cur >= prev {
+		return cur - prev
+	}
+	return cur
 }
 
 func (s *trafficSummary) hasData() bool {

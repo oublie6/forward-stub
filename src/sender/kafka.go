@@ -1,60 +1,70 @@
-// kafka.go 实现基于 Sarama 的 Kafka 发送端。
+// kafka.go 实现基于 franz-go 的 Kafka 发送端。
 package sender
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"forward-stub/src/config"
 	"forward-stub/src/logx"
 	"forward-stub/src/packet"
 
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/sasl"
 	"go.uber.org/zap/zapcore"
 )
 
 type KafkaSender struct {
-	// name: 逻辑名称，对应配置 senders 的 key。
-	name string
-	// brokers: Kafka broker 列表，来自配置 remote（CSV）。
+	name    string
 	brokers []string
-	// topic: 目标主题。
-	topic string
+	topic   string
 
-	mu sync.Mutex
-	// client: franz-go producer 客户端，实例级复用以减少连接与元数据开销。
+	mu     sync.RWMutex
 	client *kgo.Client
 }
 
 // NewKafkaSender 负责该函数对应的核心逻辑，详见实现细节。
-func NewKafkaSender(name, brokers, topic string) (*KafkaSender, error) {
-	// topic 与 brokers 必填。
-	if strings.TrimSpace(topic) == "" {
+func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
+	if strings.TrimSpace(sc.Topic) == "" {
 		return nil, errors.New("kafka sender requires topic")
 	}
-	brs := splitCSV(brokers)
+	brs := splitCSV(sc.Remote)
 	if len(brs) == 0 {
 		return nil, errors.New("kafka sender requires brokers in remote/listen")
 	}
-	// 生产参数说明：
-	// - RequiredAcks(AllISRAcks): 可靠性优先，避免 leader-only ack 导致数据风险。
-	// - StickyKeyPartitioner: 对无 key 流量提升批量聚合效率，提升吞吐。
-	// - ProducerBatchMaxBytes(1MiB): 放大单批次上限，减少请求次数。
-	// - ProducerLinger(1ms): 微小聚合窗口，兼顾吞吐与低延迟。
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(brs...),
-		kgo.RequiredAcks(kgo.AllISRAcks()),
+		kgo.RequiredAcks(kafkaRequiredAcks(sc.Acks)),
 		kgo.RecordPartitioner(kgo.StickyKeyPartitioner(nil)),
-		kgo.ProducerBatchMaxBytes(1 << 20),
-		kgo.ProducerLinger(1 * time.Millisecond),
+		kgo.ProducerBatchMaxBytes(int32(kafkaIntDefault(sc.BatchMaxBytes, 1<<20))),
+		kgo.ProducerLinger(time.Duration(kafkaIntDefault(sc.LingerMS, 1)) * time.Millisecond),
+	}
+	if v := strings.TrimSpace(sc.ClientID); v != "" {
+		opts = append(opts, kgo.ClientID(v))
+	}
+	if codec, enabled, err := kafkaCompressionCodec(sc.Compression); err != nil {
+		return nil, err
+	} else if enabled {
+		opts = append(opts, kgo.ProducerBatchCompression(codec))
+	}
+	if sc.TLS {
+		opts = append(opts, kgo.DialTLSConfig(&tls.Config{InsecureSkipVerify: sc.TLSSkipVerify}))
+	}
+	if mech, err := buildKafkaSASLMechanism(sc.SASLMechanism, sc.Username, sc.Password); err != nil {
+		return nil, err
+	} else if mech != nil {
+		opts = append(opts, kgo.SASL(mech))
 	}
 	cli, err := kgo.NewClient(opts...)
 	if err != nil {
 		return nil, err
 	}
-	return &KafkaSender{name: name, brokers: brs, topic: topic, client: cli}, nil
+	return &KafkaSender{name: name, brokers: brs, topic: sc.Topic, client: cli}, nil
 }
 
 // Name 负责该函数对应的核心逻辑，详见实现细节。
@@ -65,15 +75,12 @@ func (s *KafkaSender) Key() string { return "kafka|" + strings.Join(s.brokers, "
 
 // Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
-	s.mu.Lock()
+	s.mu.RLock()
 	cli := s.client
-	s.mu.Unlock()
+	s.mu.RUnlock()
 	if cli == nil {
 		return errors.New("kafka sender closed")
 	}
-	// 这里使用 ProduceSync：
-	// - 优点：调用侧语义简单，错误可即时反馈到任务链路；
-	// - 代价：吞吐上限通常低于纯异步生产（若后续需要极限吞吐可演进）。
 	rec := &kgo.Record{Topic: s.topic, Value: p.Payload}
 	res := cli.ProduceSync(ctx, rec)
 	if err := res.FirstErr(); err != nil {
@@ -97,7 +104,6 @@ func (s *KafkaSender) Close(ctx context.Context) error {
 	return nil
 }
 
-// splitCSV 负责该函数对应的核心逻辑，详见实现细节。
 func splitCSV(v string) []string {
 	parts := strings.Split(v, ",")
 	out := make([]string, 0, len(parts))
@@ -108,4 +114,76 @@ func splitCSV(v string) []string {
 		}
 	}
 	return out
+}
+
+func kafkaIntDefault(v, d int) int {
+	if v <= 0 {
+		return d
+	}
+	return v
+}
+
+func kafkaRequiredAcks(acks int) kgo.Acks {
+	switch acks {
+	case 0:
+		return kgo.NoAck()
+	case 1:
+		return kgo.LeaderAck()
+	default:
+		return kgo.AllISRAcks()
+	}
+}
+
+func kafkaCompressionCodec(v string) (kgo.CompressionCodec, bool, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "none":
+		return kgo.NoCompression(), false, nil
+	case "gzip":
+		return kgo.GzipCompression(), true, nil
+	case "snappy":
+		return kgo.SnappyCompression(), true, nil
+	case "lz4":
+		return kgo.Lz4Compression(), true, nil
+	case "zstd":
+		return kgo.ZstdCompression(), true, nil
+	default:
+		return kgo.NoCompression(), false, fmt.Errorf("kafka compression %s unsupported", v)
+	}
+}
+
+type kafkaPlainMechanism struct {
+	username string
+	password string
+}
+
+func (m kafkaPlainMechanism) Name() string { return "PLAIN" }
+
+func (m kafkaPlainMechanism) Authenticate(_ context.Context, _ string) (sasl.Session, []byte, error) {
+	msg := []byte("\x00" + m.username + "\x00" + m.password)
+	return kafkaPlainSession{}, msg, nil
+}
+
+type kafkaPlainSession struct{}
+
+func (kafkaPlainSession) Challenge(_ []byte) (bool, []byte, error) {
+	return true, nil, nil
+}
+
+func buildKafkaSASLMechanism(mechanism, username, password string) (sasl.Mechanism, error) {
+	mech := strings.ToUpper(strings.TrimSpace(mechanism))
+	u := strings.TrimSpace(username)
+	p := strings.TrimSpace(password)
+	if mech == "" && (u != "" || p != "") {
+		mech = "PLAIN"
+	}
+	if mech == "" {
+		return nil, nil
+	}
+	if u == "" || p == "" {
+		return nil, fmt.Errorf("kafka sasl %s requires username and password", mech)
+	}
+	if mech != "PLAIN" {
+		return nil, fmt.Errorf("kafka sasl mechanism %s unsupported, only PLAIN is supported", mech)
+	}
+	return kafkaPlainMechanism{username: u, password: p}, nil
 }

@@ -4,6 +4,8 @@ package main
 import (
 	"context"
 	"flag"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -94,6 +96,17 @@ func main() {
 	}
 	lg = logx.L()
 
+	var pprofSrv *http.Server
+	if cfg.Pprof.Enabled {
+		pprofSrv = &http.Server{Addr: cfg.Pprof.Listen}
+		go func() {
+			if err := pprofSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				lg.Warnw("pprof server stopped unexpectedly", "addr", cfg.Pprof.Listen, "error", err)
+			}
+		}()
+		lg.Infow("pprof server enabled", "addr", cfg.Pprof.Listen)
+	}
+
 	rt := app.NewRuntime()
 	if err := rt.UpdateCache(context.Background(), cfg); err != nil {
 		lg.Errorf("UpdateCache error: %v", err)
@@ -105,6 +118,11 @@ func main() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 
+	if pprofSrv != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		_ = pprofSrv.Shutdown(shutdownCtx)
+		cancel()
+	}
 	_ = rt.Stop(context.Background())
 	lg.Info("forward-stub stopped.")
 }
