@@ -27,8 +27,16 @@
       "listen": "127.0.0.1:9092",
       "topic": "forward.stub.input",
       "group_id": "forward-stub-demo",
+      "tls": false,
+      "tls_skip_verify": false,
+      "sasl_mechanism": "PLAIN",
+      "username": "kafka-user",
+      "password": "kafka-pass",
       "start_offset": "latest",
-      "client_id": "forward-stub-recv"
+      "client_id": "forward-stub-recv",
+      "fetch_min_bytes": 1,
+      "fetch_max_bytes": 16777216,
+      "fetch_max_wait_ms": 100
     }
   },
   "senders": {
@@ -46,6 +54,9 @@
       "concurrency": 1,
       "tls": false,
       "tls_skip_verify": false,
+      "sasl_mechanism": "PLAIN",
+      "username": "kafka-user",
+      "password": "kafka-pass",
       "client_id": "forward-stub-send",
       "acks": -1,
       "linger_ms": 1,
