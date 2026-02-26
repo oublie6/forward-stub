@@ -1,91 +1,100 @@
-// kafka.go 实现基于 Sarama consumer group 的 Kafka 接收端。
+// kafka.go 实现基于 franz-go consumer group 的 Kafka 接收端。
 package receiver
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"forward-stub/src/config"
 	"forward-stub/src/logx"
 	"forward-stub/src/packet"
 
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/sasl"
 	"go.uber.org/zap/zapcore"
 )
 
 type KafkaReceiver struct {
-	// name: 逻辑名称，对应配置 receivers 的 key。
-	name string
-	// brokers: Kafka broker 列表，来自配置 listen（CSV）。
+	name    string
 	brokers []string
-	// topic: 消费主题。
-	topic string
-	// groupID: 消费组，用于分区负载均衡与位点管理。
+	topic   string
 	groupID string
 
 	onPacket func(*packet.Packet)
 
-	mu sync.Mutex
-	// client: franz-go 客户端；Start 创建，Stop/退出时关闭。
+	mu     sync.Mutex
 	client *kgo.Client
-	// cancel: 用于中断 PollFetches。
 	cancel context.CancelFunc
-	// done: Start 退出信号，供 Stop 等待优雅结束。
-	done chan struct{}
+	done   chan struct{}
 
 	stats *logx.TrafficCounter
 }
 
 // NewKafkaReceiver 负责该函数对应的核心逻辑，详见实现细节。
-func NewKafkaReceiver(name, brokers, topic, groupID string) (*KafkaReceiver, error) {
-	// topic 与 brokers 是必填。groupID 允许空并自动生成，便于开箱即用。
-	if strings.TrimSpace(topic) == "" {
+func NewKafkaReceiver(name string, rc config.ReceiverConfig) (*KafkaReceiver, error) {
+	if strings.TrimSpace(rc.Topic) == "" {
 		return nil, errors.New("kafka receiver requires topic")
 	}
-	if strings.TrimSpace(groupID) == "" {
+	groupID := strings.TrimSpace(rc.GroupID)
+	if groupID == "" {
 		groupID = "forward-stub-" + name
 	}
-	brs := splitCSV(brokers)
+	brs := splitCSV(rc.Listen)
 	if len(brs) == 0 {
 		return nil, errors.New("kafka receiver requires brokers in listen/remote")
 	}
-	return &KafkaReceiver{name: name, brokers: brs, topic: topic, groupID: groupID}, nil
+
+	opts := []kgo.Opt{
+		kgo.SeedBrokers(brs...),
+		kgo.ConsumerGroup(groupID),
+		kgo.ConsumeTopics(rc.Topic),
+		kgo.FetchMinBytes(int32(kafkaIntDefault(rc.FetchMinBytes, 1))),
+		kgo.FetchMaxBytes(int32(kafkaIntDefault(rc.FetchMaxBytes, 16<<20))),
+		kgo.FetchMaxWait(time.Duration(kafkaIntDefault(rc.FetchMaxWaitMS, 100)) * time.Millisecond),
+	}
+	if v := strings.TrimSpace(rc.ClientID); v != "" {
+		opts = append(opts, kgo.ClientID(v))
+	}
+	if strings.EqualFold(strings.TrimSpace(rc.StartOffset), "earliest") {
+		opts = append(opts, kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()))
+	}
+	if strings.EqualFold(strings.TrimSpace(rc.StartOffset), "latest") {
+		opts = append(opts, kgo.ConsumeResetOffset(kgo.NewOffset().AtEnd()))
+	}
+	if rc.TLS {
+		opts = append(opts, kgo.DialTLSConfig(&tls.Config{InsecureSkipVerify: rc.TLSSkipVerify}))
+	}
+	if mech, err := buildKafkaSASLMechanism(rc.SASLMechanism, rc.Username, rc.Password); err != nil {
+		return nil, err
+	} else if mech != nil {
+		opts = append(opts, kgo.SASL(mech))
+	}
+	cli, err := kgo.NewClient(opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &KafkaReceiver{name: name, brokers: brs, topic: rc.Topic, groupID: groupID, client: cli}, nil
 }
 
-// Name 负责该函数对应的核心逻辑，详见实现细节。
 func (r *KafkaReceiver) Name() string { return r.name }
 
-// Key 负责该函数对应的核心逻辑，详见实现细节。
 func (r *KafkaReceiver) Key() string {
 	return "kafka|" + strings.Join(r.brokers, ",") + "|" + r.groupID + "|" + r.topic
 }
 
-// Start 负责该函数对应的核心逻辑，详见实现细节。
 func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
 
-	// 消费参数说明：
-	// - ConsumerGroup + ConsumeTopics: 使用 group 消费模型，支持重平衡。
-	// - FetchMinBytes(1): 低流量时尽快返回，降低端到端延迟。
-	// - FetchMaxBytes(16MiB): 提高批量拉取上限，提升吞吐。
-	// - FetchMaxWait(100ms): 服务端最长等待窗口，平衡延迟与批量效率。
-	opts := []kgo.Opt{
-		kgo.SeedBrokers(r.brokers...),
-		kgo.ConsumerGroup(r.groupID),
-		kgo.ConsumeTopics(r.topic),
-		kgo.FetchMinBytes(1),
-		kgo.FetchMaxBytes(16 << 20),
-		kgo.FetchMaxWait(100 * time.Millisecond),
-	}
-	cli, err := kgo.NewClient(opts...)
-	if err != nil {
-		return err
-	}
-
 	r.mu.Lock()
-	r.client = cli
+	if r.client == nil {
+		r.mu.Unlock()
+		return errors.New("kafka receiver closed")
+	}
 	r.done = make(chan struct{})
 	rctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
@@ -98,6 +107,7 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 			"proto", "kafka",
 		)
 	}
+	cli := r.client
 	r.mu.Unlock()
 
 	defer func() {
@@ -122,7 +132,6 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 	}()
 
 	for {
-		// PollFetches 为阻塞拉取；被 rctx cancel 时会尽快返回。
 		fetches := cli.PollFetches(rctx)
 		if err := fetches.Err0(); err != nil {
 			if errors.Is(err, context.Canceled) {
@@ -140,8 +149,6 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 			if r.stats != nil {
 				r.stats.AddBytes(len(rec.Value))
 			}
-			// 数据生命周期约定：
-			// 从 franz-go record 拷贝到 packet 池化内存，避免上游复用/释放导致悬挂引用。
 			payload, rel := packet.CopyFrom(rec.Value)
 			r.onPacket(&packet.Packet{
 				Payload: payload,
@@ -154,16 +161,12 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 			})
 		})
 		if anyRecord {
-			// 告知客户端此批次处理完成，允许参与重平衡进程。
 			cli.AllowRebalance()
 		}
 	}
 }
 
-// Stop 负责该函数对应的核心逻辑，详见实现细节。
 func (r *KafkaReceiver) Stop(ctx context.Context) error {
-	// Stop 只负责触发 cancel 并等待 Start 退出，不直接关闭 client；
-	// client 关闭由 Start defer 统一执行，避免并发 close。
 	r.mu.Lock()
 	cancel := r.cancel
 	done := r.done
@@ -182,7 +185,6 @@ func (r *KafkaReceiver) Stop(ctx context.Context) error {
 	}
 }
 
-// splitCSV 负责该函数对应的核心逻辑，详见实现细节。
 func splitCSV(v string) []string {
 	parts := strings.Split(v, ",")
 	out := make([]string, 0, len(parts))
@@ -193,4 +195,48 @@ func splitCSV(v string) []string {
 		}
 	}
 	return out
+}
+
+func kafkaIntDefault(v, d int) int {
+	if v <= 0 {
+		return d
+	}
+	return v
+}
+
+type kafkaPlainMechanism struct {
+	username string
+	password string
+}
+
+func (m kafkaPlainMechanism) Name() string { return "PLAIN" }
+
+func (m kafkaPlainMechanism) Authenticate(_ context.Context, _ string) (sasl.Session, []byte, error) {
+	msg := []byte("\x00" + m.username + "\x00" + m.password)
+	return kafkaPlainSession{}, msg, nil
+}
+
+type kafkaPlainSession struct{}
+
+func (kafkaPlainSession) Challenge(_ []byte) (bool, []byte, error) {
+	return true, nil, nil
+}
+
+func buildKafkaSASLMechanism(mechanism, username, password string) (sasl.Mechanism, error) {
+	mech := strings.ToUpper(strings.TrimSpace(mechanism))
+	u := strings.TrimSpace(username)
+	p := strings.TrimSpace(password)
+	if mech == "" && (u != "" || p != "") {
+		mech = "PLAIN"
+	}
+	if mech == "" {
+		return nil, nil
+	}
+	if u == "" || p == "" {
+		return nil, fmt.Errorf("kafka sasl %s requires username and password", mech)
+	}
+	if mech != "PLAIN" {
+		return nil, fmt.Errorf("kafka sasl mechanism %s unsupported, only PLAIN is supported", mech)
+	}
+	return kafkaPlainMechanism{username: u, password: p}, nil
 }

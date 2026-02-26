@@ -47,6 +47,18 @@ type ReceiverConfig struct {
 	Frame     string `json:"frame"` // "" | "u16be" (TCP)
 	Topic     string `json:"topic,omitempty"`
 	GroupID   string `json:"group_id,omitempty"`
+
+	Username      string `json:"username,omitempty"`
+	Password      string `json:"password,omitempty"`
+	SASLMechanism string `json:"sasl_mechanism,omitempty"` // 当前支持 PLAIN
+	TLS           bool   `json:"tls,omitempty"`
+	TLSSkipVerify bool   `json:"tls_skip_verify,omitempty"`
+	ClientID      string `json:"client_id,omitempty"`
+
+	StartOffset    string `json:"start_offset,omitempty"` // earliest | latest
+	FetchMinBytes  int    `json:"fetch_min_bytes,omitempty"`
+	FetchMaxBytes  int    `json:"fetch_max_bytes,omitempty"`
+	FetchMaxWaitMS int    `json:"fetch_max_wait_ms,omitempty"`
 }
 
 type SenderConfig struct {
@@ -55,6 +67,18 @@ type SenderConfig struct {
 	Frame       string `json:"frame"`
 	Concurrency int    `json:"concurrency"`
 	Topic       string `json:"topic"`
+
+	Username      string `json:"username,omitempty"`
+	Password      string `json:"password,omitempty"`
+	SASLMechanism string `json:"sasl_mechanism,omitempty"` // 当前支持 PLAIN
+	TLS           bool   `json:"tls,omitempty"`
+	TLSSkipVerify bool   `json:"tls_skip_verify,omitempty"`
+	ClientID      string `json:"client_id,omitempty"`
+
+	Acks          int    `json:"acks,omitempty"`            // -1(all) / 1 / 0
+	LingerMS      int    `json:"linger_ms,omitempty"`       // 默认 1ms
+	BatchMaxBytes int    `json:"batch_max_bytes,omitempty"` // 默认 1MiB
+	Compression   string `json:"compression,omitempty"`     // none|gzip|snappy|lz4|zstd
 
 	LocalIP   string `json:"local_ip"`
 	LocalPort int    `json:"local_port"`
