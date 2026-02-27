@@ -6,7 +6,6 @@ const (
 	DefaultLogLevel                 = "info"
 	DefaultTrafficStatsInterval     = "1s"
 	DefaultTrafficStatsSampleEvery  = 1
-	DefaultTrafficStatsEnableSender = true
 	DefaultLogRotateMaxSizeMB       = 100
 	DefaultLogRotateMaxBackups      = 5
 	DefaultLogRotateMaxAgeDays      = 30
@@ -37,7 +36,6 @@ type LoggingConfig struct {
 	Compress                 *bool  `json:"compress,omitempty"`
 	TrafficStatsInterval     string `json:"traffic_stats_interval,omitempty"`
 	TrafficStatsSampleEvery  int    `json:"traffic_stats_sample_every,omitempty"`
-	TrafficStatsEnableSender *bool  `json:"traffic_stats_enable_sender,omitempty"`
 }
 
 type ReceiverConfig struct {
@@ -131,9 +129,5 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.Logging.TrafficStatsSampleEvery <= 0 {
 		c.Logging.TrafficStatsSampleEvery = DefaultTrafficStatsSampleEvery
-	}
-	if c.Logging.TrafficStatsEnableSender == nil {
-		v := DefaultTrafficStatsEnableSender
-		c.Logging.TrafficStatsEnableSender = &v
 	}
 }

@@ -13,13 +13,11 @@ import (
 
 var trafficStatsIntervalNanos atomic.Int64
 var trafficStatsSampleEvery atomic.Int64
-var trafficStatsEnableSender atomic.Bool
 
 // init 负责该函数对应的核心逻辑，详见实现细节。
 func init() {
 	trafficStatsIntervalNanos.Store(int64(time.Second))
 	trafficStatsSampleEvery.Store(1)
-	trafficStatsEnableSender.Store(true)
 }
 
 // SetTrafficStatsInterval 负责该函数对应的核心逻辑，详见实现细节。
@@ -44,16 +42,6 @@ func trafficStatsSampleN() uint64 {
 		return 1
 	}
 	return uint64(v)
-}
-
-// SetTrafficStatsEnableSender 控制是否开启 sender 维度统计。
-func SetTrafficStatsEnableSender(enabled bool) {
-	trafficStatsEnableSender.Store(enabled)
-}
-
-// TrafficStatsEnableSender 返回 sender 维度统计是否开启。
-func TrafficStatsEnableSender() bool {
-	return trafficStatsEnableSender.Load()
 }
 
 // trafficStatsInterval 负责该函数对应的核心逻辑，详见实现细节。

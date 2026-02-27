@@ -95,8 +95,7 @@ go run . -config ./configs/example.json
     "level": "info",
     "file": "",
     "traffic_stats_interval": "5s",
-    "traffic_stats_sample_every": 1,
-    "traffic_stats_enable_sender": true
+    "traffic_stats_sample_every": 1
   },
   "receivers": {},
   "senders": {},
@@ -149,8 +148,7 @@ pipeline 是 stage 数组，按顺序执行。例如：`match_offset_bytes`。
   "logging": {
     "level": "info",
     "traffic_stats_interval": "5s",
-    "traffic_stats_sample_every": 1,
-    "traffic_stats_enable_sender": true
+    "traffic_stats_sample_every": 1
   },
   "receivers": {
     "kafka_in": {

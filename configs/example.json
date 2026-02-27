@@ -71,7 +71,6 @@
     "level": "info",
     "file": "",
     "traffic_stats_interval": "5s",
-    "traffic_stats_sample_every": 1,
-    "traffic_stats_enable_sender": true
+    "traffic_stats_sample_every": 1
   }
 }
