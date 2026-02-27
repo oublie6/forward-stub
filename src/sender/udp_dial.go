@@ -10,7 +10,15 @@ func dialUDPWithReuse(ctx context.Context, local, remote *net.UDPAddr) (*net.UDP
 	d := net.Dialer{
 		LocalAddr: local,
 		Control: func(network, address string, c syscall.RawConn) error {
-			return setSocketReuse(c)
+			var ctrlErr error
+			if err := c.Control(func(fd uintptr) {
+				if err := syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); err != nil {
+					ctrlErr = err
+				}
+			}); err != nil {
+				return err
+			}
+			return ctrlErr
 		},
 	}
 
