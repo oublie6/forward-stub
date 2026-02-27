@@ -4,6 +4,8 @@ import (
 	"context"
 	"net"
 	"syscall"
+
+	"github.com/panjf2000/gnet/v2/pkg/socket"
 )
 
 func dialUDPWithReuse(ctx context.Context, local, remote *net.UDPAddr) (*net.UDPConn, error) {
@@ -12,10 +14,8 @@ func dialUDPWithReuse(ctx context.Context, local, remote *net.UDPAddr) (*net.UDP
 		Control: func(network, address string, c syscall.RawConn) error {
 			var ctrlErr error
 			if err := c.Control(func(fd uintptr) {
-				// 允许多个 sender 绑定相同 local ip:port（典型场景为不同 remote）。
-				if err := syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); err != nil {
+				if err := socket.SetReuseAddr(int(fd), 1); err != nil {
 					ctrlErr = err
-					return
 				}
 			}); err != nil {
 				return err
