@@ -13,7 +13,7 @@ import (
 
 // UDPUnicastSender：方向A（最通用）实现
 // - 仅使用 net.DialUDP 绑定固定源端口（local_ip:local_port）并发送到 remote
-// - 不设置 SO_REUSEPORT / SO_REUSEADDR（跨平台不做 syscall 分支）
+// - 设置 SO_REUSEADDR以允许多 sender 复用同一 local port
 // - 保证“同一个 sender = 同一个 socket”，天然满足“单 socket 内保序”
 type UDPUnicastSender struct {
 	name   string
@@ -104,7 +104,7 @@ func (s *UDPUnicastSender) ensureConnLocked() error {
 	if s.conn.Load() != nil {
 		return nil
 	}
-	c, err := net.DialUDP("udp", s.local, s.remote)
+	c, err := dialUDPWithReuse(context.Background(), s.local, s.remote)
 	if err != nil {
 		return err
 	}
