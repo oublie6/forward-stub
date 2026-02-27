@@ -8,7 +8,7 @@ import (
 	"forward-stub/src/packet"
 )
 
-func TestTrafficSummaryTaskLineIncludesWorkerPoolStats(t *testing.T) {
+func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
 	RegisterTaskRuntimeStats("task-a", func() TaskRuntimeStats {
 		return TaskRuntimeStats{
 			PoolSize:    64,
@@ -24,22 +24,28 @@ func TestTrafficSummaryTaskLineIncludesWorkerPoolStats(t *testing.T) {
 	s := newTrafficSummary(3 * time.Second)
 	c := &trafficCounter{role: "task", name: "task-a", key: "send"}
 	s.add(c, 10, 100, time.Second)
-	if len(s.task) != 1 {
-		t.Fatalf("expected one task summary line, got %d", len(s.task))
+	if len(s.tasks) != 1 {
+		t.Fatalf("expected one task summary item, got %d", len(s.tasks))
 	}
-	line := s.task[0]
-	checks := []string{
-		"worker_pool={size=64 running=8 free=56 waiting=2 inflight=3 fast_path=false}",
-		"interval_packets=10",
-		"interval_bytes=100",
+	item := s.tasks[0]
+	if item.Task != "task-a" || item.Direction != "send" {
+		t.Fatalf("unexpected task aggregate identity: %+v", item)
 	}
-	for _, want := range checks {
-		if !strings.Contains(line, want) {
-			t.Fatalf("summary line missing %q: %s", want, line)
-		}
+	if item.TotalPackets != 10 || item.TotalBytes != 100 {
+		t.Fatalf("unexpected total counters: %+v", item)
 	}
-	if strings.Contains(line, "memory_pool={") {
-		t.Fatalf("task line should not contain memory_pool anymore: %s", line)
+	if item.IntervalPackets != 10 || item.IntervalBytes != 100 {
+		t.Fatalf("unexpected interval counters: %+v", item)
+	}
+	if item.PPS != 10 || item.BPS != 100 {
+		t.Fatalf("unexpected rates: %+v", item)
+	}
+	if item.WorkerPool == nil {
+		t.Fatalf("worker pool stats missing: %+v", item)
+	}
+	if item.WorkerPool.Size != 64 || item.WorkerPool.Running != 8 || item.WorkerPool.Free != 56 ||
+		item.WorkerPool.Waiting != 2 || item.WorkerPool.Inflight != 3 || item.WorkerPool.FastPath {
+		t.Fatalf("unexpected worker pool stats: %+v", item.WorkerPool)
 	}
 }
 

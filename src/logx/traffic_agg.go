@@ -236,8 +236,29 @@ func (h *trafficStatsHub) flush(elapsed, interval time.Duration) {
 
 type trafficSummary struct {
 	uptime     string
-	task       []string
+	tasks      []taskAggregateStats
 	memoryPool string
+}
+
+type taskAggregateStats struct {
+	Task            string           `json:"task"`
+	Direction       string           `json:"direction"`
+	TotalPackets    uint64           `json:"total_packets"`
+	TotalBytes      uint64           `json:"total_bytes"`
+	IntervalPackets uint64           `json:"interval_packets,omitempty"`
+	IntervalBytes   uint64           `json:"interval_bytes,omitempty"`
+	PPS             float64          `json:"pps,omitempty"`
+	BPS             float64          `json:"bps,omitempty"`
+	WorkerPool      *workerPoolStats `json:"worker_pool,omitempty"`
+}
+
+type workerPoolStats struct {
+	Size     int   `json:"size"`
+	Running  int   `json:"running"`
+	Free     int   `json:"free"`
+	Waiting  int   `json:"waiting"`
+	Inflight int64 `json:"inflight"`
+	FastPath bool  `json:"fast_path"`
 }
 
 func newTrafficSummary(elapsed time.Duration) *trafficSummary {
@@ -245,9 +266,15 @@ func newTrafficSummary(elapsed time.Duration) *trafficSummary {
 }
 
 func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, interval time.Duration) {
-	line := fmt.Sprintf("task=%s dir=%s total_packets=%d total_bytes=%d", c.name, c.key, packets, bytes)
-	if c.name == "" {
-		line = fmt.Sprintf("%s total_packets=%d total_bytes=%d", c.msg, packets, bytes)
+	if c.role != "task" {
+		return
+	}
+
+	item := taskAggregateStats{
+		Task:         c.name,
+		Direction:    c.key,
+		TotalPackets: packets,
+		TotalBytes:   bytes,
 	}
 
 	if interval > 0 {
@@ -255,35 +282,27 @@ func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, interval 
 		lastBytes := c.lastB.Swap(bytes)
 		intervalPackets := diffCounter(packets, lastPackets)
 		intervalBytes := diffCounter(bytes, lastBytes)
+		item.IntervalPackets = intervalPackets
+		item.IntervalBytes = intervalBytes
 		seconds := interval.Seconds()
 		if seconds > 0 {
-			line = fmt.Sprintf(
-				"%s | interval_packets=%d interval_bytes=%d pps=%.2f bps=%.2f",
-				line,
-				intervalPackets,
-				intervalBytes,
-				float64(intervalPackets)/seconds,
-				float64(intervalBytes)/seconds,
-			)
+			item.PPS = float64(intervalPackets) / seconds
+			item.BPS = float64(intervalBytes) / seconds
 		}
 	}
 
-	switch c.role {
-	case "task":
-		if runtime, ok := lookupTaskRuntimeStats(c.name); ok {
-			line = fmt.Sprintf(
-				"%s | worker_pool={size=%d running=%d free=%d waiting=%d inflight=%d fast_path=%t}",
-				line,
-				runtime.PoolSize,
-				runtime.PoolRunning,
-				runtime.PoolFree,
-				runtime.PoolWaiting,
-				runtime.Inflight,
-				runtime.FastPath,
-			)
+	if runtime, ok := lookupTaskRuntimeStats(c.name); ok {
+		item.WorkerPool = &workerPoolStats{
+			Size:     runtime.PoolSize,
+			Running:  runtime.PoolRunning,
+			Free:     runtime.PoolFree,
+			Waiting:  runtime.PoolWaiting,
+			Inflight: runtime.Inflight,
+			FastPath: runtime.FastPath,
 		}
-		s.task = append(s.task, line)
 	}
+
+	s.tasks = append(s.tasks, item)
 }
 
 func diffCounter(cur, prev uint64) uint64 {
@@ -309,12 +328,11 @@ func (s *trafficSummary) setMemoryPool() {
 }
 
 func (s *trafficSummary) hasData() bool {
-	return len(s.task) > 0
+	return len(s.tasks) > 0
 }
 
 func (s *trafficSummary) log() {
-	tasks := strings.Join(s.task, "\n")
-	L().Infow("traffic stats summary", "uptime", s.uptime, "memory_pool", s.memoryPool, "tasks", tasks)
+	L().Infow("traffic stats summary", "uptime", s.uptime, "memory_pool", s.memoryPool, "tasks", s.tasks)
 }
 
 func parseTrafficMeta(fields []any) (role string, name string, key string) {
