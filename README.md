@@ -222,6 +222,23 @@ pipeline 是 stage 数组，按顺序执行。例如：`match_offset_bytes`。
 - 日志级别：`debug` / `info` / `warn` / `error`
 - 高频路径先通过 `logx.Enabled(level)` 判断等级，减少无效字段构造。
 - 支持 `lumberjack` 滚动文件日志。
+- `logging` 关键字段：
+  - `file`：非空时写入滚动日志文件
+  - `compress`：是否压缩历史分卷（默认 `true`）
+  - `max_size_mb` / `max_backups` / `max_age_days`：分卷大小、保留份数、保留天数
+
+### 8.1 Docker/Kubernetes 日志挂载建议
+
+- Docker：挂载日志目录到宿主机（示例）
+
+```bash
+docker run --rm \
+  -v $(pwd)/configs/example.json:/app/configs/example.json:ro \
+  -v $(pwd)/logs:/var/log/forward-stub \
+  forward-stub:latest
+```
+
+- Kubernetes：`deploy/k8s/deployment.yaml` 已示例 `logs` volume 挂载到 `/var/log/forward-stub`，`deploy/k8s/configmap.yaml` 里将 `logging.file` 指向 `/var/log/forward-stub/app.log` 并开启 `compress=true`。
 
 ## 9. 性能与稳定性建议
 

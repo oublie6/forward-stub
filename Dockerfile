@@ -8,6 +8,9 @@ FROM gcr.io/distroless/static-debian12:nonroot
 # 应用运行目录。
 WORKDIR /app
 
+# 日志目录可通过 docker volume/pvc 挂载到宿主机。
+VOLUME ["/var/log/forward-stub"]
+
 # BINARY_PATH 允许外部注入预构建二进制路径，默认使用 dist/linux 产物。
 ARG BINARY_PATH=dist/linux/forward-stub
 
