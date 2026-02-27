@@ -72,6 +72,9 @@
     "file": "",
     "traffic_stats_interval": "5s",
     "traffic_stats_sample_every": 1,
-    "traffic_stats_enable_sender": true
+    "compress": true,
+    "max_size_mb": 100,
+    "max_backups": 5,
+    "max_age_days": 30
   }
 }

@@ -13,13 +13,11 @@ import (
 
 var trafficStatsIntervalNanos atomic.Int64
 var trafficStatsSampleEvery atomic.Int64
-var trafficStatsEnableSender atomic.Bool
 
 // init 负责该函数对应的核心逻辑，详见实现细节。
 func init() {
 	trafficStatsIntervalNanos.Store(int64(time.Second))
 	trafficStatsSampleEvery.Store(1)
-	trafficStatsEnableSender.Store(true)
 }
 
 // SetTrafficStatsInterval 负责该函数对应的核心逻辑，详见实现细节。
@@ -44,16 +42,6 @@ func trafficStatsSampleN() uint64 {
 		return 1
 	}
 	return uint64(v)
-}
-
-// SetTrafficStatsEnableSender 控制是否开启 sender 维度统计。
-func SetTrafficStatsEnableSender(enabled bool) {
-	trafficStatsEnableSender.Store(enabled)
-}
-
-// TrafficStatsEnableSender 返回 sender 维度统计是否开启。
-func TrafficStatsEnableSender() bool {
-	return trafficStatsEnableSender.Load()
 }
 
 // trafficStatsInterval 负责该函数对应的核心逻辑，详见实现细节。
@@ -246,14 +234,16 @@ func (h *trafficStatsHub) flush(elapsed, interval time.Duration) {
 		}
 		summary.add(c, pkts, b, interval)
 	}
+	summary.setMemoryPool()
 	if summary.hasData() {
-		L().Infow("traffic stats summary", summary.fields()...)
+		summary.log()
 	}
 }
 
 type trafficSummary struct {
-	uptime string
-	task   []string
+	uptime     string
+	task       []string
+	memoryPool string
 }
 
 func newTrafficSummary(elapsed time.Duration) *trafficSummary {
@@ -298,19 +288,6 @@ func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, interval 
 				runtime.FastPath,
 			)
 		}
-		pool := packet.SnapshotPayloadPoolStats()
-		line = fmt.Sprintf(
-			"%s | memory_pool={inuse_buffers=%d inuse_bytes=%d cached_buffers=%d cached_bytes=%d total_buffers=%d total_bytes=%d gets=%d puts=%d}",
-			line,
-			pool.InUseBuffers,
-			pool.InUseBytes,
-			pool.CachedBuffers,
-			pool.CachedBytes,
-			pool.TotalBuffers,
-			pool.TotalBytes,
-			pool.Gets,
-			pool.Puts,
-		)
 		s.task = append(s.task, line)
 	}
 }
@@ -322,16 +299,28 @@ func diffCounter(cur, prev uint64) uint64 {
 	return cur
 }
 
+func (s *trafficSummary) setMemoryPool() {
+	pool := packet.SnapshotPayloadPoolStats()
+	s.memoryPool = fmt.Sprintf(
+		"inuse_buffers=%d inuse_bytes=%d cached_buffers=%d cached_bytes=%d total_buffers=%d total_bytes=%d gets=%d puts=%d",
+		pool.InUseBuffers,
+		pool.InUseBytes,
+		pool.CachedBuffers,
+		pool.CachedBytes,
+		pool.TotalBuffers,
+		pool.TotalBytes,
+		pool.Gets,
+		pool.Puts,
+	)
+}
+
 func (s *trafficSummary) hasData() bool {
 	return len(s.task) > 0
 }
 
-func (s *trafficSummary) fields() []any {
-	args := []any{"uptime", s.uptime}
-	if len(s.task) > 0 {
-		args = append(args, "tasks", s.task)
-	}
-	return args
+func (s *trafficSummary) log() {
+	tasks := strings.Join(s.task, "\n")
+	L().Infow("traffic stats summary", "uptime", s.uptime, "memory_pool", s.memoryPool, "tasks", tasks)
 }
 
 func parseTrafficMeta(fields []any) (role string, name string, key string) {

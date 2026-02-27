@@ -6,7 +6,7 @@ data:
   config.json: |
     {
       "version": 1,
-      "logging": {"level": "info", "file": ""},
+      "logging": {"level": "info", "file": "/var/log/forward-stub/app.log", "compress": true, "max_size_mb": 100, "max_backups": 5, "max_age_days": 30},
       "receivers": {
         "in": {"type": "udp_gnet", "listen": "udp://0.0.0.0:19000", "multicore": true}
       },

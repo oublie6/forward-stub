@@ -32,7 +32,11 @@ spec:
             - name: config
               mountPath: /app/config
               readOnly: true
+            - name: logs
+              mountPath: /var/log/forward-stub
       volumes:
         - name: config
           configMap:
             name: forward-stub-config
+        - name: logs
+          emptyDir: {}
