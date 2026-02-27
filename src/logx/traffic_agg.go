@@ -202,12 +202,6 @@ func (h *trafficStatsHub) loop() {
 		select {
 		case <-ticker.C:
 			h.flush(time.Since(startedAt), interval)
-			nextInterval := trafficStatsInterval()
-			if nextInterval != interval {
-				ticker.Stop()
-				interval = nextInterval
-				ticker = time.NewTicker(interval)
-			}
 		case <-h.stopCh:
 			return
 		}
