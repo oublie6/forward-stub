@@ -25,7 +25,6 @@ type Options struct {
 	Compress                 bool
 	TrafficStatsInterval     time.Duration
 	TrafficStatsSampleEvery  int
-	TrafficStatsEnableSender bool
 }
 
 var (
@@ -73,7 +72,6 @@ func Init(opts Options) error {
 	atomicLevel.SetLevel(lvl)
 	SetTrafficStatsInterval(opts.TrafficStatsInterval)
 	SetTrafficStatsSampleEvery(opts.TrafficStatsSampleEvery)
-	SetTrafficStatsEnableSender(opts.TrafficStatsEnableSender)
 	core := zapcore.NewCore(encoder, ws, atomicLevel)
 	z := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 	next := z.Sugar()

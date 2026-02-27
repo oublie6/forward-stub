@@ -37,7 +37,6 @@ func main() {
 		Compress:                 config.DefaultLogRotateCompress,
 		TrafficStatsInterval:     time.Second,
 		TrafficStatsSampleEvery:  config.DefaultTrafficStatsSampleEvery,
-		TrafficStatsEnableSender: config.DefaultTrafficStatsEnableSender,
 	}); err != nil {
 		_, _ = os.Stderr.WriteString("init logger error: " + err.Error() + "\n")
 		os.Exit(1)
@@ -87,7 +86,6 @@ func main() {
 		Compress:                 *cfg.Logging.Compress,
 		TrafficStatsInterval:     trafficStatsInterval,
 		TrafficStatsSampleEvery:  cfg.Logging.TrafficStatsSampleEvery,
-		TrafficStatsEnableSender: *cfg.Logging.TrafficStatsEnableSender,
 	}); err != nil {
 		_, _ = os.Stderr.WriteString("re-init logger error: " + err.Error() + "\n")
 		os.Exit(1)
