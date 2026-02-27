@@ -300,10 +300,14 @@ func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, interval 
 		}
 		pool := packet.SnapshotPayloadPoolStats()
 		line = fmt.Sprintf(
-			"%s | memory_pool={inuse_buffers=%d inuse_bytes=%d gets=%d puts=%d}",
+			"%s | memory_pool={inuse_buffers=%d inuse_bytes=%d cached_buffers=%d cached_bytes=%d total_buffers=%d total_bytes=%d gets=%d puts=%d}",
 			line,
 			pool.InUseBuffers,
 			pool.InUseBytes,
+			pool.CachedBuffers,
+			pool.CachedBytes,
+			pool.TotalBuffers,
+			pool.TotalBytes,
 			pool.Gets,
 			pool.Puts,
 		)

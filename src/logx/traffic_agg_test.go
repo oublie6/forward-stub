@@ -39,6 +39,8 @@ func TestTrafficSummaryTaskLineIncludesPoolStats(t *testing.T) {
 		"memory_pool={",
 		"inuse_buffers=",
 		"inuse_bytes=",
+		"cached_bytes=",
+		"total_bytes=",
 		"gets=",
 		"puts=",
 	}
