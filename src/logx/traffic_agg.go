@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"forward-stub/src/packet"
 )
 
 var trafficStatsIntervalNanos atomic.Int64
@@ -61,6 +63,48 @@ func trafficStatsInterval() time.Duration {
 		return time.Second
 	}
 	return time.Duration(n)
+}
+
+type TaskRuntimeStats struct {
+	PoolSize    int
+	PoolRunning int
+	PoolFree    int
+	PoolWaiting int
+	Inflight    int64
+	FastPath    bool
+}
+
+var taskRuntimeStatsMu sync.RWMutex
+var taskRuntimeStatsFn = make(map[string]func() TaskRuntimeStats)
+
+// RegisterTaskRuntimeStats 注册 task 运行时统计回调，供聚合日志输出线程池状态。
+func RegisterTaskRuntimeStats(task string, fn func() TaskRuntimeStats) {
+	if task == "" || fn == nil {
+		return
+	}
+	taskRuntimeStatsMu.Lock()
+	taskRuntimeStatsFn[task] = fn
+	taskRuntimeStatsMu.Unlock()
+}
+
+// UnregisterTaskRuntimeStats 注销 task 运行时统计回调。
+func UnregisterTaskRuntimeStats(task string) {
+	if task == "" {
+		return
+	}
+	taskRuntimeStatsMu.Lock()
+	delete(taskRuntimeStatsFn, task)
+	taskRuntimeStatsMu.Unlock()
+}
+
+func lookupTaskRuntimeStats(task string) (TaskRuntimeStats, bool) {
+	taskRuntimeStatsMu.RLock()
+	fn := taskRuntimeStatsFn[task]
+	taskRuntimeStatsMu.RUnlock()
+	if fn == nil {
+		return TaskRuntimeStats{}, false
+	}
+	return fn(), true
 }
 
 type trafficCounter struct {
@@ -242,6 +286,27 @@ func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, interval 
 
 	switch c.role {
 	case "task":
+		if runtime, ok := lookupTaskRuntimeStats(c.name); ok {
+			line = fmt.Sprintf(
+				"%s | worker_pool={size=%d running=%d free=%d waiting=%d inflight=%d fast_path=%t}",
+				line,
+				runtime.PoolSize,
+				runtime.PoolRunning,
+				runtime.PoolFree,
+				runtime.PoolWaiting,
+				runtime.Inflight,
+				runtime.FastPath,
+			)
+		}
+		pool := packet.SnapshotPayloadPoolStats()
+		line = fmt.Sprintf(
+			"%s | memory_pool={inuse_buffers=%d inuse_bytes=%d gets=%d puts=%d}",
+			line,
+			pool.InUseBuffers,
+			pool.InUseBytes,
+			pool.Gets,
+			pool.Puts,
+		)
 		s.task = append(s.task, line)
 	}
 }
