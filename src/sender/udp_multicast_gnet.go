@@ -17,7 +17,7 @@ import (
 // UDPMulticastSender：方向A（最通用）实现
 // - 使用 net.DialUDP 绑定固定源端口（local_ip:local_port）并发送到组播地址 group
 // - 组播相关 socket option 使用 x/net 的 ipv4/ipv6 PacketConn 设置（跨平台）
-// - 不设置 SO_REUSEPORT / SO_REUSEADDR：避免 syscall 平台差异
+// - 设置 SO_REUSEADDR以允许多 sender 复用同一 local port
 type UDPMulticastSender struct {
 	name      string
 	group     *net.UDPAddr
@@ -116,7 +116,7 @@ func (s *UDPMulticastSender) ensureConnLocked() error {
 	if s.conn.Load() != nil {
 		return nil
 	}
-	c, err := net.DialUDP("udp", s.local, s.group)
+	c, err := dialUDPWithReuse(context.Background(), s.local, s.group)
 	if err != nil {
 		return err
 	}

@@ -36,6 +36,8 @@ type Task struct {
 
 	accepting atomic.Bool
 	inflight  sync.WaitGroup
+
+	inflightCount atomic.Int64
 }
 
 // Start 初始化任务执行池。
@@ -64,6 +66,7 @@ func (t *Task) Start() error {
 			"direction", "send",
 		)
 	}
+	logx.RegisterTaskRuntimeStats(t.Name, t.runtimeStats)
 	return nil
 }
 
@@ -75,9 +78,11 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 		return
 	}
 
+	t.inflightCount.Add(1)
 	t.inflight.Add(1)
 	run := func() {
 		defer t.inflight.Done()
+		defer t.inflightCount.Add(-1)
 		defer pkt.Release()
 		t.processAndSend(ctx, pkt)
 	}
@@ -89,6 +94,7 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 
 	if err := t.pool.Submit(run); err != nil {
 		t.inflight.Done()
+		t.inflightCount.Add(-1)
 		pkt.Release()
 		if logx.Enabled(zapcore.DebugLevel) {
 			logx.L().Debugw("task dropped packet due to full worker pool", "task", t.Name, "pool_size", t.PoolSize, "error", err)
@@ -105,6 +111,7 @@ func (t *Task) StopGraceful() {
 		t.pool.Release()
 		t.pool = nil
 	}
+	logx.UnregisterTaskRuntimeStats(t.Name)
 	if t.sendStats != nil {
 		t.sendStats.Close()
 		t.sendStats = nil
@@ -126,4 +133,18 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 			logx.L().Warnw("sender send failed", "task", t.Name, "error", err)
 		}
 	}
+}
+
+func (t *Task) runtimeStats() logx.TaskRuntimeStats {
+	stats := logx.TaskRuntimeStats{
+		PoolSize: t.PoolSize,
+		Inflight: t.inflightCount.Load(),
+		FastPath: t.FastPath,
+	}
+	if t.pool != nil {
+		stats.PoolRunning = t.pool.Running()
+		stats.PoolFree = t.pool.Free()
+		stats.PoolWaiting = t.pool.Waiting()
+	}
+	return stats
 }
