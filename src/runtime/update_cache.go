@@ -216,7 +216,7 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (receiver.Receiver, error) {
 	switch rc.Type {
 	case "udp_gnet":
-		return receiver.NewGnetUDP(name, rc.Listen, rc.Multicore, gnetLogLevel), nil
+		return receiver.NewGnetUDP(name, rc.Listen, rc.Multicore, rc.NumEventLoop, rc.ReadBufferCap, gnetLogLevel), nil
 	case "tcp_gnet":
 		var fr receiver.Framer
 		switch rc.Frame {
@@ -227,7 +227,7 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 		default:
 			return nil, fmt.Errorf("receiver %s unknown frame %s", name, rc.Frame)
 		}
-		return receiver.NewGnetTCP(name, rc.Listen, rc.Multicore, fr, gnetLogLevel), nil
+		return receiver.NewGnetTCP(name, rc.Listen, rc.Multicore, rc.NumEventLoop, rc.ReadBufferCap, fr, gnetLogLevel), nil
 	case "kafka":
 		return receiver.NewKafkaReceiver(name, rc)
 	case "sftp":

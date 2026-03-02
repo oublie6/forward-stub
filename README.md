@@ -124,6 +124,8 @@ go run . -config ./configs/example.json
 - `type`：`udp_gnet` / `tcp_gnet` / `kafka` / `sftp`
 - `listen`：监听地址（Kafka 场景为 broker 列表）
 - `multicore`：是否启用 gnet multicore
+- `num_event_loop`：显式设置 gnet event-loop 数量（`<=0` 使用 gnet 默认值）
+- `read_buffer_cap`：显式设置 gnet 读缓冲上限（字节，`<=0` 使用 gnet 默认值）
 - `frame`：TCP 分帧（`""` 或 `"u16be"`）
 - `topic` / `group_id`：Kafka receiver 参数
 - Kafka 扩展字段：`username`、`password`、`sasl_mechanism`（当前支持 `PLAIN`）、`tls`、`tls_skip_verify`、`client_id`、`start_offset`（`earliest/latest`）、`fetch_min_bytes`、`fetch_max_bytes`、`fetch_max_wait_ms`
