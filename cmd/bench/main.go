@@ -81,24 +81,28 @@ func main() {
 	trafficStatsInterval := flag.Duration("traffic-stats-interval", time.Second, "aggregated traffic stats log interval (e.g. 5s, 10s)")
 	flag.Parse()
 
+	if err := logx.Init(logx.Options{Level: "error", TrafficStatsSampleEvery: 1}); err != nil {
+		os.Exit(1)
+	}
+
 	if *benchConfigPath != "" {
 		if err := applyBenchConfigFile(*benchConfigPath, mode, duration, warmup, payloadSize, workers, ppsPerWorker, ppsSweep, multicore, udpSinkReaders, udpSinkReadBuf, taskFastPath, taskPoolSize, logLevel, logFile, trafficStatsInterval); err != nil {
-			fmt.Fprintf(os.Stderr, "load bench config failed: %v\n", err)
+			logx.L().Errorw("load bench config failed", "error", err)
 			os.Exit(2)
 		}
 	}
 
 	if *payloadSize <= 0 || *payloadSize > 65535 {
-		fmt.Fprintf(os.Stderr, "invalid payload-size: %d\n", *payloadSize)
+		logx.L().Errorw("invalid payload-size", "payload_size", *payloadSize)
 		os.Exit(2)
 	}
 	if *workers <= 0 {
-		fmt.Fprintf(os.Stderr, "invalid workers: %d\n", *workers)
+		logx.L().Errorw("invalid workers", "workers", *workers)
 		os.Exit(2)
 	}
 
 	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile, TrafficStatsSampleEvery: 1}); err != nil {
-		fmt.Fprintf(os.Stderr, "log init failed: %v\n", err)
+		logx.L().Errorw("log init failed", "error", err)
 		os.Exit(1)
 	}
 	defer func() { _ = logx.Sync() }()
@@ -109,7 +113,7 @@ func main() {
 	if strings.TrimSpace(*ppsSweep) != "" {
 		parsed, err := parseSweep(*ppsSweep)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "invalid pps-sweep: %v\n", err)
+			logx.L().Errorw("invalid pps-sweep", "error", err, "pps_sweep", *ppsSweep)
 			os.Exit(2)
 		}
 		rates = parsed
@@ -119,7 +123,7 @@ func main() {
 		for _, rate := range rates {
 			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf, *taskFastPath, *taskPoolSize)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "[%s] benchmark failed: %v\n", proto, err)
+				logx.L().Errorw("benchmark failed", "proto", proto, "error", err)
 				os.Exit(1)
 			}
 			printResult(res)
@@ -133,7 +137,7 @@ func main() {
 		benchRun("udp")
 		benchRun("tcp")
 	default:
-		fmt.Fprintf(os.Stderr, "invalid mode: %s\n", *mode)
+		logx.L().Errorw("invalid mode", "mode", *mode)
 		os.Exit(2)
 	}
 }
@@ -541,12 +545,22 @@ func throttle(pps int) {
 
 // printResult 负责该函数对应的核心逻辑，详见实现细节。
 func printResult(r *result) {
-	fmt.Printf("\n=== %s forward benchmark ===\n", r.proto)
-	fmt.Printf("duration=%s payload=%dB workers=%d\n", r.duration.Round(time.Millisecond), r.payloadSize, r.senderWorkers)
-	fmt.Printf("sent: packets=%d bytes=%d\n", r.sentPackets, r.sentBytes)
-	fmt.Printf("recv: packets=%d bytes=%d\n", r.recvPackets, r.recvBytes)
-	fmt.Printf("loss: %.2f%%\n", r.packetLossRate*100)
-	fmt.Printf("throughput: %.0f pps, %.2f Mbps\n", r.pps, r.mbps)
+	if r == nil {
+		return
+	}
+	logx.L().Infow("forward benchmark result",
+		"proto", r.proto,
+		"duration", r.duration.Round(time.Millisecond).String(),
+		"payload_size", r.payloadSize,
+		"workers", r.senderWorkers,
+		"sent_packets", r.sentPackets,
+		"sent_bytes", r.sentBytes,
+		"recv_packets", r.recvPackets,
+		"recv_bytes", r.recvBytes,
+		"loss_rate", r.packetLossRate,
+		"pps", r.pps,
+		"mbps", r.mbps,
+	)
 }
 
 // max 负责该函数对应的核心逻辑，详见实现细节。
