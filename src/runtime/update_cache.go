@@ -226,6 +226,8 @@ func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (send
 		return sender.NewGnetTCPSender(name, sc.Remote, with, conc, gnetLogLevel)
 	case "kafka":
 		return sender.NewKafkaSender(name, sc)
+	case "sftp":
+		return sender.NewSFTPSender(name, sc)
 	default:
 		return nil, fmt.Errorf("sender %s unknown type %s", name, sc.Type)
 	}

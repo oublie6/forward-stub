@@ -15,6 +15,12 @@ type Meta struct {
 	Flags  uint32
 	Remote string
 	Local  string
+
+	FilePath   string
+	TransferID string
+	Offset     int64
+	TotalSize  int64
+	EOF        bool
 }
 
 type Packet struct {

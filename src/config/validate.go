@@ -98,6 +98,16 @@ func (c *Config) Validate() error {
 			if err := validateKafkaAuth("sender", sn, s.SASLMechanism, s.Username, s.Password); err != nil {
 				return err
 			}
+		case "sftp":
+			if s.Remote == "" {
+				return fmt.Errorf("sender %s sftp requires remote", sn)
+			}
+			if s.Username == "" || s.Password == "" {
+				return fmt.Errorf("sender %s sftp requires username and password", sn)
+			}
+			if s.RemoteDir == "" {
+				return fmt.Errorf("sender %s sftp requires remote_dir", sn)
+			}
 		default:
 			return fmt.Errorf("sender %s unknown type %s", sn, s.Type)
 		}

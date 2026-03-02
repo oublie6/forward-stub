@@ -64,7 +64,7 @@ type ReceiverConfig struct {
 }
 
 type SenderConfig struct {
-	Type        string `json:"type"` // udp_unicast | udp_multicast | tcp_gnet | kafka
+	Type        string `json:"type"` // udp_unicast | udp_multicast | tcp_gnet | kafka | sftp
 	Remote      string `json:"remote"`
 	Frame       string `json:"frame"`
 	Concurrency int    `json:"concurrency"`
@@ -87,6 +87,9 @@ type SenderConfig struct {
 	Iface     string `json:"iface"`
 	TTL       int    `json:"ttl"`
 	Loop      bool   `json:"loop"`
+
+	RemoteDir  string `json:"remote_dir,omitempty"`
+	TempSuffix string `json:"temp_suffix,omitempty"`
 }
 
 type StageConfig struct {
@@ -94,6 +97,8 @@ type StageConfig struct {
 	Offset int    `json:"offset,omitempty"`
 	Hex    string `json:"hex,omitempty"`
 	Flag   string `json:"flag,omitempty"`
+	Path   string `json:"path,omitempty"`
+	Bool   *bool  `json:"bool,omitempty"`
 }
 
 type TaskConfig struct {

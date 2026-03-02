@@ -43,6 +43,14 @@ func compileStage(sc config.StageConfig) (pipeline.StageFunc, error) {
 		return pipeline.ReplaceOffsetBytes(sc.Offset, b, flagFromName(sc.Flag)), nil
 	case "drop_if_flag":
 		return pipeline.DropIfFlag(flagFromName(sc.Flag)), nil
+	case "mark_as_file_chunk":
+		eof := true
+		if sc.Bool != nil {
+			eof = *sc.Bool
+		}
+		return pipeline.MarkAsFileChunk(sc.Path, eof), nil
+	case "clear_file_meta":
+		return pipeline.ClearFileMeta(), nil
 	default:
 		return nil, fmt.Errorf("unknown stage type: %s", sc.Type)
 	}

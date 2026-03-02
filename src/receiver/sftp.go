@@ -151,7 +151,7 @@ func (r *SFTPReceiver) scanOnce(ctx context.Context) error {
 		if r.isSeen(fp, sig) {
 			continue
 		}
-		if err := r.streamFile(ctx, scli, fp); err != nil {
+		if err := r.streamFile(ctx, scli, fp, e.Size()); err != nil {
 			return err
 		}
 		r.markSeen(fp, sig)
@@ -159,7 +159,7 @@ func (r *SFTPReceiver) scanOnce(ctx context.Context) error {
 	return nil
 }
 
-func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePath string) error {
+func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePath string, totalSize int64) error {
 	f, err := scli.Open(filePath)
 	if err != nil {
 		return err
@@ -171,6 +171,8 @@ func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePa
 		chunkSize = 1024
 	}
 	buf := make([]byte, chunkSize)
+	offset := int64(0)
+	transferID := fmt.Sprintf("%s|%d", filePath, totalSize)
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -178,6 +180,7 @@ func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePa
 		}
 		n, err := f.Read(buf)
 		if n > 0 {
+			eof := err == io.EOF
 			payload, rel := packet.CopyFrom(buf[:n])
 			if r.stats != nil {
 				r.stats.AddBytes(n)
@@ -185,12 +188,18 @@ func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePa
 			r.onPacket(&packet.Packet{
 				Payload: payload,
 				Meta: packet.Meta{
-					Proto:  packet.ProtoSFTP,
-					Remote: filePath,
-					Local:  r.cfg.Listen,
+					Proto:      packet.ProtoSFTP,
+					Remote:     filePath,
+					Local:      r.cfg.Listen,
+					FilePath:   filePath,
+					TransferID: transferID,
+					Offset:     offset,
+					TotalSize:  totalSize,
+					EOF:        eof,
 				},
 				ReleaseFn: rel,
 			})
+			offset += int64(n)
 		}
 		if err == io.EOF {
 			return nil

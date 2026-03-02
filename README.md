@@ -1,6 +1,6 @@
 # forward-stub
 
-一个面向高吞吐报文转发场景的 Go 服务：支持多种接收端（UDP/TCP gnet、Kafka、SFTP）、可编排 pipeline 规则处理，以及多种发送端（UDP 单播/组播、TCP、Kafka）。
+一个面向高吞吐报文转发场景的 Go 服务：支持多种接收端（UDP/TCP gnet、Kafka、SFTP）、可编排 pipeline 规则处理，以及多种发送端（UDP 单播/组播、TCP、Kafka、SFTP）。
 
 ---
 
@@ -39,7 +39,7 @@
 │   ├── pipeline/             # pipeline 编译与 stage
 │   ├── receiver/             # UDP/TCP/Kafka/SFTP 接收端
 │   ├── runtime/              # 核心运行时（Store、UpdateCache）
-│   ├── sender/               # UDP/TCP/Kafka 发送端
+│   ├── sender/               # UDP/TCP/Kafka/SFTP 发送端
 │   └── task/                 # 单条处理链路（pipeline + senders）
 ├── scripts/                  # 构建与打包脚本
 └── deploy/k8s/               # Kubernetes 部署清单
@@ -126,7 +126,7 @@ go run . -config ./configs/example.json
 
 ### 6.3 senders
 
-- `type`：`udp_unicast` / `udp_multicast` / `tcp_gnet` / `kafka`
+- `type`：`udp_unicast` / `udp_multicast` / `tcp_gnet` / `kafka` / `sftp`
 - 常见字段：`remote`、`concurrency`、`frame`、`topic`
 - Kafka 扩展字段：`username`、`password`、`sasl_mechanism`（当前支持 `PLAIN`）、`tls`、`tls_skip_verify`、`client_id`、`acks`（`-1/1/0`）、`linger_ms`、`batch_max_bytes`、`compression`（`none/gzip/snappy/lz4/zstd`）
 - UDP 扩展字段：`local_ip`、`local_port`、`iface`、`ttl`、`loop`
@@ -235,6 +235,44 @@ V1 版本支持把 SFTP 目录中的文件按 chunk 读取为内部 packet，后
 - 同一文件按顺序分块读取，块大小由 `chunk_size` 控制（默认 64KiB）。
 - `poll_interval_sec` 控制扫描周期（默认 5 秒）。
 - 当前版本通过内存去重避免重复处理“同路径同 size+mtime”的文件。
+
+
+### 6.8 SFTP sender 配置示例（V2）
+
+V2 版本支持将带文件元信息（`file_path/offset/total_size/eof`）的 packet 分块写入 SFTP，并在完成后原子 rename 提交。
+
+```json
+{
+  "senders": {
+    "sftp_out": {
+      "type": "sftp",
+      "remote": "127.0.0.1:22",
+      "username": "demo",
+      "password": "demo-pass",
+      "remote_dir": "/data/out",
+      "temp_suffix": ".part"
+    }
+  }
+}
+```
+
+### 6.9 V3 互转 stage 示例
+
+- `mark_as_file_chunk`：将实时数据标记为文件分块语义（stream -> file）。
+- `clear_file_meta`：清理文件元信息（file -> stream）。
+
+```json
+{
+  "pipelines": {
+    "stream_to_file": [
+      {"type": "mark_as_file_chunk", "path": "stream/out.bin", "bool": true}
+    ],
+    "file_to_stream": [
+      {"type": "clear_file_meta"}
+    ]
+  }
+}
+```
 
 ## 7. 运行时流程
 
