@@ -108,7 +108,12 @@ go run . -config ./configs/example.json
 
 - `version`：配置版本号。
 - `control`：配置中心拉取配置参数（可选）。
-- `logging`：日志级别与日志文件。
+- `logging`：日志级别、日志文件与可选 payload 收发日志开关。
+- payload 日志扩展字段：
+  - `payload_log_tasks`：需要开启 payload 日志的任务名白名单（按 task 名匹配）
+  - `payload_log_recv`：是否启用任务接收侧 payload 日志
+  - `payload_log_send`：是否启用任务发送侧 payload 日志
+  - `payload_log_max_bytes`：单条日志中最多打印多少 payload 字节（以十六进制摘要输出）
 - `receivers`：输入端定义。
 - `senders`：输出端定义。
 - `pipelines`：处理规则编排（按顺序执行 stage）。
@@ -137,7 +142,10 @@ pipeline 是 stage 数组，按顺序执行。例如：`match_offset_bytes`。
 
 ### 6.5 tasks
 
-一个 task 绑定：`receivers`、`pipelines`、`senders`，并可配置 `pool_size` 与 `fast_path`。
+一个 task 绑定：`receivers`、`pipelines`、`senders`，并可配置 `pool_size`、`fast_path` 以及可选的 payload 日志开关。
+
+- `log_payload_recv`：该任务是否允许打印接收侧 payload 日志（需全局 `payload_log_recv=true`）
+- `log_payload_send`：该任务是否允许打印发送侧 payload 日志（需全局 `payload_log_send=true`）
 
 ### 6.6 Kafka receiver / sender 配置示例
 

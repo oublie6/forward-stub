@@ -10,6 +10,7 @@ const (
 	DefaultLogRotateMaxBackups     = 5
 	DefaultLogRotateMaxAgeDays     = 30
 	DefaultLogRotateCompress       = true
+	DefaultPayloadLogMaxBytes      = 256
 )
 
 // Config 是系统运行时的全量配置快照。
@@ -79,6 +80,18 @@ type LoggingConfig struct {
 	// TrafficStatsSampleEvery 为采样倍率，1 表示全量统计。
 	// 用法：高吞吐场景可调大以降低统计开销。
 	TrafficStatsSampleEvery int `json:"traffic_stats_sample_every,omitempty"`
+	// PayloadLogTasks 是启用 payload 打印的任务名白名单。
+	// 用法：仅名单内任务会打印 payload 收发日志；为空表示全部任务均不打印。
+	PayloadLogTasks []string `json:"payload_log_tasks,omitempty"`
+	// PayloadLogRecv 控制是否打印任务接收侧 payload 日志。
+	// 用法：开启后会在 dispatch 进入任务前输出 task/receiver/元信息与 payload 摘要。
+	PayloadLogRecv bool `json:"payload_log_recv,omitempty"`
+	// PayloadLogSend 控制是否打印任务发送侧 payload 日志。
+	// 用法：开启后会在 sender.Send 前输出 task/sender/元信息与 payload 摘要。
+	PayloadLogSend bool `json:"payload_log_send,omitempty"`
+	// PayloadLogMaxBytes 控制日志中 payload 摘要的最大字节数。
+	// 用法：建议设置为 64~1024 之间，避免大包导致日志膨胀；<=0 时使用默认值。
+	PayloadLogMaxBytes int `json:"payload_log_max_bytes,omitempty"`
 }
 
 // ReceiverConfig 描述单个接收端实例。
@@ -258,6 +271,12 @@ type TaskConfig struct {
 	// Senders 是处理完成后要投递的发送端名称列表。
 	// 用法：可配置多个 sender 实现一份输入多路分发。
 	Senders []string `json:"senders"`
+	// LogPayloadRecv 控制该任务是否打印“接收到任务前”的 payload 日志（需 logging.PayloadLogRecv=true 且命中白名单）。
+	// 用法：用于针对单任务定位输入问题，默认关闭。
+	LogPayloadRecv bool `json:"log_payload_recv,omitempty"`
+	// LogPayloadSend 控制该任务是否打印“发送到 sender 前”的 payload 日志（需 logging.PayloadLogSend=true 且命中白名单）。
+	// 用法：用于针对单任务定位输出问题，默认关闭。
+	LogPayloadSend bool `json:"log_payload_send,omitempty"`
 }
 
 // ApplyDefaults 为 receiver/task/sender 之外的配置字段填充默认值。
@@ -290,5 +309,8 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.Logging.TrafficStatsSampleEvery <= 0 {
 		c.Logging.TrafficStatsSampleEvery = DefaultTrafficStatsSampleEvery
+	}
+	if c.Logging.PayloadLogMaxBytes <= 0 {
+		c.Logging.PayloadLogMaxBytes = DefaultPayloadLogMaxBytes
 	}
 }
