@@ -222,7 +222,15 @@ func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (send
 		_ = conc
 		return sender.NewUDPMulticastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.Iface, sc.TTL, sc.Loop)
 	case "tcp_gnet":
-		with := sc.Frame == "u16be"
+		with := false
+		switch sc.Frame {
+		case "", "none":
+			with = false
+		case "u16be":
+			with = true
+		default:
+			return nil, fmt.Errorf("sender %s unknown frame %s", name, sc.Frame)
+		}
 		return sender.NewGnetTCPSender(name, sc.Remote, with, conc, gnetLogLevel)
 	case "kafka":
 		return sender.NewKafkaSender(name, sc)
