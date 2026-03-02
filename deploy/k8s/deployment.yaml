@@ -2,16 +2,28 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: forward-stub
+  labels:
+    app.kubernetes.io/name: forward-stub
 spec:
   replicas: 1
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
-      app: forward-stub
+      app.kubernetes.io/name: forward-stub
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   template:
     metadata:
       labels:
-        app: forward-stub
+        app.kubernetes.io/name: forward-stub
     spec:
+      terminationGracePeriodSeconds: 15
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: forward-stub
           image: forward-stub:latest
@@ -28,15 +40,25 @@ spec:
             limits:
               cpu: "1000m"
               memory: "512Mi"
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           volumeMounts:
             - name: config
               mountPath: /app/config
               readOnly: true
             - name: logs
               mountPath: /var/log/forward-stub
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: config
           configMap:
             name: forward-stub-config
         - name: logs
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}

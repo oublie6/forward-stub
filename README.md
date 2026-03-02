@@ -639,7 +639,18 @@ docker build --build-arg BINARY_PATH=dist/linux/forward-stub -t forward-stub:lat
 
 ### 12.4 Kubernetes 部署
 
-`deploy/k8s` 目录提供了 `deployment`、`service`、`configmap` 与 `kustomization` 示例。
+`deploy/k8s` 目录提供了 `namespace`、`deployment`、`service`、`configmap` 与 `kustomization` 示例，默认命名空间为 `forward-stub`。
+
+建议通过脚本统一操作：
+
+```bash
+./scripts/k8s-deploy.sh render   # 渲染最终 YAML
+./scripts/k8s-deploy.sh diff     # 对比集群差异
+./scripts/k8s-deploy.sh apply    # 部署到集群
+./scripts/k8s-deploy.sh delete   # 从集群删除
+```
+
+如需覆盖镜像，可在部署前编辑 `deploy/k8s/kustomization.yaml` 中的 `images` 字段。
 
 ## 13. 后续演进方向
 
