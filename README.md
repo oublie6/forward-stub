@@ -541,6 +541,28 @@ make verify
 - 微基准 `ns/op` 回退超过 20%；
 - 在相同压测参数下，端到端“无丢包最大吞吐”回退超过 20%。
 
+### 10.5 UDP/TCP/Kafka 任务在 payload 日志开关下的不丢包最大吞吐基准
+
+用于验证 `log_payload_recv/log_payload_send` 开关对转发吞吐的影响，并在 benchmark 内部校验 `sent == received`，确保统计结果来自“无丢包”场景：
+
+```bash
+go test ./src/runtime -run '^$' -bench BenchmarkPayloadLogSwitchThroughput -benchmem -benchtime=1s
+```
+
+最近一次结果（2 vCPU 容器）如下：
+
+- UDP
+  - 256B：关闭日志 `297.04 MB/s`，开启日志 `298.90 MB/s`
+  - 4096B：关闭日志 `996.96 MB/s`，开启日志 `1097.35 MB/s`
+- TCP
+  - 256B：关闭日志 `305.89 MB/s`，开启日志 `314.99 MB/s`
+  - 4096B：关闭日志 `927.92 MB/s`，开启日志 `795.64 MB/s`
+- Kafka
+  - 256B：关闭日志 `293.32 MB/s`，开启日志 `254.41 MB/s`
+  - 4096B：关闭日志 `1039.23 MB/s`，开启日志 `2067.04 MB/s`
+
+> 说明：该 benchmark 将日志级别固定为 `error`，用于隔离“开关路径本身”开销，避免实际 `info` 日志 IO 放大对吞吐测量的干扰。
+
 ## 11. 常见问题（FAQ）
 
 ### Q1：启动时报 `must provide -config`
