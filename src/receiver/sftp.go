@@ -23,20 +23,41 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// SFTPReceiver 是基于轮询目录的 SFTP 接收端。
+//
+// 工作方式：
+//  1. 按 poll_interval_sec 定时连接远端目录；
+//  2. 对每个常规文件按 chunk 读取并转成 Packet(file_chunk)；
+//  3. 通过 seen 指纹避免重复消费未变化文件。
 type SFTPReceiver struct {
+	// name 是 receiver 实例名（配置 key）。
+	// 用法：用于日志打点、运行时映射与指标标签。
 	name string
-	cfg  config.ReceiverConfig
+	// cfg 是 receiver 配置快照。
+	// 用法：Start/scan 过程中读取轮询、目录、认证等参数。
+	cfg config.ReceiverConfig
 
+	// onPacket 是上游注入的投递回调。
+	// 用法：每读到一个 chunk 就调用一次，把数据送入 task 流程。
 	onPacket func(*packet.Packet)
 
-	mu     sync.Mutex
+	// mu 保护 cancel/done/seen 等可变状态。
+	mu sync.Mutex
+	// cancel 用于请求停止后台轮询循环。
 	cancel context.CancelFunc
-	done   chan struct{}
+	// done 在 Start 退出时关闭，用于 Stop 等待。
+	done chan struct{}
 
+	// stats 是流量统计计数器。
+	// 用法：启用 info 日志级别时按周期输出吞吐指标。
 	stats *logx.TrafficCounter
-	seen  map[string]string
+	// seen 记录已处理文件指纹（size+mtime）。
+	// 用法：避免同一文件在下次轮询中被重复读取。
+	seen map[string]string
 }
 
+// NewSFTPReceiver 构造并校验 SFTPReceiver。
+// 需要 listen/username/password/remote_dir 四个核心字段。
 func NewSFTPReceiver(name string, rc config.ReceiverConfig) (*SFTPReceiver, error) {
 	if strings.TrimSpace(rc.Listen) == "" {
 		return nil, fmt.Errorf("sftp receiver requires listen")
@@ -53,12 +74,16 @@ func NewSFTPReceiver(name string, rc config.ReceiverConfig) (*SFTPReceiver, erro
 	return &SFTPReceiver{name: name, cfg: rc, seen: make(map[string]string)}, nil
 }
 
+// Name 返回 receiver 名称（配置 key）。
 func (r *SFTPReceiver) Name() string { return r.name }
 
+// Key 返回 receiver 去重键，用于 runtime 复用实例。
 func (r *SFTPReceiver) Key() string {
 	return "sftp|" + strings.TrimSpace(r.cfg.Listen) + "|" + strings.TrimSpace(r.cfg.RemoteDir)
 }
 
+// Start 启动轮询循环并持续产出 packet。
+// 用法：通常由 runtime 调用一次；成功后会阻塞直到 ctx 取消或 Stop 被调用。
 func (r *SFTPReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
 
@@ -107,6 +132,8 @@ func (r *SFTPReceiver) Start(ctx context.Context, onPacket func(*packet.Packet))
 	}
 }
 
+// Stop 请求停止并等待 Start 退出。
+// 用法：热更新或进程退出时调用，确保后台 goroutine 与连接正确回收。
 func (r *SFTPReceiver) Stop(ctx context.Context) error {
 	r.mu.Lock()
 	cancel := r.cancel
@@ -126,6 +153,8 @@ func (r *SFTPReceiver) Stop(ctx context.Context) error {
 	}
 }
 
+// scanOnce 执行一次目录扫描并顺序处理文件。
+// 用法：每个轮询周期调用一次，按文件名排序保证处理顺序稳定。
 func (r *SFTPReceiver) scanOnce(ctx context.Context) error {
 	cli, scli, err := r.connect()
 	if err != nil {
@@ -161,6 +190,8 @@ func (r *SFTPReceiver) scanOnce(ctx context.Context) error {
 	return nil
 }
 
+// streamFile 将单个文件按 chunk 转换为 file_chunk packet 并回调输出。
+// 用法：会为每个 chunk 计算 checksum，并携带 offset/EOF 供 sender 重组。
 func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePath string, totalSize int64) error {
 	f, err := scli.Open(filePath)
 	if err != nil {
@@ -218,6 +249,8 @@ func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePa
 	}
 }
 
+// connect 建立 SSH 与 SFTP 客户端连接。
+// 用法：每轮扫描建立短连接，扫描结束后立即关闭以降低长期连接失效风险。
 func (r *SFTPReceiver) connect() (*ssh.Client, *sftp.Client, error) {
 	addr := strings.TrimSpace(r.cfg.Listen)
 	if _, _, err := net.SplitHostPort(addr); err != nil {
@@ -241,18 +274,24 @@ func (r *SFTPReceiver) connect() (*ssh.Client, *sftp.Client, error) {
 	return cli, scli, nil
 }
 
+// isSeen 判断文件指纹是否已处理。
+// 用法：在处理前调用，命中则跳过该文件。
 func (r *SFTPReceiver) isSeen(fp, sig string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.seen[fp] == sig
 }
 
+// markSeen 记录文件最新指纹，避免重复消费。
+// 用法：文件完整 stream 成功后调用，确保失败文件可在下轮重试。
 func (r *SFTPReceiver) markSeen(fp, sig string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.seen[fp] = sig
 }
 
+// defaultInt 返回 v（若 v<=0 则返回默认值 d）。
+// 用法：统一处理配置字段“未设置或非法值”时的兜底行为。
 func defaultInt(v, d int) int {
 	if v <= 0 {
 		return d
