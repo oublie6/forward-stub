@@ -354,6 +354,33 @@ go run ./cmd/bench -bench-config ./configs/bench.example.json
 
 `configs/bench.example.json` 已覆盖 bench 常用可配置项（如 `workers`、`task_pool_size`、`pps_per_worker`、`pps_sweep`、`traffic_stats_interval` 等），可按机器规模直接调参复用。
 
+### 10.4 每次改动的回归基线（功能 + 性能）
+
+建议每次提交前执行：
+
+```bash
+make verify
+```
+
+`make verify` 会串行执行：
+- `go test ./...`（功能回归）
+- `go test ./src/runtime -run '^$' -bench BenchmarkDispatchMatrix -benchmem -benchtime=2s`（4 协议笛卡尔积 dispatch 微基准）
+- `go run ./cmd/bench -mode both -duration 4s -warmup 1s -payload-size 512 -workers 2 -pps-sweep 2000,4000,8000 -log-level error`（UDP/TCP 端到端压测）
+
+在当前 CI 机型（2 vCPU）上的一组参考边界（仅供趋势比较）：
+- dispatch 微基准：
+  - 256B 负载：约 `600~710 ns/op`
+  - 4096B 负载：约 `2.6~3.2 us/op`
+  - 分配：`6 allocs/op`，约 `592B/op(256B 载荷)` / `4432B/op(4096B 载荷)`
+- 端到端压测（2 workers，512B）：
+  - UDP：约 `1.4k~4.0k pps`（`5.8~16.3 Mbps`）
+  - TCP：约 `1.4k~7.8k pps`（`5.8~32.1 Mbps`）
+
+若出现以下情况，建议阻断发布并定位：
+- 功能测试失败或转发正确性异常；
+- 微基准 `ns/op` 回退超过 20%；
+- 端到端吞吐 `pps` 或 `Mbps` 回退超过 20%。
+
 ## 11. 常见问题（FAQ）
 
 ### Q1：启动时报 `must provide -config`
