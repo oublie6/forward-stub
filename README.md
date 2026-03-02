@@ -304,27 +304,96 @@ SFTP 转发使用 `Envelope(file_chunk)` 语义，关键字段：
 - `checksum`：单 chunk 校验值（SHA-256，十六进制）。
 - `eof`：是否最后一个分块。
 
-#### 6.11.2 SFTP Receiver 工作流
+#### 6.11.2 SFTP Receiver 工作流（详细）
 
-1. 按 `poll_interval_sec` 周期扫描 `remote_dir`；
-2. 对目录下常规文件进行排序并逐个读取；
-3. 按 `chunk_size` 分块，生成 `file_chunk` packet；
-4. 为每个 chunk 填充 `offset/total_size/checksum/eof`；
-5. 通过 `size + mtime` 指纹判重，避免重复消费未变化文件。
+Receiver 的实现可以理解为“**轮询扫描器 + 分块读取器 + 元信息封装器**”，核心流程如下。
+
+**A. 启动与生命周期**
+
+1. `Start` 被 runtime 调用后，会记录 `onPacket` 回调并创建可取消上下文；
+2. 启用流量统计（如果日志级别允许），用于输出 receiver 吞吐；
+3. 进入循环：`scanOnce -> sleep(poll_interval_sec) -> scanOnce ...`；
+4. `Stop` 被调用时触发 cancel，等待 `Start` 退出并回收状态。
+
+**B. 单次扫描（scanOnce）**
+
+1. 建立 SSH + SFTP 连接（本轮短连接，用完关闭）；
+2. 读取 `remote_dir` 下目录项，仅处理常规文件；
+3. 按文件名排序后顺序处理（确保行为稳定、便于排障复现）；
+4. 基于 `size + mtime` 生成文件指纹：
+   - 指纹已出现：跳过（避免重复消费未变化文件）；
+   - 指纹未出现：进入 `streamFile` 分块读取；
+5. 文件成功处理后才写入 `seen`，确保失败文件可在下一轮重试。
+
+**C. 文件分块（streamFile）**
+
+1. 按 `chunk_size` 分配缓冲区（最小兜底 1024 字节）；
+2. 循环读取文件，每次读取生成一个 `file_chunk` packet；
+3. 为每个 chunk 填充核心元信息：
+   - `transfer_id`：默认由 `filePath + totalSize` 组合；
+   - `offset`：当前块在原文件中的起始位置；
+   - `total_size`：文件总字节数；
+   - `checksum`：当前 chunk 的 SHA-256；
+   - `eof`：当前 chunk 是否文件末块；
+4. 通过 `onPacket` 将 packet 推给 task/pipeline/sender 链路。
+
+**D. Receiver 的几个设计取舍**
+
+- **短连接扫描**：每轮扫描单独建连，降低长期空闲连接失效后的异常处理复杂度；
+- **指纹去重而非落库断点**：实现简单、开销低，但进程重启后不会保留历史 `seen`；
+- **顺序处理文件**：牺牲部分并行读取能力，换取更稳定的处理顺序。
 
 建议：
-- 大文件建议增大 `chunk_size`（例如 256KiB~1MiB）降低对象数；
-- 小文件高频场景建议缩短 `poll_interval_sec`，平衡实时性与目录扫描开销。
+- 大文件优先增大 `chunk_size`（如 256KiB~1MiB）降低对象数量与调度开销；
+- 小文件高频目录优先缩短 `poll_interval_sec`，但要关注目录扫描与 SSH 建连成本；
+- 若目录文件非常多，建议在上游按日期/批次分目录，避免单目录扫描过重。
 
-#### 6.11.3 SFTP Sender 工作流
+#### 6.11.3 SFTP Sender 工作流（详细）
 
-1. 按 `transfer_id` 查找或创建传输状态；
-2. 将 chunk 按 `offset` 写入 `remote_dir/<file>.part`（可自定义后缀）；
-3. 若配置 checksum，则先校验 chunk 完整性；
-4. 收到 EOF 且已写入字节达到 `total_size` 后执行 rename；
-5. rename 目标为 `remote_dir/<file>`，对下游消费者呈现“提交即完整”的文件视图。
+Sender 的实现可以理解为“**按 transfer 会话聚合 + 随机写入临时文件 + 原子提交**”。
 
-该设计可避免消费者读取到半文件；即使中途失败也只会留下临时文件，便于清理。
+**A. 输入约束与会话定位**
+
+1. 每次 `Send` 接收一个 packet；
+2. 优先使用 `meta.transfer_id` 定位会话状态；若缺失则自动生成临时会话 ID；
+3. 文件名优先级：`file_name` > `base(file_path)` > `transfer_id.bin`；
+4. 首次出现的会话会创建状态：`tempPath/finalPath/totalSize/eofSeen/writtenMax`。
+
+**B. 校验与分块写入**
+
+1. 若 packet 带 `checksum`，sender 先计算 payload SHA-256 并校验；
+2. 校验通过后，以 `WriteAt(offset)` 写入 `remote_dir/<file><temp_suffix>`；
+3. 更新会话进度：
+   - `writtenMax = max(writtenMax, offset + len(payload))`
+   - 若 `eof=true`，则标记 `eofSeen=true`。
+
+这种写法支持“按偏移写入”，对乱序 chunk 或补写场景更友好。
+
+**C. 提交条件与原子可见性**
+
+当且仅当满足以下条件才提交最终文件：
+
+- 已见到 EOF（`eofSeen=true`）；
+- 且 `total_size<=0` 或 `writtenMax >= total_size`。
+
+满足条件后执行：
+
+1. 尝试删除同名最终文件（如已存在）；
+2. `Rename(tempPath, finalPath)` 原子提交；
+3. 删除内存会话状态。
+
+通过“临时文件 + rename”机制，下游通常只能看到完整文件，避免读到半成品。
+
+**D. Sender 的几个设计取舍**
+
+- **串行锁保护**：`Send` 内部串行化，保证连接状态和会话 map 一致性；
+- **连接复用 + 按需重连**：正常路径复用 SFTP/SSH 连接，不可用时 `ensureConn` 重建；
+- **会话状态在内存中**：轻量高效，但进程重启会丢失未提交会话上下文。
+
+运维建议：
+- 将 `temp_suffix` 设为下游不会消费的后缀（如 `.part/.tmp`）；
+- 配置定期清理策略，处理异常中断后遗留的临时文件；
+- 若业务要求严格“整文件一致性”，务必保证上游正确设置 `total_size + eof`。
 
 #### 6.11.4 典型编排
 
