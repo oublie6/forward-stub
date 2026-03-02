@@ -7,6 +7,7 @@ const (
 	ProtoUDP   Proto = 1
 	ProtoTCP   Proto = 2
 	ProtoKafka Proto = 3
+	ProtoSFTP  Proto = 4
 )
 
 type Meta struct {
@@ -14,6 +15,12 @@ type Meta struct {
 	Flags  uint32
 	Remote string
 	Local  string
+
+	FilePath   string
+	TransferID string
+	Offset     int64
+	TotalSize  int64
+	EOF        bool
 }
 
 type Packet struct {

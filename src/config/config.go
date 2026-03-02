@@ -2,14 +2,14 @@
 package config
 
 const (
-	DefaultControlTimeoutSec        = 5
-	DefaultLogLevel                 = "info"
-	DefaultTrafficStatsInterval     = "1s"
-	DefaultTrafficStatsSampleEvery  = 1
-	DefaultLogRotateMaxSizeMB       = 100
-	DefaultLogRotateMaxBackups      = 5
-	DefaultLogRotateMaxAgeDays      = 30
-	DefaultLogRotateCompress        = true
+	DefaultControlTimeoutSec       = 5
+	DefaultLogLevel                = "info"
+	DefaultTrafficStatsInterval    = "1s"
+	DefaultTrafficStatsSampleEvery = 1
+	DefaultLogRotateMaxSizeMB      = 100
+	DefaultLogRotateMaxBackups     = 5
+	DefaultLogRotateMaxAgeDays     = 30
+	DefaultLogRotateCompress       = true
 )
 
 type Config struct {
@@ -28,18 +28,18 @@ type ControlConfig struct {
 }
 
 type LoggingConfig struct {
-	Level                    string `json:"level"`
-	File                     string `json:"file"`
-	MaxSizeMB                int    `json:"max_size_mb,omitempty"`
-	MaxBackups               int    `json:"max_backups,omitempty"`
-	MaxAgeDays               int    `json:"max_age_days,omitempty"`
-	Compress                 *bool  `json:"compress,omitempty"`
-	TrafficStatsInterval     string `json:"traffic_stats_interval,omitempty"`
-	TrafficStatsSampleEvery  int    `json:"traffic_stats_sample_every,omitempty"`
+	Level                   string `json:"level"`
+	File                    string `json:"file"`
+	MaxSizeMB               int    `json:"max_size_mb,omitempty"`
+	MaxBackups              int    `json:"max_backups,omitempty"`
+	MaxAgeDays              int    `json:"max_age_days,omitempty"`
+	Compress                *bool  `json:"compress,omitempty"`
+	TrafficStatsInterval    string `json:"traffic_stats_interval,omitempty"`
+	TrafficStatsSampleEvery int    `json:"traffic_stats_sample_every,omitempty"`
 }
 
 type ReceiverConfig struct {
-	Type      string `json:"type"` // udp_gnet | tcp_gnet | kafka
+	Type      string `json:"type"` // udp_gnet | tcp_gnet | kafka | sftp
 	Listen    string `json:"listen"`
 	Multicore bool   `json:"multicore"`
 	Frame     string `json:"frame"` // "" | "u16be" (TCP)
@@ -57,10 +57,14 @@ type ReceiverConfig struct {
 	FetchMinBytes  int    `json:"fetch_min_bytes,omitempty"`
 	FetchMaxBytes  int    `json:"fetch_max_bytes,omitempty"`
 	FetchMaxWaitMS int    `json:"fetch_max_wait_ms,omitempty"`
+
+	RemoteDir       string `json:"remote_dir,omitempty"`
+	PollIntervalSec int    `json:"poll_interval_sec,omitempty"`
+	ChunkSize       int    `json:"chunk_size,omitempty"`
 }
 
 type SenderConfig struct {
-	Type        string `json:"type"` // udp_unicast | udp_multicast | tcp_gnet | kafka
+	Type        string `json:"type"` // udp_unicast | udp_multicast | tcp_gnet | kafka | sftp
 	Remote      string `json:"remote"`
 	Frame       string `json:"frame"`
 	Concurrency int    `json:"concurrency"`
@@ -83,6 +87,9 @@ type SenderConfig struct {
 	Iface     string `json:"iface"`
 	TTL       int    `json:"ttl"`
 	Loop      bool   `json:"loop"`
+
+	RemoteDir  string `json:"remote_dir,omitempty"`
+	TempSuffix string `json:"temp_suffix,omitempty"`
 }
 
 type StageConfig struct {
@@ -90,6 +97,8 @@ type StageConfig struct {
 	Offset int    `json:"offset,omitempty"`
 	Hex    string `json:"hex,omitempty"`
 	Flag   string `json:"flag,omitempty"`
+	Path   string `json:"path,omitempty"`
+	Bool   *bool  `json:"bool,omitempty"`
 }
 
 type TaskConfig struct {
