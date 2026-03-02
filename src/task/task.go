@@ -3,6 +3,7 @@ package task
 
 import (
 	"context"
+	"encoding/hex"
 	"sync"
 	"sync/atomic"
 
@@ -30,6 +31,10 @@ type Task struct {
 
 	PoolSize int
 	FastPath bool
+
+	LogPayloadRecv bool
+	LogPayloadSend bool
+	PayloadLogMax  int
 
 	pool      *ants.Pool
 	sendStats *logx.TrafficCounter
@@ -129,10 +134,55 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 		if t.sendStats != nil {
 			t.sendStats.AddBytes(len(pkt.Payload))
 		}
+		if t.LogPayloadSend && logx.Enabled(zapcore.InfoLevel) {
+			logx.L().Infow("task payload send",
+				"task", t.Name,
+				"sender", s.Name(),
+				"kind", pkt.Kind,
+				"payload_len", len(pkt.Payload),
+				"payload_hex", payloadHex(pkt.Payload, t.PayloadLogMax),
+				"transfer_id", pkt.Meta.TransferID,
+				"offset", pkt.Meta.Offset,
+				"total_size", pkt.Meta.TotalSize,
+				"eof", pkt.Meta.EOF,
+			)
+		}
 		if err := s.Send(ctx, pkt); err != nil && logx.Enabled(zapcore.WarnLevel) {
-			logx.L().Warnw("sender send failed", "task", t.Name, "error", err)
+			logx.L().Warnw("sender send failed", "task", t.Name, "sender", s.Name(), "error", err)
 		}
 	}
+}
+
+// LogPayloadReceive 在任务接收入口输出 payload 摘要日志。
+// 仅在配置开启时生效，避免对高吞吐链路造成额外日志开销。
+func (t *Task) LogPayloadReceive(receiver string, pkt *packet.Packet) {
+	if t == nil || !t.LogPayloadRecv || pkt == nil || !logx.Enabled(zapcore.InfoLevel) {
+		return
+	}
+	logx.L().Infow("task payload recv",
+		"task", t.Name,
+		"receiver", receiver,
+		"kind", pkt.Kind,
+		"payload_len", len(pkt.Payload),
+		"payload_hex", payloadHex(pkt.Payload, t.PayloadLogMax),
+		"transfer_id", pkt.Meta.TransferID,
+		"offset", pkt.Meta.Offset,
+		"total_size", pkt.Meta.TotalSize,
+		"eof", pkt.Meta.EOF,
+	)
+}
+
+func payloadHex(b []byte, max int) string {
+	if len(b) == 0 {
+		return ""
+	}
+	if max <= 0 {
+		max = 256
+	}
+	if len(b) > max {
+		return hex.EncodeToString(b[:max]) + "...(truncated)"
+	}
+	return hex.EncodeToString(b)
 }
 
 func (t *Task) runtimeStats() logx.TaskRuntimeStats {
