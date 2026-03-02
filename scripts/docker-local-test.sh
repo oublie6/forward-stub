@@ -9,6 +9,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 DOCKER_HOST_URI=${DOCKER_HOST_URI:-unix:///tmp/forward-stub-docker.sock}
 CONTAINERD_SOCK=${CONTAINERD_SOCK:-/tmp/forward-stub-containerd.sock}
+PRELOADED_IMAGE_DIR=${PRELOADED_IMAGE_DIR:-${ROOT_DIR}/deploy/images}
 
 BUILDER_IMAGE=${BUILDER_IMAGE:-golang:1.25-alpine}
 RUNTIME_IMAGE=${RUNTIME_IMAGE:-gcr.io/distroless/static-debian12:nonroot}
@@ -115,6 +116,60 @@ pull_with_retries() {
   return 1
 }
 
+image_exists_locally() {
+  local image=$1
+  DOCKER_HOST="${DOCKER_HOST_URI}" docker image inspect "${image}" >/dev/null 2>&1
+}
+
+# 一些离线 tar 包内镜像标签可能带 docker.io 前缀，这里做一次归一化打标。
+normalize_repo_tag() {
+  local image=$1
+  if [[ "${image}" == docker.io/library/* ]]; then
+    echo "${image#docker.io/library/}"
+    return 0
+  fi
+  if [[ "${image}" == docker.io/* ]]; then
+    echo "${image#docker.io/}"
+    return 0
+  fi
+  return 1
+}
+
+load_preloaded_images() {
+  local image_dir=$1
+  local file
+  local loaded_tags
+  local tag
+  local normalized
+
+  if [[ ! -d "${image_dir}" ]]; then
+    echo "[preload] 跳过：目录不存在 ${image_dir}"
+    return 0
+  fi
+
+  shopt -s nullglob
+  for file in "${image_dir}"/*.tar; do
+    echo "[preload] 加载镜像包: ${file}"
+    DOCKER_HOST="${DOCKER_HOST_URI}" docker load -i "${file}"
+
+    # 基于 tar manifest 获取 RepoTags 并补充归一化标签。
+    loaded_tags=$(tar -xOf "${file}" manifest.json 2>/dev/null \
+      | tr '{},[]' '\n' \
+      | sed -n 's/.*"RepoTags":\[\(.*\)\].*/\1/p' \
+      | tr ',' '\n' \
+      | sed -e 's/"//g' -e 's/^ *//' -e 's/ *$//' \
+      | sed '/^$/d' || true)
+
+    while IFS= read -r tag; do
+      [[ -z "${tag}" ]] && continue
+      if normalized=$(normalize_repo_tag "${tag}"); then
+        DOCKER_HOST="${DOCKER_HOST_URI}" docker tag "${tag}" "${normalized}"
+      fi
+    done <<<"${loaded_tags}"
+  done
+  shopt -u nullglob
+}
+
 nohup containerd \
   --address "${CONTAINERD_SOCK}" \
   --root /tmp/forward-stub-containerd-root \
@@ -146,8 +201,19 @@ for i in $(seq 1 40); do
   fi
 done
 
-pull_with_retries "${BUILDER_IMAGE}"
-pull_with_retries "${RUNTIME_IMAGE}"
+load_preloaded_images "${PRELOADED_IMAGE_DIR}"
+
+if image_exists_locally "${BUILDER_IMAGE}"; then
+  echo "[pull] 已存在本地镜像，跳过拉取: ${BUILDER_IMAGE}"
+else
+  pull_with_retries "${BUILDER_IMAGE}"
+fi
+
+if image_exists_locally "${RUNTIME_IMAGE}"; then
+  echo "[pull] 已存在本地镜像，跳过拉取: ${RUNTIME_IMAGE}"
+else
+  pull_with_retries "${RUNTIME_IMAGE}"
+fi
 
 DOCKER_HOST="${DOCKER_HOST_URI}" docker save -o "${ROOT_DIR}/docker/base-images/${BUILDER_IMAGE//[\/:]/_}.tar" "${BUILDER_IMAGE}"
 DOCKER_HOST="${DOCKER_HOST_URI}" docker save -o "${ROOT_DIR}/docker/base-images/${RUNTIME_IMAGE//[\/:]/_}.tar" "${RUNTIME_IMAGE}"
