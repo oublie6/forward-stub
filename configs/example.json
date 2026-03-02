@@ -51,7 +51,9 @@
       "pipelines": [],
       "senders": [
         "udp_uni_out"
-      ]
+      ],
+      "log_payload_recv": true,
+      "log_payload_send": true
     },
     "udp_task_multicast": {
       "pool_size": 64,
@@ -75,6 +77,12 @@
     "compress": true,
     "max_size_mb": 100,
     "max_backups": 5,
-    "max_age_days": 30
+    "max_age_days": 30,
+    "payload_log_tasks": [
+      "udp_task_unicast"
+    ],
+    "payload_log_recv": true,
+    "payload_log_send": true,
+    "payload_log_max_bytes": 128
   }
 }

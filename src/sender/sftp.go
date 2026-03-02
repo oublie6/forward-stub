@@ -20,28 +20,62 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// sftpTransferState 保存单个 transfer_id 在发送端的组装状态。
 type sftpTransferState struct {
-	tempPath   string
-	finalPath  string
-	totalSize  int64
-	eofSeen    bool
+	// tempPath 是远端临时文件路径。
+	// 用法：所有 chunk 先写入该路径，完成后再 rename 提交。
+	tempPath string
+	// finalPath 是远端最终文件路径。
+	// 用法：达到提交条件后将 tempPath 原子重命名到该路径。
+	finalPath string
+	// totalSize 是期望文件总大小。
+	// 用法：与 writtenMax、eofSeen 一起判断是否可安全提交。
+	totalSize int64
+	// eofSeen 表示是否已收到结束分块。
+	// 用法：避免仅凭字节数达到阈值就过早提交。
+	eofSeen bool
+	// writtenMax 是已写入的最大末尾偏移。
+	// 用法：支持乱序 chunk 到达时估算当前写入进度。
 	writtenMax int64
 }
 
+// SFTPSender 是按分块写入并最终 rename 提交的 SFTP 发送端。
+//
+// 使用方式：
+//  1. task 将 file_chunk packet 传入 Send；
+//  2. sender 依据 transfer_id + offset 写入临时文件；
+//  3. 接收到 EOF 且写满 total_size 后 rename 为正式文件。
 type SFTPSender struct {
-	name       string
-	addr       string
-	username   string
-	password   string
-	remoteDir  string
+	// name 是 sender 实例名（配置 key）。
+	// 用法：用于 runtime 映射与日志定位。
+	name string
+	// addr 是远端 SFTP 服务地址（host:port）。
+	// 用法：ensureConn 会校验格式并据此建立 SSH 连接。
+	addr string
+	// username/password 是远端认证凭据。
+	// 用法：用于 SSH 密码认证，建议由密钥管理系统注入。
+	username string
+	password string
+	// remoteDir 是最终文件写入目录。
+	// 用法：连接建立时会尝试 MkdirAll，确保目录存在。
+	remoteDir string
+	// tempSuffix 是临时文件后缀。
+	// 用法：下游可据此过滤未完成文件。
 	tempSuffix string
 
-	mu        sync.Mutex
+	// mu 串行化 Send 与连接状态变更，避免并发写冲突。
+	mu sync.Mutex
+	// sshClient/sftpCli 是复用的底层连接。
+	// 用法：ensureConn 保证可用，Close 统一释放。
 	sshClient *ssh.Client
 	sftpCli   *sftp.Client
-	states    map[string]*sftpTransferState
+	// states 保存 transfer_id 到组装状态的映射。
+	// 用法：跨多次 Send 追踪同一文件的写入进度。
+	states map[string]*sftpTransferState
 }
 
+// NewSFTPSender 构造并校验 SFTPSender。
+// 用法：创建时会主动探测连接；失败则返回错误避免 runtime 挂入不可用 sender。
 func NewSFTPSender(name string, sc config.SenderConfig) (*SFTPSender, error) {
 	if strings.TrimSpace(sc.Remote) == "" {
 		return nil, fmt.Errorf("sftp sender requires remote")
@@ -71,9 +105,15 @@ func NewSFTPSender(name string, sc config.SenderConfig) (*SFTPSender, error) {
 	return s, nil
 }
 
+// Name 返回 sender 名称（配置 key）。
 func (s *SFTPSender) Name() string { return s.name }
-func (s *SFTPSender) Key() string  { return "sftp|" + s.addr + "|" + s.remoteDir }
 
+// Key 返回 sender 去重键，用于 runtime 复用实例。
+func (s *SFTPSender) Key() string { return "sftp|" + s.addr + "|" + s.remoteDir }
+
+// Send 接收一个 packet 并写入远端临时文件。
+// 当满足完成条件（EOF + 写满 total_size）时，会原子 rename 为最终文件。
+// 用法：推荐只投递 PayloadKindFileChunk 数据；若无 transfer_id 会自动生成临时会话。
 func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -145,6 +185,8 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 	return nil
 }
 
+// Close 关闭底层 SFTP/SSH 连接并释放资源。
+// 用法：在 runtime 下线 sender 或进程退出时调用，避免连接泄漏。
 func (s *SFTPSender) Close(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -159,6 +201,8 @@ func (s *SFTPSender) Close(ctx context.Context) error {
 	return nil
 }
 
+// ensureConn 确保底层连接可用，不可用时执行重连。
+// 用法：由 Send/构造阶段调用，调用方无需显式管理重连逻辑。
 func (s *SFTPSender) ensureConn() error {
 	if s.sftpCli != nil && s.sshClient != nil {
 		return nil
