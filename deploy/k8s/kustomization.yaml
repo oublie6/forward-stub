@@ -1,6 +1,14 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+namespace: forward-stub
+commonLabels:
+  app.kubernetes.io/part-of: forward-stub
 resources:
+  - namespace.yaml
   - configmap.yaml
   - deployment.yaml
   - service.yaml
+images:
+  - name: forward-stub
+    newName: forward-stub
+    newTag: latest
