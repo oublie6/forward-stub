@@ -24,5 +24,5 @@ USER nonroot:nonroot
 
 # 固定入口为服务进程。
 ENTRYPOINT ["/app/forward-stub"]
-# 默认使用容器内配置文件并启用 info 级日志。
-CMD ["-config", "/app/configs/example.json", "-log-level", "info"]
+# 默认使用容器内配置文件；日志级别请在配置文件 logging.level 中设置。
+CMD ["-config", "/app/configs/example.json"]

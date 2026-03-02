@@ -16,7 +16,7 @@ spec:
         - name: forward-stub
           image: forward-stub:latest
           imagePullPolicy: IfNotPresent
-          args: ["-config", "/app/config/config.json", "-log-level", "info"]
+          args: ["-config", "/app/config/config.json"]
           ports:
             - name: udp-in
               containerPort: 19000

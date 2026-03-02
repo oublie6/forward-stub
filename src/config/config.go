@@ -105,6 +105,12 @@ type ReceiverConfig struct {
 	// Multicore 控制 gnet 是否启用多核事件循环。
 	// 用法：仅对 gnet 协议有效，在多核机器上可提升吞吐。
 	Multicore bool `json:"multicore"`
+	// NumEventLoop 显式指定 gnet event-loop 数量（<=0 表示使用 gnet 默认值）。
+	// 用法：仅对 gnet 协议有效；在 CPU 绑定压测场景可精细控制并发模型。
+	NumEventLoop int `json:"num_event_loop,omitempty"`
+	// ReadBufferCap 显式指定 gnet 每连接读缓冲上限（字节，<=0 表示使用 gnet 默认值）。
+	// 用法：仅对 gnet 协议有效；大包场景可适度调大以减少扩容与拷贝。
+	ReadBufferCap int `json:"read_buffer_cap,omitempty"`
 	// Frame 是 TCP 粘包拆包规则（空或 u16be）。
 	// 用法：收发两端需一致；u16be 表示以 2 字节大端长度前缀分帧。
 	Frame string `json:"frame"` // "" | "u16be" (TCP)

@@ -14,10 +14,12 @@ import (
 )
 
 type GnetUDP struct {
-	name         string
-	listen       string
-	multicore    bool
-	gnetLogLevel logging.Level
+	name          string
+	listen        string
+	multicore     bool
+	numEventLoop  int
+	readBufferCap int
+	gnetLogLevel  logging.Level
 
 	onPacket func(*packet.Packet)
 
@@ -27,8 +29,15 @@ type GnetUDP struct {
 }
 
 // NewGnetUDP 负责该函数对应的核心逻辑，详见实现细节。
-func NewGnetUDP(name, listen string, multicore bool, gnetLogLevel string) *GnetUDP {
-	return &GnetUDP{name: name, listen: listen, multicore: multicore, gnetLogLevel: logx.ParseGnetLogLevel(gnetLogLevel)}
+func NewGnetUDP(name, listen string, multicore bool, numEventLoop, readBufferCap int, gnetLogLevel string) *GnetUDP {
+	return &GnetUDP{
+		name:          name,
+		listen:        listen,
+		multicore:     multicore,
+		numEventLoop:  numEventLoop,
+		readBufferCap: readBufferCap,
+		gnetLogLevel:  logx.ParseGnetLogLevel(gnetLogLevel),
+	}
 }
 
 // Name 负责该函数对应的核心逻辑，详见实现细节。
@@ -59,6 +68,8 @@ func (r *GnetUDP) Start(ctx context.Context, onPacket func(*packet.Packet)) erro
 		&udpHandler{recv: r},
 		r.listen,
 		gnet.WithMulticore(r.multicore),
+		gnet.WithNumEventLoop(r.numEventLoop),
+		gnet.WithReadBufferCap(r.readBufferCap),
 		gnet.WithReusePort(true),
 		gnet.WithReuseAddr(true),
 		gnet.WithLogLevel(r.gnetLogLevel),
