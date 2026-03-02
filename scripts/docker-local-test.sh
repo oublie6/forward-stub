@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# 在受限环境中启动独立 dockerd（不依赖 systemd），并完成：
+# 1) 拉取 Dockerfile 基础镜像
+# 2) 导出到项目目录 docker/base-images
+# 3) 执行镜像构建验证
+
+ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
+DOCKER_HOST_URI=${DOCKER_HOST_URI:-unix:///tmp/forward-stub-docker.sock}
+CONTAINERD_SOCK=${CONTAINERD_SOCK:-/tmp/forward-stub-containerd.sock}
+
+BUILDER_IMAGE=${BUILDER_IMAGE:-golang:1.25-alpine}
+RUNTIME_IMAGE=${RUNTIME_IMAGE:-gcr.io/distroless/static-debian12:nonroot}
+VERSION=${VERSION:-dev}
+TARGETOS=${TARGETOS:-linux}
+TARGETARCH=${TARGETARCH:-arm64}
+PULL_RETRIES=${PULL_RETRIES:-3}
+PULL_RETRY_INTERVAL_SEC=${PULL_RETRY_INTERVAL_SEC:-3}
+# 支持配置多个镜像源（逗号分隔），例如：
+# IMAGE_MIRRORS="docker.m.daocloud.io,mirror.ccs.tencentyun.com"
+IMAGE_MIRRORS=${IMAGE_MIRRORS:-}
+
+mkdir -p "${ROOT_DIR}/docker/base-images"
+mkdir -p /tmp/forward-stub-containerd-root /tmp/forward-stub-containerd-state /tmp/forward-stub-docker-data /tmp/forward-stub-docker-exec
+
+# 清理上一次残留
+rm -f /tmp/forward-stub-dockerd.pid /tmp/forward-stub-containerd.sock /tmp/forward-stub-docker.sock
+if [[ -f /tmp/forward-stub-containerd.pid ]]; then
+  kill "$(cat /tmp/forward-stub-containerd.pid)" >/dev/null 2>&1 || true
+fi
+
+cleanup() {
+  if [[ -f /tmp/forward-stub-dockerd.pid ]]; then
+    kill "$(cat /tmp/forward-stub-dockerd.pid)" >/dev/null 2>&1 || true
+  fi
+  if [[ -f /tmp/forward-stub-containerd.pid ]]; then
+    kill "$(cat /tmp/forward-stub-containerd.pid)" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+trim() {
+  local s=$1
+  # shellcheck disable=SC2001
+  echo "$(echo "${s}" | sed 's/^ *//;s/ *$//')"
+}
+
+# docker 镜像名是否包含 registry 前缀。
+has_registry_prefix() {
+  local img=$1
+  if [[ "${img}" != */* ]]; then
+    return 1
+  fi
+  local first=${img%%/*}
+  [[ "${first}" == *.* || "${first}" == *:* || "${first}" == "localhost" ]]
+}
+
+# 将原镜像重写到指定镜像源。
+rewrite_image_for_mirror() {
+  local image=$1
+  local mirror=$2
+  if has_registry_prefix "${image}"; then
+    echo "${mirror}/${image#*/}"
+  else
+    echo "${mirror}/library/${image}"
+  fi
+}
+
+# 构建拉取候选列表（原图 + 多镜像源重写）。
+build_pull_candidates() {
+  local image=$1
+  local -a out
+  out+=("${image}")
+
+  if [[ -n "${IMAGE_MIRRORS}" ]]; then
+    IFS=',' read -r -a mirrors <<<"${IMAGE_MIRRORS}"
+    for m in "${mirrors[@]}"; do
+      m=$(trim "${m}")
+      [[ -z "${m}" ]] && continue
+      out+=("$(rewrite_image_for_mirror "${image}" "${m}")")
+    done
+  fi
+
+  printf '%s\n' "${out[@]}"
+}
+
+pull_with_retries() {
+  local canonical_image=$1
+  local -a candidates
+  local candidate
+  local attempt
+
+  mapfile -t candidates < <(build_pull_candidates "${canonical_image}")
+
+  echo "[pull] 镜像 ${canonical_image}，候选源：${candidates[*]}"
+  for candidate in "${candidates[@]}"; do
+    for attempt in $(seq 1 "${PULL_RETRIES}"); do
+      echo "[pull] 尝试 ${attempt}/${PULL_RETRIES}: ${candidate}"
+      if DOCKER_HOST="${DOCKER_HOST_URI}" docker pull "${candidate}"; then
+        if [[ "${candidate}" != "${canonical_image}" ]]; then
+          DOCKER_HOST="${DOCKER_HOST_URI}" docker tag "${candidate}" "${canonical_image}"
+        fi
+        echo "[pull] 成功: ${canonical_image} <= ${candidate}"
+        return 0
+      fi
+
+      if [[ "${attempt}" -lt "${PULL_RETRIES}" ]]; then
+        sleep "${PULL_RETRY_INTERVAL_SEC}"
+      fi
+    done
+  done
+
+  echo "[pull] 失败: ${canonical_image}（所有镜像源均重试后失败）"
+  return 1
+}
+
+nohup containerd \
+  --address "${CONTAINERD_SOCK}" \
+  --root /tmp/forward-stub-containerd-root \
+  --state /tmp/forward-stub-containerd-state \
+  >/tmp/forward-stub-containerd.log 2>&1 &
+echo $! >/tmp/forward-stub-containerd.pid
+
+nohup dockerd \
+  --host "${DOCKER_HOST_URI}" \
+  --containerd "${CONTAINERD_SOCK}" \
+  --data-root /tmp/forward-stub-docker-data \
+  --exec-root /tmp/forward-stub-docker-exec \
+  --pidfile /tmp/forward-stub-dockerd.pid \
+  --storage-driver=vfs \
+  --iptables=false \
+  --bridge=none \
+  --ip-forward=false \
+  --ip-masq=false \
+  >/tmp/forward-stub-dockerd.log 2>&1 &
+
+for i in $(seq 1 40); do
+  if DOCKER_HOST="${DOCKER_HOST_URI}" docker info >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+  if [[ "$i" == "40" ]]; then
+    echo "dockerd 启动失败，请检查 /tmp/forward-stub-dockerd.log"
+    exit 1
+  fi
+done
+
+pull_with_retries "${BUILDER_IMAGE}"
+pull_with_retries "${RUNTIME_IMAGE}"
+
+DOCKER_HOST="${DOCKER_HOST_URI}" docker save -o "${ROOT_DIR}/docker/base-images/${BUILDER_IMAGE//[\/:]/_}.tar" "${BUILDER_IMAGE}"
+DOCKER_HOST="${DOCKER_HOST_URI}" docker save -o "${ROOT_DIR}/docker/base-images/${RUNTIME_IMAGE//[\/:]/_}.tar" "${RUNTIME_IMAGE}"
+
+DOCKER_HOST="${DOCKER_HOST_URI}" docker build -t forward-stub:test --build-arg VERSION="${VERSION}" --build-arg TARGETOS="${TARGETOS}" --build-arg TARGETARCH="${TARGETARCH}" "${ROOT_DIR}"
+DOCKER_HOST="${DOCKER_HOST_URI}" docker image inspect forward-stub:test --format '{{.Id}} {{.Architecture}} {{.Os}}'
+
+ls -lh "${ROOT_DIR}/docker/base-images"
