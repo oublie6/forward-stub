@@ -4,6 +4,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"forward-stub/src/config"
@@ -23,6 +24,33 @@ import (
 //  1. 逻辑清晰、故障边界小，适合作为稳定基线；
 //  2. 避免差量更新时复杂的拓扑依赖与回滚成本；
 //  3. 后续若需更高实时性，可在此基础上演进为增量热更新。
+type taskPayloadLogOptions struct {
+	recv bool
+	send bool
+	max  int
+}
+
+func buildTaskPayloadLogOptions(name string, tc config.TaskConfig, lc config.LoggingConfig) taskPayloadLogOptions {
+	if len(lc.PayloadLogTasks) == 0 {
+		return taskPayloadLogOptions{max: lc.PayloadLogMaxBytes}
+	}
+	enabled := false
+	for _, n := range lc.PayloadLogTasks {
+		if strings.TrimSpace(n) == name {
+			enabled = true
+			break
+		}
+	}
+	if !enabled {
+		return taskPayloadLogOptions{max: lc.PayloadLogMaxBytes}
+	}
+	return taskPayloadLogOptions{
+		recv: lc.PayloadLogRecv && tc.LogPayloadRecv,
+		send: lc.PayloadLogSend && tc.LogPayloadSend,
+		max:  lc.PayloadLogMaxBytes,
+	}
+}
+
 func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	lg := logx.L()
 	start := time.Now()
@@ -83,12 +111,16 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		}
 		st.mu.Unlock()
 
+		logOpts := buildTaskPayloadLogOptions(name, tc, cfg.Logging)
 		tk := &task.Task{
-			Name:      name,
-			Pipelines: pipes,
-			Senders:   sends,
-			PoolSize:  tc.PoolSize,
-			FastPath:  tc.FastPath,
+			Name:           name,
+			Pipelines:      pipes,
+			Senders:        sends,
+			PoolSize:       tc.PoolSize,
+			FastPath:       tc.FastPath,
+			LogPayloadRecv: logOpts.recv,
+			LogPayloadSend: logOpts.send,
+			PayloadLogMax:  logOpts.max,
 		}
 		if err := tk.Start(); err != nil {
 			return err
@@ -165,6 +197,7 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 
 	// 仅有一个订阅任务时直接复用原始包，避免无意义二次复制。
 	if len(tasks) == 1 {
+		tasks[0].T.LogPayloadReceive(receiverName, pkt)
 		tasks[0].T.Handle(ctx, pkt)
 		return
 	}
@@ -172,7 +205,9 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 	// 多任务场景下，为避免共享 packet 带来的释放时序竞争，
 	// 每个任务都分配独立副本，原始包由 dispatch 统一释放。
 	for _, ts := range tasks {
-		ts.T.Handle(ctx, pkt.Clone())
+		cp := pkt.Clone()
+		ts.T.LogPayloadReceive(receiverName, cp)
+		ts.T.Handle(ctx, cp)
 	}
 	pkt.Release()
 }
