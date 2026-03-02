@@ -1,6 +1,6 @@
 # forward-stub
 
-一个面向高吞吐报文转发场景的 Go 服务：支持多种接收端（UDP/TCP gnet、Kafka）、可编排 pipeline 规则处理，以及多种发送端（UDP 单播/组播、TCP、Kafka）。
+一个面向高吞吐报文转发场景的 Go 服务：支持多种接收端（UDP/TCP gnet、Kafka、SFTP）、可编排 pipeline 规则处理，以及多种发送端（UDP 单播/组播、TCP、Kafka）。
 
 ---
 
@@ -37,7 +37,7 @@
 │   ├── logx/                 # 日志初始化与工具
 │   ├── packet/               # 报文对象、buffer 池
 │   ├── pipeline/             # pipeline 编译与 stage
-│   ├── receiver/             # UDP/TCP/Kafka 接收端
+│   ├── receiver/             # UDP/TCP/Kafka/SFTP 接收端
 │   ├── runtime/              # 核心运行时（Store、UpdateCache）
 │   ├── sender/               # UDP/TCP/Kafka 发送端
 │   └── task/                 # 单条处理链路（pipeline + senders）
@@ -116,12 +116,13 @@ go run . -config ./configs/example.json
 
 ### 6.2 receivers
 
-- `type`：`udp_gnet` / `tcp_gnet` / `kafka`
+- `type`：`udp_gnet` / `tcp_gnet` / `kafka` / `sftp`
 - `listen`：监听地址（Kafka 场景为 broker 列表）
 - `multicore`：是否启用 gnet multicore
 - `frame`：TCP 分帧（`""` 或 `"u16be"`）
 - `topic` / `group_id`：Kafka receiver 参数
 - Kafka 扩展字段：`username`、`password`、`sasl_mechanism`（当前支持 `PLAIN`）、`tls`、`tls_skip_verify`、`client_id`、`start_offset`（`earliest/latest`）、`fetch_min_bytes`、`fetch_max_bytes`、`fetch_max_wait_ms`
+- SFTP 扩展字段：`remote_dir`、`poll_interval_sec`、`chunk_size`，并复用 `username/password` 进行登录认证
 
 ### 6.3 senders
 
@@ -208,6 +209,32 @@ pipeline 是 stage 数组，按顺序执行。例如：`match_offset_bytes`。
 - 配置了 `username/password` 时，默认按 `PLAIN` SASL 鉴权；也可显式设置 `sasl_mechanism=PLAIN`。
 - `tls=true` 可启用 TLS，测试环境可配 `tls_skip_verify=true`（生产不建议）。
 - `pipelines` 可先配置为空数组（透传），后续再按需追加 stage。
+
+
+### 6.7 SFTP receiver 配置示例（V1）
+
+V1 版本支持把 SFTP 目录中的文件按 chunk 读取为内部 packet，后续可经 pipeline 处理并转发至现有 sender。
+
+```json
+{
+  "receivers": {
+    "sftp_in": {
+      "type": "sftp",
+      "listen": "127.0.0.1:22",
+      "username": "demo",
+      "password": "demo-pass",
+      "remote_dir": "/data/in",
+      "poll_interval_sec": 5,
+      "chunk_size": 65536
+    }
+  }
+}
+```
+
+说明：
+- 同一文件按顺序分块读取，块大小由 `chunk_size` 控制（默认 64KiB）。
+- `poll_interval_sec` 控制扫描周期（默认 5 秒）。
+- 当前版本通过内存去重避免重复处理“同路径同 size+mtime”的文件。
 
 ## 7. 运行时流程
 
