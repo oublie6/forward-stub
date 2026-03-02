@@ -3,6 +3,8 @@ package receiver
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -185,17 +187,23 @@ func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePa
 			if r.stats != nil {
 				r.stats.AddBytes(n)
 			}
+			h := sha256.Sum256(buf[:n])
 			r.onPacket(&packet.Packet{
-				Payload: payload,
-				Meta: packet.Meta{
-					Proto:      packet.ProtoSFTP,
-					Remote:     filePath,
-					Local:      r.cfg.Listen,
-					FilePath:   filePath,
-					TransferID: transferID,
-					Offset:     offset,
-					TotalSize:  totalSize,
-					EOF:        eof,
+				Envelope: packet.Envelope{
+					Kind:    packet.PayloadKindFileChunk,
+					Payload: payload,
+					Meta: packet.Meta{
+						Proto:      packet.ProtoSFTP,
+						Remote:     filePath,
+						Local:      r.cfg.Listen,
+						FileName:   path.Base(filePath),
+						FilePath:   filePath,
+						TransferID: transferID,
+						Offset:     offset,
+						TotalSize:  totalSize,
+						Checksum:   hex.EncodeToString(h[:]),
+						EOF:        eof,
+					},
 				},
 				ReleaseFn: rel,
 			})

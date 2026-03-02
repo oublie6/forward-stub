@@ -3,6 +3,8 @@ package sender
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
@@ -86,11 +88,20 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 	if transferID == "" {
 		transferID = fmt.Sprintf("stream-%d", time.Now().UnixNano())
 	}
-	fileName := path.Base(strings.TrimSpace(p.Meta.FilePath))
+	fileName := strings.TrimSpace(p.Meta.FileName)
+	if fileName == "" {
+		fileName = path.Base(strings.TrimSpace(p.Meta.FilePath))
+	}
 	if fileName == "." || fileName == "/" || fileName == "" {
 		fileName = transferID + ".bin"
 	}
 
+	if want := strings.TrimSpace(p.Meta.Checksum); want != "" {
+		h := sha256.Sum256(p.Payload)
+		if got := hex.EncodeToString(h[:]); !strings.EqualFold(got, want) {
+			return fmt.Errorf("sftp sender checksum mismatch: got=%s want=%s transfer=%s", got, want, transferID)
+		}
+	}
 	st, ok := s.states[transferID]
 	if !ok {
 		finalPath := path.Join(s.remoteDir, fileName)

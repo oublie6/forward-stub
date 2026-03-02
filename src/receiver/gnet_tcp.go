@@ -138,11 +138,14 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 		payload, rel := packet.CopyFrom(cs.buf)
 		cs.buf = cs.buf[:0]
 		h.recv.onPacket(&packet.Packet{
-			Payload: payload,
-			Meta: packet.Meta{
-				Proto:  packet.ProtoTCP,
-				Remote: cs.remote,
-				Local:  cs.local,
+			Envelope: packet.Envelope{
+				Kind:    packet.PayloadKindStream,
+				Payload: payload,
+				Meta: packet.Meta{
+					Proto:  packet.ProtoTCP,
+					Remote: cs.remote,
+					Local:  cs.local,
+				},
 			},
 			ReleaseFn: rel,
 		})
@@ -161,11 +164,14 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 		}
 		payload, rel := packet.CopyFrom(fr)
 		h.recv.onPacket(&packet.Packet{
-			Payload: payload,
-			Meta: packet.Meta{
-				Proto:  packet.ProtoTCP,
-				Remote: cs.remote,
-				Local:  cs.local,
+			Envelope: packet.Envelope{
+				Kind:    packet.PayloadKindStream,
+				Payload: payload,
+				Meta: packet.Meta{
+					Proto:  packet.ProtoTCP,
+					Remote: cs.remote,
+					Local:  cs.local,
+				},
 			},
 			ReleaseFn: rel,
 		})

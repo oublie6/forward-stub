@@ -274,6 +274,20 @@ V2 版本支持将带文件元信息（`file_path/offset/total_size/eof`）的 p
 }
 ```
 
+
+### 6.10 Envelope 统一数据模型（V3）
+
+V3 在 receiver/pipeline/sender 之间统一使用 Envelope 语义（兼容现有 `packet.Packet` 外壳），支持两类 payload：
+- `stream`：实时数据
+- `file_chunk`：文件分块
+
+关键元数据：`transfer_id`、`file_name`、`offset`、`total_size`、`checksum`、`eof`。
+
+链路规则：
+- task/pipeline 只处理 Envelope 元数据与 payload；
+- sender 按 mode 输出（如 kafka/udp/tcp 输出 stream，sftp 输出 file_chunk）；
+- 可组合实现 stream->file、file->stream、file->file。
+
 ## 7. 运行时流程
 
 1. 启动后加载配置（本地文件或远端 API）。

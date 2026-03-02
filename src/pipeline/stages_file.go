@@ -25,6 +25,7 @@ func MarkAsFileChunk(defaultPath string, eof bool) StageFunc {
 		if p.Meta.TotalSize <= 0 {
 			p.Meta.TotalSize = int64(len(p.Payload))
 		}
+		p.Kind = packet.PayloadKindFileChunk
 		p.Meta.Offset = 0
 		p.Meta.EOF = eof
 		return true
@@ -39,6 +40,7 @@ func ClearFileMeta() StageFunc {
 		p.Meta.Offset = 0
 		p.Meta.TotalSize = 0
 		p.Meta.EOF = false
+		p.Kind = packet.PayloadKindStream
 		return true
 	}
 }
