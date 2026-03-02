@@ -111,11 +111,14 @@ func (h *udpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	}
 	payload, rel := packet.CopyFrom(in)
 	h.recv.onPacket(&packet.Packet{
-		Payload: payload,
-		Meta: packet.Meta{
-			Proto:  packet.ProtoUDP,
-			Remote: c.RemoteAddr().String(),
-			Local:  c.LocalAddr().String(),
+		Envelope: packet.Envelope{
+			Kind:    packet.PayloadKindStream,
+			Payload: payload,
+			Meta: packet.Meta{
+				Proto:  packet.ProtoUDP,
+				Remote: c.RemoteAddr().String(),
+				Local:  c.LocalAddr().String(),
+			},
 		},
 		ReleaseFn: rel,
 	})

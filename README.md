@@ -1,6 +1,6 @@
 # forward-stub
 
-一个面向高吞吐报文转发场景的 Go 服务：支持多种接收端（UDP/TCP gnet、Kafka）、可编排 pipeline 规则处理，以及多种发送端（UDP 单播/组播、TCP、Kafka）。
+一个面向高吞吐报文转发场景的 Go 服务：支持多种接收端（UDP/TCP gnet、Kafka、SFTP）、可编排 pipeline 规则处理，以及多种发送端（UDP 单播/组播、TCP、Kafka、SFTP）。
 
 ---
 
@@ -37,9 +37,9 @@
 │   ├── logx/                 # 日志初始化与工具
 │   ├── packet/               # 报文对象、buffer 池
 │   ├── pipeline/             # pipeline 编译与 stage
-│   ├── receiver/             # UDP/TCP/Kafka 接收端
+│   ├── receiver/             # UDP/TCP/Kafka/SFTP 接收端
 │   ├── runtime/              # 核心运行时（Store、UpdateCache）
-│   ├── sender/               # UDP/TCP/Kafka 发送端
+│   ├── sender/               # UDP/TCP/Kafka/SFTP 发送端
 │   └── task/                 # 单条处理链路（pipeline + senders）
 ├── scripts/                  # 构建与打包脚本
 └── deploy/k8s/               # Kubernetes 部署清单
@@ -116,16 +116,17 @@ go run . -config ./configs/example.json
 
 ### 6.2 receivers
 
-- `type`：`udp_gnet` / `tcp_gnet` / `kafka`
+- `type`：`udp_gnet` / `tcp_gnet` / `kafka` / `sftp`
 - `listen`：监听地址（Kafka 场景为 broker 列表）
 - `multicore`：是否启用 gnet multicore
 - `frame`：TCP 分帧（`""` 或 `"u16be"`）
 - `topic` / `group_id`：Kafka receiver 参数
 - Kafka 扩展字段：`username`、`password`、`sasl_mechanism`（当前支持 `PLAIN`）、`tls`、`tls_skip_verify`、`client_id`、`start_offset`（`earliest/latest`）、`fetch_min_bytes`、`fetch_max_bytes`、`fetch_max_wait_ms`
+- SFTP 扩展字段：`remote_dir`、`poll_interval_sec`、`chunk_size`，并复用 `username/password` 进行登录认证
 
 ### 6.3 senders
 
-- `type`：`udp_unicast` / `udp_multicast` / `tcp_gnet` / `kafka`
+- `type`：`udp_unicast` / `udp_multicast` / `tcp_gnet` / `kafka` / `sftp`
 - 常见字段：`remote`、`concurrency`、`frame`、`topic`
 - Kafka 扩展字段：`username`、`password`、`sasl_mechanism`（当前支持 `PLAIN`）、`tls`、`tls_skip_verify`、`client_id`、`acks`（`-1/1/0`）、`linger_ms`、`batch_max_bytes`、`compression`（`none/gzip/snappy/lz4/zstd`）
 - UDP 扩展字段：`local_ip`、`local_port`、`iface`、`ttl`、`loop`
@@ -208,6 +209,84 @@ pipeline 是 stage 数组，按顺序执行。例如：`match_offset_bytes`。
 - 配置了 `username/password` 时，默认按 `PLAIN` SASL 鉴权；也可显式设置 `sasl_mechanism=PLAIN`。
 - `tls=true` 可启用 TLS，测试环境可配 `tls_skip_verify=true`（生产不建议）。
 - `pipelines` 可先配置为空数组（透传），后续再按需追加 stage。
+
+
+### 6.7 SFTP receiver 配置示例（V1）
+
+V1 版本支持把 SFTP 目录中的文件按 chunk 读取为内部 packet，后续可经 pipeline 处理并转发至现有 sender。
+
+```json
+{
+  "receivers": {
+    "sftp_in": {
+      "type": "sftp",
+      "listen": "127.0.0.1:22",
+      "username": "demo",
+      "password": "demo-pass",
+      "remote_dir": "/data/in",
+      "poll_interval_sec": 5,
+      "chunk_size": 65536
+    }
+  }
+}
+```
+
+说明：
+- 同一文件按顺序分块读取，块大小由 `chunk_size` 控制（默认 64KiB）。
+- `poll_interval_sec` 控制扫描周期（默认 5 秒）。
+- 当前版本通过内存去重避免重复处理“同路径同 size+mtime”的文件。
+
+
+### 6.8 SFTP sender 配置示例（V2）
+
+V2 版本支持将带文件元信息（`file_path/offset/total_size/eof`）的 packet 分块写入 SFTP，并在完成后原子 rename 提交。
+
+```json
+{
+  "senders": {
+    "sftp_out": {
+      "type": "sftp",
+      "remote": "127.0.0.1:22",
+      "username": "demo",
+      "password": "demo-pass",
+      "remote_dir": "/data/out",
+      "temp_suffix": ".part"
+    }
+  }
+}
+```
+
+### 6.9 V3 互转 stage 示例
+
+- `mark_as_file_chunk`：将实时数据标记为文件分块语义（stream -> file）。
+- `clear_file_meta`：清理文件元信息（file -> stream）。
+
+```json
+{
+  "pipelines": {
+    "stream_to_file": [
+      {"type": "mark_as_file_chunk", "path": "stream/out.bin", "bool": true}
+    ],
+    "file_to_stream": [
+      {"type": "clear_file_meta"}
+    ]
+  }
+}
+```
+
+
+### 6.10 Envelope 统一数据模型（V3）
+
+V3 在 receiver/pipeline/sender 之间统一使用 Envelope 语义（兼容现有 `packet.Packet` 外壳），支持两类 payload：
+- `stream`：实时数据
+- `file_chunk`：文件分块
+
+关键元数据：`transfer_id`、`file_name`、`offset`、`total_size`、`checksum`、`eof`。
+
+链路规则：
+- task/pipeline 只处理 Envelope 元数据与 payload；
+- sender 按 mode 输出（如 kafka/udp/tcp 输出 stream，sftp 输出 file_chunk）；
+- 可组合实现 stream->file、file->stream、file->file。
 
 ## 7. 运行时流程
 

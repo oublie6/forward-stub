@@ -52,5 +52,5 @@ func TestUDPUnicastSenderAllowsSameLocalPortAcrossDifferentRemotes(t *testing.T)
 }
 
 func dummyPacket(payload string) *packet.Packet {
-	return &packet.Packet{Payload: []byte(payload)}
+	return &packet.Packet{Envelope: packet.Envelope{Payload: []byte(payload)}}
 }

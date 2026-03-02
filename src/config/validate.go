@@ -67,6 +67,16 @@ func (c *Config) Validate() error {
 			if err := validateKafkaAuth("receiver", rn, r.SASLMechanism, r.Username, r.Password); err != nil {
 				return err
 			}
+		case "sftp":
+			if r.Listen == "" {
+				return fmt.Errorf("receiver %s sftp requires listen", rn)
+			}
+			if r.Username == "" || r.Password == "" {
+				return fmt.Errorf("receiver %s sftp requires username and password", rn)
+			}
+			if r.RemoteDir == "" {
+				return fmt.Errorf("receiver %s sftp requires remote_dir", rn)
+			}
 		default:
 			return fmt.Errorf("receiver %s unknown type %s", rn, r.Type)
 		}
@@ -87,6 +97,16 @@ func (c *Config) Validate() error {
 			}
 			if err := validateKafkaAuth("sender", sn, s.SASLMechanism, s.Username, s.Password); err != nil {
 				return err
+			}
+		case "sftp":
+			if s.Remote == "" {
+				return fmt.Errorf("sender %s sftp requires remote", sn)
+			}
+			if s.Username == "" || s.Password == "" {
+				return fmt.Errorf("sender %s sftp requires username and password", sn)
+			}
+			if s.RemoteDir == "" {
+				return fmt.Errorf("sender %s sftp requires remote_dir", sn)
 			}
 		default:
 			return fmt.Errorf("sender %s unknown type %s", sn, s.Type)

@@ -151,11 +151,14 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 			}
 			payload, rel := packet.CopyFrom(rec.Value)
 			r.onPacket(&packet.Packet{
-				Payload: payload,
-				Meta: packet.Meta{
-					Proto:  packet.ProtoKafka,
-					Remote: rec.Topic,
-					Local:  r.groupID,
+				Envelope: packet.Envelope{
+					Kind:    packet.PayloadKindStream,
+					Payload: payload,
+					Meta: packet.Meta{
+						Proto:  packet.ProtoKafka,
+						Remote: rec.Topic,
+						Local:  r.groupID,
+					},
 				},
 				ReleaseFn: rel,
 			})

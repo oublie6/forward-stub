@@ -86,7 +86,7 @@ func TestDispatchClonesForEveryTaskAndReleasesOriginal(t *testing.T) {
 	})
 
 	payload := []byte("hello-kafka-and-udp")
-	pkt := &packet.Packet{Payload: append([]byte(nil), payload...)}
+	pkt := &packet.Packet{Envelope: packet.Envelope{Payload: append([]byte(nil), payload...)}}
 	released := 0
 	pkt.ReleaseFn = func() {
 		released++
@@ -125,7 +125,7 @@ func TestDispatchSingleSubscriberReusesOriginalPacket(t *testing.T) {
 	})
 
 	payload := []byte("single-subscriber")
-	pkt := &packet.Packet{Payload: append([]byte(nil), payload...)}
+	pkt := &packet.Packet{Envelope: packet.Envelope{Payload: append([]byte(nil), payload...)}}
 	released := 0
 	pkt.ReleaseFn = func() { released++ }
 

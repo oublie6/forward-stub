@@ -3,10 +3,18 @@ package packet
 
 type Proto uint8
 
+type PayloadKind uint8
+
 const (
 	ProtoUDP   Proto = 1
 	ProtoTCP   Proto = 2
 	ProtoKafka Proto = 3
+	ProtoSFTP  Proto = 4
+)
+
+const (
+	PayloadKindStream    PayloadKind = 1
+	PayloadKindFileChunk PayloadKind = 2
 )
 
 type Meta struct {
@@ -14,11 +22,25 @@ type Meta struct {
 	Flags  uint32
 	Remote string
 	Local  string
+
+	TransferID string
+	FileName   string
+	FilePath   string
+	Offset     int64
+	TotalSize  int64
+	Checksum   string
+	EOF        bool
+}
+
+type Envelope struct {
+	Kind PayloadKind
+	Meta Meta
+
+	Payload []byte
 }
 
 type Packet struct {
-	Payload   []byte
-	Meta      Meta
+	Envelope
 	ReleaseFn func()
 }
 
@@ -33,5 +55,7 @@ func (p *Packet) Release() {
 // Clone 负责该函数对应的核心逻辑，详见实现细节。
 func (p *Packet) Clone() *Packet {
 	out, rel := CopyFrom(p.Payload)
-	return &Packet{Payload: out, Meta: p.Meta, ReleaseFn: rel}
+	cp := p.Envelope
+	cp.Payload = out
+	return &Packet{Envelope: cp, ReleaseFn: rel}
 }

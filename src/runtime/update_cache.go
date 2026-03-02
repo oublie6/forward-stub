@@ -195,6 +195,8 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 		return receiver.NewGnetTCP(name, rc.Listen, rc.Multicore, fr, gnetLogLevel), nil
 	case "kafka":
 		return receiver.NewKafkaReceiver(name, rc)
+	case "sftp":
+		return receiver.NewSFTPReceiver(name, rc)
 	default:
 		return nil, fmt.Errorf("receiver %s unknown type %s", name, rc.Type)
 	}
@@ -224,6 +226,8 @@ func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (send
 		return sender.NewGnetTCPSender(name, sc.Remote, with, conc, gnetLogLevel)
 	case "kafka":
 		return sender.NewKafkaSender(name, sc)
+	case "sftp":
+		return sender.NewSFTPSender(name, sc)
 	default:
 		return nil, fmt.Errorf("sender %s unknown type %s", name, sc.Type)
 	}
