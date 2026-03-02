@@ -1,5 +1,11 @@
 # forward-stub
 
+## 0. 技术架构文档
+
+- 完整技术文档（含架构图、时序图、类图、数据流图、数据处理流程图）：`docs/technical-architecture.md`
+
+---
+
 一个面向高吞吐报文转发场景的 Go 服务：支持多种接收端（UDP/TCP gnet、Kafka、SFTP）、可编排 pipeline 规则处理，以及多种发送端（UDP 单播/组播、TCP、Kafka、SFTP）。
 
 ---
