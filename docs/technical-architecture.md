@@ -18,6 +18,8 @@
 
 ## 2. 总体架构图（Architecture Diagram）
 
+### 2.1 当前生产架构（As-Is）
+
 ```mermaid
 flowchart LR
     A[配置来源\n本地JSON / Control API] --> B[Runtime.UpdateCache]
@@ -59,6 +61,73 @@ flowchart LR
     H[(Packet Payload Pool)] <--> G
     H <--> T
 ```
+
+### 2.2 演进目标架构（To-Be）
+
+> 在保持当前“receiver → task/pipeline → sender”主干稳定的前提下，新增控制平面、流量治理与数据平面加速能力，形成“**可热更新、可弹性、可灰度、可观测**”的一体化转发平台。
+
+```mermaid
+flowchart TB
+    subgraph CP[控制平面 Control Plane]
+      API[配置中心 API / GitOps]
+      CFG[配置聚合与校验\nSchema + 签名 + 版本]
+      ORCH[编排器\n全量发布 + 增量任务切换]
+      POLICY[策略中心\n限流/熔断/降级/灰度]
+      OBS[可观测控制\n指标/日志/链路追踪配置]
+      API --> CFG --> ORCH
+      POLICY --> ORCH
+      OBS --> ORCH
+    end
+
+    subgraph DP[数据平面 Data Plane]
+      ING[Ingress\nUDP/TCP/Kafka/SFTP/HTTP]
+      RX[Receiver 层\ngnet / Kafka client / SFTP client]
+      SCH[调度与路由\natomic snapshot + task graph]
+      PL[Pipeline 引擎\nmatch/replace/drop/file-meta]
+      GOV[流量治理层\nRateLimit + CircuitBreaker + Backpressure]
+      TX[Egress\nUDP/TCP/Kafka/SFTP/ObjectStorage]
+      ING --> RX --> SCH --> PL --> GOV --> TX
+    end
+
+    subgraph ACC[性能加速层 Acceleration]
+      DPDK[DPDK/XDP 加速通道\n零拷贝 + 旁路内核]
+      BATCH[批处理与向量化\nBatch Send / SIMD 字节处理]
+      POOL[内存池与对象复用\npayload pool / lock-free queue]
+    end
+
+    ORCH -- 下发版本化配置 --> SCH
+    ORCH -- 动态装载 pipeline --> PL
+    POLICY -- 实时策略 --> GOV
+    OBS -- telemetry 策略 --> DP
+    DPDK -. 可选旁路 .-> RX
+    BATCH -. 吞吐优化 .-> PL
+    POOL -. GC 压力控制 .-> SCH
+```
+
+### 2.3 现有能力与规划能力矩阵
+
+| 维度 | 现有能力（Current） | 规划能力（Roadmap） |
+| --- | --- | --- |
+| 配置管理 | 本地配置加载 + 进程内热更新 | 从配置中心 API 拉取配置（支持鉴权、签名校验、版本回滚、灰度发布） |
+| 更新策略 | 全量替换（先停后建再放流） | 任务级增量切换（Task Incremental Switch）、双版本并行与流量镜像验证 |
+| 流量治理 | 基础背压（pool nonblocking） | 多级限流（实例/任务/租户）、熔断、自动降级、优先级队列 |
+| 性能优化 | gnet + payload pool + snapshot 路由 | DPDK/XDP 快路径、批量收发、NUMA 亲和、零拷贝路径优化 |
+| 可用性保障 | sender 失败隔离、graceful stop | 自适应重试预算、故障域隔离、跨可用区容灾、配置发布熔断 |
+| 可观测性 | 结构化日志 + 吞吐统计 | OpenTelemetry 全链路追踪、RED/USE 指标体系、异常画像与根因分析 |
+| 安全与合规 | 基础网络连通 | mTLS、API Token 轮换、配置审计追踪、敏感字段脱敏 |
+
+### 2.4 建议纳入技术文档的演进功能清单
+
+1. **DPDK/XDP 数据面加速**：在高 PPS 场景引入用户态网络栈与零拷贝收发，降低内核协议栈开销。  
+2. **分层限流与服务降级**：支持按入口、任务、下游目标多级令牌桶 + 熔断降级（丢弃、采样、旁路）。  
+3. **任务增量切换（Task Incremental Switch）**：实现任务级热切换、蓝绿并行、回滚秒级生效。  
+4. **配置中心 API 化**：支持 Pull/Watch 模式、配置版本签名、差异对比、审计日志。  
+5. **运行时策略引擎**：将限流、重试、超时、路由权重外置为 Policy，支持动态生效。  
+6. **智能流量调度**：引入基于负载和时延的自适应路由（Latency-Aware / EWMA）。  
+7. **弹性伸缩联动**：将任务队列深度、发送失败率、CPU 使用率接入 HPA/KEDA。  
+8. **可观测性升级**：统一 metrics/log/trace，支持链路拓扑自动发现与异常告警收敛。  
+9. **可靠投递增强**：为 Kafka/SFTP 等路径补充幂等键、重放保护与失败死信队列。  
+10. **多租户与安全隔离**：引入租户级资源配额、命名空间隔离、细粒度 RBAC。  
 
 ---
 
@@ -356,6 +425,25 @@ UDP/TCP 核心链路基于 `gnet` 事件循环，配合 `multicore`、`num_event
 
 流量统计 + payload 摘要 + 任务运行态指标，便于快速定位“入口拥塞、规则丢弃、出口失败”等问题。
 
+## 10.5 关于“事件循环队列调大能否实现 0 丢包”
+
+先说结论：**单纯把事件循环相关参数调大，不能保证 0 丢包**。
+
+在本项目里，gnet 接收侧可调的是 `multicore`、`num_event_loop`、`read_buffer_cap`，它们主要影响并行度与读缓冲行为；并没有一个“把内部队列调大就一定不丢包”的万能开关。
+
+同时，当前 `Task` 默认使用 `ants.WithNonblocking(true)`，当 worker pool 满载时会直接返回错误并丢弃该包（有 debug 日志），这属于**应用层主动背压/丢弃策略**。
+
+因此要逼近“0 丢包”，建议按“端到端容量治理”实施：
+
+1. **入口不丢**：按 CPU 拓扑调优 `num_event_loop` 与网卡队列（RSS/RPS），放大 socket rmem / backlog，避免内核先丢。  
+2. **处理不丢**：关键链路优先使用 `FastPath` 或提升 `pool_size`；对慢任务拆分独立 task，防止互相挤占。  
+3. **出口不丢**：为下游 sender 建立重试预算、超时与熔断策略，避免慢下游反向拖垮全链路。  
+4. **链路可削峰**：在 receiver 与 task 间引入可观测的有界缓冲（ring/channel）与水位告警，而不是无限堆积。  
+5. **协议级兜底**：若业务要求“严格 0 丢失”，优先选可确认与可重放的链路（如 Kafka + 幂等键 + offset 管理）；UDP 语义上只能做到“极低丢包”，无法数学意义保证 0。  
+6. **持续压测校准**：使用 `cmd/bench` 以真实包长、真实并发做容量曲线，找到 `pool_size / event_loop / batch` 的稳定工作点并预留冗余。
+
+> 工程实践里通常将目标定义为“在给定 SLA 与故障域下可验证的近零丢包”，并通过可重放机制实现最终不丢。
+
 ---
 
 ## 11. 模块映射速查
@@ -376,4 +464,3 @@ UDP/TCP 核心链路基于 `gnet` 事件循环，配合 `multicore`、`num_event
 2. **按任务隔离资源**：关键任务使用独立 sender、合理 `pool_size`，避免噪声互扰。
 3. **渐进开启 payload 日志**：仅在问题排查时按任务白名单开启，并限制 `payload_log_max_bytes`。
 4. **K8s 结合探针与滚动发布**：利用全量替换更新策略，降低热更新复杂度。
-
