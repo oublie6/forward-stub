@@ -102,8 +102,8 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 		t.inflight.Done()
 		t.inflightCount.Add(-1)
 		pkt.Release()
-		if logx.Enabled(zapcore.DebugLevel) {
-			logx.L().Debugw("task dropped packet due to full worker pool", "task", t.Name, "pool_size", t.PoolSize, "error", err)
+		if logx.Enabled(zapcore.InfoLevel) {
+			logx.L().Infow("task dropped packet due to full worker pool", "task", t.Name, "pool_size", t.PoolSize, "error", err)
 		}
 		return
 	}
