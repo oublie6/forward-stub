@@ -639,11 +639,65 @@ make package
 make package-all
 ```
 
-### 12.3 Docker 构建
+### 12.3 Docker 构建、推送与本地运行（Makefile）
+
+推荐统一使用 `make` 目标，而不是手写 `docker build/run/push` 命令。
 
 ```bash
-docker build -t forward-stub:latest .
+# 仅构建镜像（默认镜像名 forward-stub:<git-version>）
+make docker-build
+
+# 构建后直接推送（一步完成）
+make docker-build-push CCR_IMAGE=ccr.ccs.tencentyun.com/<namespace>/forward-stub:latest
+
+# 构建后直接本地启动容器（一步完成）
+make docker-build-run RUN_ARGS='--restart unless-stopped'
+
+# 已有镜像，单独推送
+make docker-push IMAGE=forward-stub:v1.0.0 CCR_IMAGE=ccr.ccs.tencentyun.com/<namespace>/forward-stub:v1.0.0
+
+# 已有镜像，单独本地运行
+make docker-run IMAGE=forward-stub:v1.0.0 CONTAINER_NAME=forward-stub-dev
 ```
+
+#### Make 变量与传参说明
+
+`make` 变量通过 `目标后追加 KEY=VALUE` 方式传参（如 `make docker-build VERSION=v1.0.0`）。
+
+- 通用写法：
+
+```bash
+make <target> KEY1=VALUE1 KEY2=VALUE2
+```
+
+- 每个变量含义如下：
+
+| 变量名 | 默认值 | 适用目标 | 说明 | 示例 |
+|---|---|---|---|---|
+| `APP_NAME` | `forward-stub` | `build` `build-linux` `package` `package-all` 等 | 应用名（也用于默认容器名和镜像名前缀） | `make build APP_NAME=fs` |
+| `VERSION` | `git describe --tags --always --dirty` 结果（失败时为 `dev`） | `build` `build-linux` `package` `package-all` `docker-build` | 版本号；会参与二进制 ldflags 与默认镜像标签 | `make docker-build VERSION=v1.2.3` |
+| `GOFLAGS` | `-mod=vendor` | `build` `test` `perf` `vet` | Go 命令附加参数 | `make test GOFLAGS='-mod=mod'` |
+| `IMAGE` | `$(APP_NAME):$(VERSION)` | `docker-build` `docker-push` `docker-run` `docker-build-push` `docker-build-run` | 本地镜像名（构建、推送、运行都基于该值） | `make docker-run IMAGE=forward-stub:dev` |
+| `CCR_IMAGE` | 空 | `docker-push` `docker-build-push` | 远端镜像地址；非空时会执行 `docker tag $(IMAGE) $(CCR_IMAGE)` 后推送 | `make docker-push CCR_IMAGE=ccr.ccs.tencentyun.com/ns/forward-stub:v1` |
+| `CONTAINER_NAME` | `$(APP_NAME)` | `docker-run` `docker-build-run` | 本地运行容器名；若已存在同名容器会先删除再启动 | `make docker-run CONTAINER_NAME=forward-stub-test` |
+| `RUN_ARGS` | 空 | `docker-run` `docker-build-run` | 透传给 `docker run` 的额外参数（端口无需映射，容器默认使用 `--network host`） | `make docker-run RUN_ARGS='--restart always -e TZ=Asia/Shanghai'` |
+
+#### 目标说明（逐项）
+
+- `make build`：本机构建当前平台二进制到 `bin/<APP_NAME>`。
+- `make build-linux`：构建 `linux/arm64` 二进制到 `dist/linux`。
+- `make test`：执行 `go test ./...`。
+- `make perf`：执行 runtime benchmark + 本地 bench 扫频。
+- `make verify`：串行执行 `test` 与 `perf`。
+- `make vet`：执行 `go vet ./...`。
+- `make package`：打包 `linux/arm64` 制品。
+- `make package-all`：打包 `linux/arm64`、`linux/amd64`、`windows/amd64` 制品。
+- `make docker-build`：构建 `$(IMAGE)` 镜像。
+- `make docker-push`：推送镜像；`CCR_IMAGE` 非空时先 tag 再推送到 CCR。
+- `make docker-run`：以 `--network host` 模式本地启动容器（后台运行），同名容器会先清理。
+- `make docker-build-push`：一步执行 `docker-build` + `docker-push`。
+- `make docker-build-run`：一步执行 `docker-build` + `docker-run`。
+- `make clean`：清理 `bin` 与 `dist` 目录。
 
 ### 12.4 Kubernetes 部署
 

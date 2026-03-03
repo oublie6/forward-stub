@@ -3,8 +3,12 @@
 APP_NAME ?= forward-stub
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 GOFLAGS ?= -mod=vendor
+IMAGE ?= $(APP_NAME):$(VERSION)
+CCR_IMAGE ?=
+CONTAINER_NAME ?= $(APP_NAME)
+RUN_ARGS ?=
 
-.PHONY: build build-linux test perf verify vet package package-all docker-build clean
+.PHONY: build build-linux test perf verify vet package package-all docker-build docker-push docker-run docker-build-push docker-build-run clean
 
 # build: 本机构建当前平台二进制到 bin/。
 build:
@@ -40,7 +44,32 @@ package-all:
 
 # docker-build: 基于当前 Dockerfile 构建容器镜像。
 docker-build:
-	docker build --build-arg VERSION=$(VERSION) -t $(APP_NAME):$(VERSION) .
+	docker build --build-arg VERSION=$(VERSION) -t $(IMAGE) .
+
+# docker-push: 推送镜像到仓库；可通过 CCR_IMAGE 覆盖目标仓库地址。
+docker-push:
+	@if [ -n "$(CCR_IMAGE)" ]; then \
+		echo "tag $(IMAGE) -> $(CCR_IMAGE)"; \
+		docker tag $(IMAGE) $(CCR_IMAGE); \
+		docker push $(CCR_IMAGE); \
+	else \
+		echo "push $(IMAGE)"; \
+		docker push $(IMAGE); \
+	fi
+
+# docker-run: 使用 host 网络模式启动本地容器；可通过 RUN_ARGS 追加参数。
+docker-run:
+	@if docker ps -a --format '{{.Names}}' | grep -wq "$(CONTAINER_NAME)"; then \
+		echo "remove existed container $(CONTAINER_NAME)"; \
+		docker rm -f $(CONTAINER_NAME); \
+	fi
+	docker run -d --network host --name $(CONTAINER_NAME) $(RUN_ARGS) $(IMAGE)
+
+# docker-build-push: 一次完成镜像构建并推送。
+docker-build-push: docker-build docker-push
+
+# docker-build-run: 一次完成镜像构建并在本地启动容器。
+docker-build-run: docker-build docker-run
 
 # clean: 清理本地构建产物。
 clean:
