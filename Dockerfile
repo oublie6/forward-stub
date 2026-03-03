@@ -23,13 +23,9 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     GOFLAGS=-mod=vendor \
     go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /app/forward-stub .
 
-# 创建非 root 用户，兼容 k8s 中 runAsNonRoot 的安全策略。
-RUN addgroup -S app && adduser -S -D -H -u 65532 -G app app
-
 # 日志目录可通过 docker volume/pvc 挂载到宿主机。
 VOLUME ["/var/log/forward-stub"]
 
 # 默认使用容器内配置文件；日志级别请在配置文件 logging.level 中设置。
-USER 65532:65532
 ENTRYPOINT ["/app/forward-stub"]
 CMD ["-config", "/app/configs/example.json"]

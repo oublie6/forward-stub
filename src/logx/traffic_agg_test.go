@@ -11,12 +11,14 @@ import (
 func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
 	RegisterTaskRuntimeStats("task-a", func() TaskRuntimeStats {
 		return TaskRuntimeStats{
-			PoolSize:    64,
-			PoolRunning: 8,
-			PoolFree:    56,
-			PoolWaiting: 2,
-			Inflight:    3,
-			FastPath:    false,
+			PoolSize:       64,
+			PoolRunning:    8,
+			PoolFree:       56,
+			PoolWaiting:    2,
+			QueueSize:      128,
+			QueueAvailable: 126,
+			Inflight:       3,
+			FastPath:       false,
 		}
 	})
 	defer UnregisterTaskRuntimeStats("task-a")
@@ -44,7 +46,8 @@ func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
 		t.Fatalf("worker pool stats missing: %+v", item)
 	}
 	if item.WorkerPool.Size != 64 || item.WorkerPool.Running != 8 || item.WorkerPool.Free != 56 ||
-		item.WorkerPool.Waiting != 2 || item.WorkerPool.Inflight != 3 || item.WorkerPool.FastPath {
+		item.WorkerPool.Waiting != 2 || item.WorkerPool.QueueSize != 128 || item.WorkerPool.QueueAvailable != 126 ||
+		item.WorkerPool.Inflight != 3 || item.WorkerPool.FastPath {
 		t.Fatalf("unexpected worker pool stats: %+v", item.WorkerPool)
 	}
 }

@@ -54,12 +54,14 @@ func trafficStatsInterval() time.Duration {
 }
 
 type TaskRuntimeStats struct {
-	PoolSize    int
-	PoolRunning int
-	PoolFree    int
-	PoolWaiting int
-	Inflight    int64
-	FastPath    bool
+	PoolSize       int
+	PoolRunning    int
+	PoolFree       int
+	PoolWaiting    int
+	QueueSize      int
+	QueueAvailable int
+	Inflight       int64
+	FastPath       bool
 }
 
 var taskRuntimeStatsMu sync.RWMutex
@@ -253,12 +255,14 @@ type taskAggregateStats struct {
 }
 
 type workerPoolStats struct {
-	Size     int   `json:"size"`
-	Running  int   `json:"running"`
-	Free     int   `json:"free"`
-	Waiting  int   `json:"waiting"`
-	Inflight int64 `json:"inflight"`
-	FastPath bool  `json:"fast_path"`
+	Size           int   `json:"size"`
+	Running        int   `json:"running"`
+	Free           int   `json:"free"`
+	Waiting        int   `json:"waiting"`
+	QueueSize      int   `json:"queue_size,omitempty"`
+	QueueAvailable int   `json:"queue_available,omitempty"`
+	Inflight       int64 `json:"inflight"`
+	FastPath       bool  `json:"fast_path"`
 }
 
 func newTrafficSummary(elapsed time.Duration) *trafficSummary {
@@ -293,12 +297,14 @@ func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, interval 
 
 	if runtime, ok := lookupTaskRuntimeStats(c.name); ok {
 		item.WorkerPool = &workerPoolStats{
-			Size:     runtime.PoolSize,
-			Running:  runtime.PoolRunning,
-			Free:     runtime.PoolFree,
-			Waiting:  runtime.PoolWaiting,
-			Inflight: runtime.Inflight,
-			FastPath: runtime.FastPath,
+			Size:           runtime.PoolSize,
+			Running:        runtime.PoolRunning,
+			Free:           runtime.PoolFree,
+			Waiting:        runtime.PoolWaiting,
+			QueueSize:      runtime.QueueSize,
+			QueueAvailable: runtime.QueueAvailable,
+			Inflight:       runtime.Inflight,
+			FastPath:       runtime.FastPath,
 		}
 	}
 
