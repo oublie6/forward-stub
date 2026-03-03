@@ -650,11 +650,17 @@ make docker-build
 # 构建后直接推送（一步完成）
 make docker-build-push CCR_IMAGE=ccr.ccs.tencentyun.com/<namespace>/forward-stub:latest
 
+# 构建后直接推送到腾讯云 CCR（一步完成）
+make docker-build-push-ccr CCR_NAMESPACE=<namespace>
+
 # 构建后直接本地启动容器（一步完成）
 make docker-build-run RUN_ARGS='--restart unless-stopped'
 
-# 已有镜像，单独推送
+# 已有镜像，单独推送（通用方式）
 make docker-push IMAGE=forward-stub:v1.0.0 CCR_IMAGE=ccr.ccs.tencentyun.com/<namespace>/forward-stub:v1.0.0
+
+# 已有镜像，单独推送到腾讯云 CCR（专用方式）
+make docker-push-ccr IMAGE=forward-stub:v1.0.0 CCR_NAMESPACE=<namespace>
 
 # 已有镜像，单独本地运行
 make docker-run IMAGE=forward-stub:v1.0.0 CONTAINER_NAME=forward-stub-dev
@@ -679,6 +685,11 @@ make <target> KEY1=VALUE1 KEY2=VALUE2
 | `GOFLAGS` | `-mod=vendor` | `build` `test` `perf` `vet` | Go 命令附加参数 | `make test GOFLAGS='-mod=mod'` |
 | `IMAGE` | `$(APP_NAME):$(VERSION)` | `docker-build` `docker-push` `docker-run` `docker-build-push` `docker-build-run` | 本地镜像名（构建、推送、运行都基于该值） | `make docker-run IMAGE=forward-stub:dev` |
 | `CCR_IMAGE` | 空 | `docker-push` `docker-build-push` | 远端镜像地址；非空时会执行 `docker tag $(IMAGE) $(CCR_IMAGE)` 后推送 | `make docker-push CCR_IMAGE=ccr.ccs.tencentyun.com/ns/forward-stub:v1` |
+| `CCR_REGISTRY` | `ccr.ccs.tencentyun.com` | `docker-push-ccr` `docker-build-push-ccr` | 腾讯云 CCR 域名 | `make docker-push-ccr CCR_REGISTRY=ccr.ccs.tencentyun.com` |
+| `CCR_NAMESPACE` | 空（必填） | `docker-push-ccr` `docker-build-push-ccr` | 腾讯云 CCR 命名空间；为空会直接报错退出 | `make docker-push-ccr CCR_NAMESPACE=my-team` |
+| `CCR_REPOSITORY` | `$(APP_NAME)` | `docker-push-ccr` `docker-build-push-ccr` | CCR 仓库名 | `make docker-push-ccr CCR_NAMESPACE=my-team CCR_REPOSITORY=forward-stub` |
+| `CCR_TAG` | `$(VERSION)` | `docker-push-ccr` `docker-build-push-ccr` | CCR 镜像 tag | `make docker-push-ccr CCR_NAMESPACE=my-team CCR_TAG=v1.0.0` |
+| `CCR_TARGET_IMAGE` | `$(CCR_REGISTRY)/$(CCR_NAMESPACE)/$(CCR_REPOSITORY):$(CCR_TAG)` | `docker-push-ccr` `docker-build-push-ccr` | CCR 完整目标镜像地址（可直接覆盖） | `make docker-push-ccr CCR_TARGET_IMAGE=ccr.ccs.tencentyun.com/ns/fs:v1` |
 | `CONTAINER_NAME` | `$(APP_NAME)` | `docker-run` `docker-build-run` | 本地运行容器名；若已存在同名容器会先删除再启动 | `make docker-run CONTAINER_NAME=forward-stub-test` |
 | `RUN_ARGS` | 空 | `docker-run` `docker-build-run` | 透传给 `docker run` 的额外参数（端口无需映射，容器默认使用 `--network host`） | `make docker-run RUN_ARGS='--restart always -e TZ=Asia/Shanghai'` |
 
@@ -693,9 +704,11 @@ make <target> KEY1=VALUE1 KEY2=VALUE2
 - `make package`：打包 `linux/arm64` 制品。
 - `make package-all`：打包 `linux/arm64`、`linux/amd64`、`windows/amd64` 制品。
 - `make docker-build`：构建 `$(IMAGE)` 镜像。
-- `make docker-push`：推送镜像；`CCR_IMAGE` 非空时先 tag 再推送到 CCR。
+- `make docker-push`：推送镜像；`CCR_IMAGE` 非空时先 tag 再推送到 CCR（通用方式）。
+- `make docker-push-ccr`：推送镜像到腾讯云 CCR（专用方式，要求传 `CCR_NAMESPACE`）。
 - `make docker-run`：以 `--network host` 模式本地启动容器（后台运行），同名容器会先清理。
 - `make docker-build-push`：一步执行 `docker-build` + `docker-push`。
+- `make docker-build-push-ccr`：一步执行 `docker-build` + `docker-push-ccr`。
 - `make docker-build-run`：一步执行 `docker-build` + `docker-run`。
 - `make clean`：清理 `bin` 与 `dist` 目录。
 
