@@ -402,7 +402,7 @@ UDP/TCP 核心链路基于 `gnet` 事件循环，配合 `multicore`、`num_event
 
 ## 9.4 部署扩展友好
 
-项目提供 Docker 多阶段构建与 Kubernetes 部署清单，可横向扩容实例并结合上游负载分流。
+项目提供基于 `golang:1.25-alpine` 的单阶段 Docker 构建与 Kubernetes 部署清单，可横向扩容实例并结合上游负载分流。
 
 ---
 

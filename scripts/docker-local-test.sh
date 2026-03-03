@@ -12,7 +12,6 @@ CONTAINERD_SOCK=${CONTAINERD_SOCK:-/tmp/forward-stub-containerd.sock}
 PRELOADED_IMAGE_DIR=${PRELOADED_IMAGE_DIR:-${ROOT_DIR}/deploy/images}
 
 BUILDER_IMAGE=${BUILDER_IMAGE:-golang:1.25-alpine}
-RUNTIME_IMAGE=${RUNTIME_IMAGE:-gcr.io/distroless/static-debian12:nonroot}
 VERSION=${VERSION:-dev}
 TARGETOS=${TARGETOS:-linux}
 TARGETARCH=${TARGETARCH:-arm64}
@@ -209,14 +208,7 @@ else
   pull_with_retries "${BUILDER_IMAGE}"
 fi
 
-if image_exists_locally "${RUNTIME_IMAGE}"; then
-  echo "[pull] 已存在本地镜像，跳过拉取: ${RUNTIME_IMAGE}"
-else
-  pull_with_retries "${RUNTIME_IMAGE}"
-fi
-
 DOCKER_HOST="${DOCKER_HOST_URI}" docker save -o "${ROOT_DIR}/docker/base-images/${BUILDER_IMAGE//[\/:]/_}.tar" "${BUILDER_IMAGE}"
-DOCKER_HOST="${DOCKER_HOST_URI}" docker save -o "${ROOT_DIR}/docker/base-images/${RUNTIME_IMAGE//[\/:]/_}.tar" "${RUNTIME_IMAGE}"
 
 DOCKER_HOST="${DOCKER_HOST_URI}" docker build -t forward-stub:test --build-arg VERSION="${VERSION}" --build-arg TARGETOS="${TARGETOS}" --build-arg TARGETARCH="${TARGETARCH}" "${ROOT_DIR}"
 DOCKER_HOST="${DOCKER_HOST_URI}" docker image inspect forward-stub:test --format '{{.Id}} {{.Architecture}} {{.Os}}'
