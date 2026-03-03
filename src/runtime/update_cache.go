@@ -118,6 +118,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 			Senders:        sends,
 			PoolSize:       tc.PoolSize,
 			FastPath:       tc.FastPath,
+			QueueSize:      tc.QueueSize,
 			LogPayloadRecv: logOpts.recv,
 			LogPayloadSend: logOpts.send,
 			PayloadLogMax:  logOpts.max,

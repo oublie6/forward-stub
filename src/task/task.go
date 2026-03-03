@@ -29,8 +29,9 @@ type Task struct {
 	Pipelines []*pipeline.Pipeline
 	Senders   []sender.Sender
 
-	PoolSize int
-	FastPath bool
+	PoolSize  int
+	FastPath  bool
+	QueueSize int
 
 	LogPayloadRecv bool
 	LogPayloadSend bool
@@ -47,16 +48,19 @@ type Task struct {
 
 // Start 初始化任务执行池。
 // 使用稳定第三方库 ants：
-//   - WithNonblocking(true)：池满时立即返回错误，避免调用方阻塞；
+//   - WithMaxBlockingTasks(QueueSize)：池满时进入有界排队；
 //   - WithPreAlloc(true)：预分配 worker 队列内存，减少高峰时动态扩容抖动。
 func (t *Task) Start() error {
 	if t.PoolSize <= 0 {
 		// 基于仓库压测（cmd/bench）默认采用 4096，优先提升发送侧受限场景吞吐。
 		t.PoolSize = 4096
 	}
+	if t.QueueSize <= 0 {
+		t.QueueSize = 4096
+	}
 	p, err := ants.NewPool(
 		t.PoolSize,
-		ants.WithNonblocking(true),
+		ants.WithMaxBlockingTasks(t.QueueSize),
 		ants.WithPreAlloc(true),
 	)
 	if err != nil {
@@ -103,7 +107,7 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 		t.inflightCount.Add(-1)
 		pkt.Release()
 		if logx.Enabled(zapcore.InfoLevel) {
-			logx.L().Infow("task dropped packet due to full worker pool", "task", t.Name, "pool_size", t.PoolSize, "error", err)
+			logx.L().Infow("task dropped packet due to full worker pool queue", "task", t.Name, "pool_size", t.PoolSize, "queue_size", t.QueueSize, "error", err)
 		}
 		return
 	}
@@ -188,14 +192,21 @@ func payloadHex(b []byte, max int) string {
 
 func (t *Task) runtimeStats() logx.TaskRuntimeStats {
 	stats := logx.TaskRuntimeStats{
-		PoolSize: t.PoolSize,
-		Inflight: t.inflightCount.Load(),
-		FastPath: t.FastPath,
+		PoolSize:  t.PoolSize,
+		QueueSize: t.QueueSize,
+		Inflight:  t.inflightCount.Load(),
+		FastPath:  t.FastPath,
 	}
 	if t.pool != nil {
 		stats.PoolRunning = t.pool.Running()
 		stats.PoolFree = t.pool.Free()
 		stats.PoolWaiting = t.pool.Waiting()
+		if stats.QueueSize > 0 {
+			stats.QueueAvailable = stats.QueueSize - stats.PoolWaiting
+			if stats.QueueAvailable < 0 {
+				stats.QueueAvailable = 0
+			}
+		}
 	}
 	return stats
 }

@@ -11,6 +11,7 @@ const (
 	DefaultLogRotateMaxAgeDays     = 30
 	DefaultLogRotateCompress       = true
 	DefaultPayloadLogMaxBytes      = 256
+	DefaultTaskQueueSize           = 4096
 )
 
 // Config 是系统运行时的全量配置快照。
@@ -268,6 +269,9 @@ type TaskConfig struct {
 	// FastPath 控制是否在调用协程内同步处理（低延迟）。
 	// 用法：追求极低延迟可开启；若处理耗时较长建议关闭以隔离背压。
 	FastPath bool `json:"fast_path"`
+	// QueueSize 是任务池在“满载时允许排队等待提交”的最大长度。
+	// 用法：>0 启用有界排队；<=0 时默认取 4096。该值越大，削峰能力越强但请求等待时延可能增大。
+	QueueSize int `json:"queue_size,omitempty"`
 	// Receivers 是该任务订阅的接收端名称列表。
 	// 用法：填写 Config.Receivers 中已定义 key，支持多源汇聚。
 	Receivers []string `json:"receivers"`
@@ -318,5 +322,11 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.Logging.PayloadLogMaxBytes <= 0 {
 		c.Logging.PayloadLogMaxBytes = DefaultPayloadLogMaxBytes
+	}
+	for name, tc := range c.Tasks {
+		if tc.QueueSize <= 0 {
+			tc.QueueSize = DefaultTaskQueueSize
+			c.Tasks[name] = tc
+		}
 	}
 }
