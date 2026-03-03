@@ -38,9 +38,9 @@ package:
 package-all:
 	APP_NAME=$(APP_NAME) VERSION=$(VERSION) TARGETS="linux/arm64 linux/amd64 windows/amd64" ./scripts/package.sh
 
-# docker-build: 先构建 Linux 二进制，再制作运行时镜像。
-docker-build: build-linux
-	docker build --build-arg BINARY_PATH=dist/linux/$(APP_NAME) -t $(APP_NAME):$(VERSION) .
+# docker-build: 基于当前 Dockerfile 构建容器镜像。
+docker-build:
+	docker build --build-arg VERSION=$(VERSION) -t $(APP_NAME):$(VERSION) .
 
 # clean: 清理本地构建产物。
 clean:

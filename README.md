@@ -80,7 +80,7 @@ go run . -config ./configs/example.json
 
 ### 4.5 容器化构建（推荐在流水线中执行）
 
-当前 `Dockerfile` 使用 **多阶段构建**：在更小的 `golang:1.25-alpine` 镜像内编译源码，再将静态二进制复制到 distroless 运行时镜像。
+当前 `Dockerfile` 使用 **单阶段构建/运行**：直接基于 `golang:1.25-alpine` 编译并运行服务，不再依赖 distroless 运行时镜像。
 默认构建目标为 `linux/arm64`（aarch64），可通过 `TARGETOS`/`TARGETARCH` 覆盖。
 
 如果希望先把基础镜像缓存到项目目录（便于离线/受限网络环境复用），可执行：
@@ -89,7 +89,7 @@ go run . -config ./configs/example.json
 ./scripts/docker-local-test.sh
 ```
 
-脚本会尝试：启动独立 dockerd、拉取基础镜像、导出到 `docker/base-images/`，并执行一次 `docker build` 验证。
+脚本会尝试：启动独立 dockerd、拉取基础镜像并导出到 `docker/base-images/`，然后执行一次 `docker build` 验证。
 
 如网络受限，可配置多镜像源重试（逗号分隔）：
 
@@ -636,11 +636,10 @@ make package
 make package-all
 ```
 
-### 12.3 Docker 构建（默认基于 linux/arm64 产物）
+### 12.3 Docker 构建
 
 ```bash
-./scripts/build-linux.sh
-docker build --build-arg BINARY_PATH=dist/linux/forward-stub -t forward-stub:latest .
+docker build -t forward-stub:latest .
 ```
 
 ### 12.4 Kubernetes 部署

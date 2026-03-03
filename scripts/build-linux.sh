@@ -27,7 +27,7 @@ mkdir -p "${OUT_DIR}"
 OUT_FILE="${OUT_DIR}/${BINARY_NAME}"
 
 echo "Building ${APP_NAME} (${GOOS}/${GOARCH}) version=${VERSION}"
-# 关闭 CGO 让二进制更易部署到精简运行时镜像（如 distroless）。
+# 关闭 CGO 以减少运行时依赖，便于在容器环境直接运行。
 CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
   GOFLAGS="${GOFLAGS}" go build -trimpath -ldflags "${LDFLAGS}" -o "${OUT_FILE}" "${MAIN_PKG}"
 
