@@ -651,13 +651,13 @@ make docker-build
 make docker-build-push CCR_IMAGE=ccr.ccs.tencentyun.com/<namespace>/forward-stub:latest
 
 # 构建后直接本地启动容器（一步完成）
-make docker-build-run RUN_PORTS='-p 18080:8080' RUN_ARGS='--restart unless-stopped'
+make docker-build-run RUN_ARGS='--restart unless-stopped'
 
 # 已有镜像，单独推送
 make docker-push IMAGE=forward-stub:v1.0.0 CCR_IMAGE=ccr.ccs.tencentyun.com/<namespace>/forward-stub:v1.0.0
 
 # 已有镜像，单独本地运行
-make docker-run IMAGE=forward-stub:v1.0.0 CONTAINER_NAME=forward-stub-dev RUN_PORTS='-p 18080:8080'
+make docker-run IMAGE=forward-stub:v1.0.0 CONTAINER_NAME=forward-stub-dev
 ```
 
 #### Make 变量与传参说明
@@ -680,8 +680,7 @@ make <target> KEY1=VALUE1 KEY2=VALUE2
 | `IMAGE` | `$(APP_NAME):$(VERSION)` | `docker-build` `docker-push` `docker-run` `docker-build-push` `docker-build-run` | 本地镜像名（构建、推送、运行都基于该值） | `make docker-run IMAGE=forward-stub:dev` |
 | `CCR_IMAGE` | 空 | `docker-push` `docker-build-push` | 远端镜像地址；非空时会执行 `docker tag $(IMAGE) $(CCR_IMAGE)` 后推送 | `make docker-push CCR_IMAGE=ccr.ccs.tencentyun.com/ns/forward-stub:v1` |
 | `CONTAINER_NAME` | `$(APP_NAME)` | `docker-run` `docker-build-run` | 本地运行容器名；若已存在同名容器会先删除再启动 | `make docker-run CONTAINER_NAME=forward-stub-test` |
-| `RUN_PORTS` | 空 | `docker-run` `docker-build-run` | 透传给 `docker run` 的端口参数（可多个） | `make docker-run RUN_PORTS='-p 8080:8080 -p 9090:9090'` |
-| `RUN_ARGS` | 空 | `docker-run` `docker-build-run` | 透传给 `docker run` 的额外参数 | `make docker-run RUN_ARGS='--restart always -e TZ=Asia/Shanghai'` |
+| `RUN_ARGS` | 空 | `docker-run` `docker-build-run` | 透传给 `docker run` 的额外参数（端口无需映射，容器默认使用 `--network host`） | `make docker-run RUN_ARGS='--restart always -e TZ=Asia/Shanghai'` |
 
 #### 目标说明（逐项）
 
@@ -695,7 +694,7 @@ make <target> KEY1=VALUE1 KEY2=VALUE2
 - `make package-all`：打包 `linux/arm64`、`linux/amd64`、`windows/amd64` 制品。
 - `make docker-build`：构建 `$(IMAGE)` 镜像。
 - `make docker-push`：推送镜像；`CCR_IMAGE` 非空时先 tag 再推送到 CCR。
-- `make docker-run`：本地启动容器（后台运行），同名容器会先清理。
+- `make docker-run`：以 `--network host` 模式本地启动容器（后台运行），同名容器会先清理。
 - `make docker-build-push`：一步执行 `docker-build` + `docker-push`。
 - `make docker-build-run`：一步执行 `docker-build` + `docker-run`。
 - `make clean`：清理 `bin` 与 `dist` 目录。

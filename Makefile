@@ -6,7 +6,6 @@ GOFLAGS ?= -mod=vendor
 IMAGE ?= $(APP_NAME):$(VERSION)
 CCR_IMAGE ?=
 CONTAINER_NAME ?= $(APP_NAME)
-RUN_PORTS ?=
 RUN_ARGS ?=
 
 .PHONY: build build-linux test perf verify vet package package-all docker-build docker-push docker-run docker-build-push docker-build-run clean
@@ -58,13 +57,13 @@ docker-push:
 		docker push $(IMAGE); \
 	fi
 
-# docker-run: 使用本地镜像启动容器；可通过 RUN_PORTS/RUN_ARGS 追加参数。
+# docker-run: 使用 host 网络模式启动本地容器；可通过 RUN_ARGS 追加参数。
 docker-run:
 	@if docker ps -a --format '{{.Names}}' | grep -wq "$(CONTAINER_NAME)"; then \
 		echo "remove existed container $(CONTAINER_NAME)"; \
 		docker rm -f $(CONTAINER_NAME); \
 	fi
-	docker run -d --name $(CONTAINER_NAME) $(RUN_PORTS) $(RUN_ARGS) $(IMAGE)
+	docker run -d --network host --name $(CONTAINER_NAME) $(RUN_ARGS) $(IMAGE)
 
 # docker-build-push: 一次完成镜像构建并推送。
 docker-build-push: docker-build docker-push
