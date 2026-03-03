@@ -5,10 +5,15 @@ VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev
 GOFLAGS ?= -mod=vendor
 IMAGE ?= $(APP_NAME):$(VERSION)
 CCR_IMAGE ?=
+CCR_REGISTRY ?= ccr.ccs.tencentyun.com
+CCR_NAMESPACE ?=
+CCR_REPOSITORY ?= $(APP_NAME)
+CCR_TAG ?= $(VERSION)
+CCR_TARGET_IMAGE ?= $(CCR_REGISTRY)/$(CCR_NAMESPACE)/$(CCR_REPOSITORY):$(CCR_TAG)
 CONTAINER_NAME ?= $(APP_NAME)
 RUN_ARGS ?=
 
-.PHONY: build build-linux test perf verify vet package package-all docker-build docker-push docker-run docker-build-push docker-build-run clean
+.PHONY: build build-linux test perf verify vet package package-all docker-build docker-push docker-push-ccr docker-run docker-build-push docker-build-run docker-build-push-ccr clean
 
 # build: 本机构建当前平台二进制到 bin/。
 build:
@@ -67,6 +72,19 @@ docker-run:
 
 # docker-build-push: 一次完成镜像构建并推送。
 docker-build-push: docker-build docker-push
+
+# docker-push-ccr: 推送镜像到腾讯云 CCR 指定地址。
+docker-push-ccr:
+	@if [ -z "$(CCR_NAMESPACE)" ]; then \
+		echo "CCR_NAMESPACE is required, example: make docker-push-ccr CCR_NAMESPACE=my-team"; \
+		exit 1; \
+	fi
+	@echo "tag $(IMAGE) -> $(CCR_TARGET_IMAGE)"
+	docker tag $(IMAGE) $(CCR_TARGET_IMAGE)
+	docker push $(CCR_TARGET_IMAGE)
+
+# docker-build-push-ccr: 一次完成镜像构建并推送到腾讯云 CCR。
+docker-build-push-ccr: docker-build docker-push-ccr
 
 # docker-build-run: 一次完成镜像构建并在本地启动容器。
 docker-build-run: docker-build docker-run
