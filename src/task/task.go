@@ -51,7 +51,8 @@ type Task struct {
 //   - WithPreAlloc(true)：预分配 worker 队列内存，减少高峰时动态扩容抖动。
 func (t *Task) Start() error {
 	if t.PoolSize <= 0 {
-		t.PoolSize = 64
+		// 基于仓库压测（cmd/bench）默认采用 4096，优先提升发送侧受限场景吞吐。
+		t.PoolSize = 4096
 	}
 	p, err := ants.NewPool(
 		t.PoolSize,
