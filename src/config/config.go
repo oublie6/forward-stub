@@ -263,7 +263,7 @@ type StageConfig struct {
 // TaskConfig 描述任务绑定关系与执行模型。
 type TaskConfig struct {
 	// PoolSize 是任务 worker 池大小。
-	// 用法：CPU 富余且流程较重时可调大，轻处理链路可保持较小值。
+	// 用法：<=0 时运行时默认取 4096；CPU 富余且发送链路受限场景可调大，轻处理链路可按压测下调。
 	PoolSize int `json:"pool_size"`
 	// FastPath 控制是否在调用协程内同步处理（低延迟）。
 	// 用法：追求极低延迟可开启；若处理耗时较长建议关闭以隔离背压。
