@@ -121,7 +121,7 @@ func (r *SFTPReceiver) Start(ctx context.Context, onPacket func(*packet.Packet))
 
 	poll := time.Duration(defaultInt(r.cfg.PollIntervalSec, 5)) * time.Second
 	for {
-		if err := r.scanOnce(rctx); err != nil && logx.Enabled(zapcore.WarnLevel) {
+		if err := r.scanOnce(rctx); err != nil {
 			logx.L().Warnw("sftp receiver scan failed", "receiver", r.name, "error", err)
 		}
 		select {

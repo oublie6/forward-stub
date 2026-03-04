@@ -137,9 +137,7 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 			if errors.Is(err, context.Canceled) {
 				return nil
 			}
-			if logx.Enabled(zapcore.WarnLevel) {
-				logx.L().Warnw("kafka receiver poll error", "receiver", r.name, "error", err)
-			}
+			logx.L().Warnw("kafka receiver poll error", "receiver", r.name, "error", err)
 			continue
 		}
 

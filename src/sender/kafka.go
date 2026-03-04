@@ -16,7 +16,6 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl"
-	"go.uber.org/zap/zapcore"
 )
 
 type KafkaSender struct {
@@ -84,9 +83,7 @@ func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
 	rec := &kgo.Record{Topic: s.topic, Value: p.Payload}
 	res := cli.ProduceSync(ctx, rec)
 	if err := res.FirstErr(); err != nil {
-		if logx.Enabled(zapcore.WarnLevel) {
-			logx.L().Warnw("kafka sender produce failed", "sender", s.name, "topic", s.topic, "error", err)
-		}
+		logx.L().Warnw("kafka sender produce failed", "sender", s.name, "topic", s.topic, "error", err)
 		return err
 	}
 	return nil
