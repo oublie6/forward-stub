@@ -189,6 +189,47 @@ pipeline 是 stage 数组，按顺序执行。例如：`match_offset_bytes`。
 - `log_payload_recv`：该任务是否允许打印接收侧 payload 日志（需全局 `payload_log_recv=true`）
 - `log_payload_send`：该任务是否允许打印发送侧 payload 日志（需全局 `payload_log_send=true`）
 
+#### 转发顺序说明（收到顺序 vs 发出顺序）
+
+- **默认不保证严格保序**：当 `fast_path=false`（默认建议用于高吞吐）时，packet 会进入 task 的 worker pool 并发处理，不同 packet 可能由不同 worker 同时执行，完成和发送时序可能重排。
+- **单 task 内部发送链路顺序**：对于“同一个 packet”，`pipelines` 与 `senders` 仍按配置顺序依次执行。
+- **保序不只 fast_path 一个开关**：
+  - 若要求“任务内近似串行”，可使用 `pool_size=1`（`fast_path=false`）降低并发重排概率；
+  - 若要求“任务处理路径严格串行”，优先使用 `fast_path=true`；
+  - 无论哪种方式，都建议将关键流量拆分为独立 task，避免与其他慢链路共享并发资源。
+- **fast_path 的保序边界**：开启后 task 在调用协程同步执行，能保证该协程内提交到 task 的先后顺序；但若上游 receiver 本身是多协程/多 event-loop（如 gnet multicore、多连接并发），则“全局跨连接顺序”仍不能保证。
+- **协议层注意事项**：即使应用层串行，UDP 天生不提供端到端可靠有序；Kafka 的顺序语义也受 partition key 影响（通常仅同 partition 内可保证有序）。
+
+#### fast_path 吞吐压测（本机示例）
+
+> 命令（4 worker、payload=512B、每档 4s）：
+
+```bash
+go run ./cmd/bench --mode both --duration 4s --warmup 1s --payload-size 512 --workers 4 --pps-sweep 5000,10000,20000,40000 --task-fast-path=true --log-level info --traffic-stats-interval 1h
+```
+
+在当前容器环境下，`loss_rate=0` 的最高档位示例：
+
+- UDP：`pps_per_worker=20000` 时 `recv pps ≈ 26.9k`、`≈110 Mbps`、`loss_rate=0`
+- TCP：`pps_per_worker=40000` 时 `recv pps ≈ 49.8k`、`≈204 Mbps`、`loss_rate=0`
+
+说明：压测结果与 CPU、内核网络栈、NIC、容器限额和对端实现强相关，请以你目标环境复测为准。
+
+#### pool_size=1 吞吐压测（本机示例）
+
+> 命令（4 worker、payload=512B、每档 4s）：
+
+```bash
+go run ./cmd/bench --mode both --duration 4s --warmup 1s --payload-size 512 --workers 4 --pps-sweep 5000,10000,20000,40000 --task-fast-path=false --task-pool-size=1 --log-level info --traffic-stats-interval 1h
+```
+
+在当前容器环境下，`loss_rate=0` 的最高档位示例：
+
+- UDP：`pps_per_worker=10000` 时 `recv pps ≈ 14.0k`、`≈57.5 Mbps`、`loss_rate=0`
+- TCP：`pps_per_worker=40000` 时 `recv pps ≈ 63.2k`、`≈258.9 Mbps`、`loss_rate=0`
+
+补充：在本次环境中，UDP 在更高压测档位（`pps_per_worker>=20000`）出现了可观测丢包，说明 `pool_size=1` 虽可降低重排，但吞吐/抗压能力可能成为瓶颈，需要结合业务目标做权衡。
+
 ### 6.6 Kafka receiver / sender 配置示例
 
 下面给出一个最小可用示例：从 Kafka topic 消费报文，经过任务处理后再写入另一个 Kafka topic。
