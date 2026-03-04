@@ -110,7 +110,7 @@ flowchart TB
 | --- | --- | --- |
 | 配置管理 | 本地配置加载 + 进程内热更新 | 从配置中心 API 拉取配置（支持鉴权、签名校验、版本回滚、灰度发布） |
 | 更新策略 | 全量替换（先停后建再放流） | 任务级增量切换（Task Incremental Switch）、双版本并行与流量镜像验证 |
-| 流量治理 | 基础背压（pool nonblocking） | 多级限流（实例/任务/租户）、熔断、自动降级、优先级队列 |
+| 流量治理 | 基础背压（pool queue + 有界等待） | 多级限流（实例/任务/租户）、熔断、自动降级、优先级队列 |
 | 性能优化 | gnet + payload pool + snapshot 路由 | DPDK/XDP 快路径、批量收发、NUMA 亲和、零拷贝路径优化 |
 | 可用性保障 | sender 失败隔离、graceful stop | 自适应重试预算、故障域隔离、跨可用区容灾、配置发布熔断 |
 | 可观测性 | 结构化日志 + 吞吐统计 | OpenTelemetry 全链路追踪、RED/USE 指标体系、异常画像与根因分析 |
@@ -336,7 +336,7 @@ flowchart LR
 `Task` 提供两种执行路径：
 
 - **FastPath**：同步执行，极低调度开销，适合轻量规则/低延迟场景。
-- **Worker Pool**：基于 `ants`，启用 `WithNonblocking(true)` + `WithPreAlloc(true)`，在高压场景限制资源并减少抖动。
+- **Worker Pool**：基于 `ants`，启用 `WithMaxBlockingTasks(queue_size)` + `WithPreAlloc(true)`，在高压场景通过有界排队吸收突发并减少抖动。
 
 ## 7.4 统一生命周期与全量热更新
 
@@ -376,7 +376,7 @@ UDP/TCP 核心链路基于 `gnet` 事件循环，配合 `multicore`、`num_event
 
 ## 8.4 并发与背压策略
 
-- Task 池满时 nonblocking 立即返回，避免全链路阻塞扩散。
+- Task 通过 `queue_size` 提供有界排队，避免无限阻塞扩散并控制内存上界。
 - 可按 task 粒度调节 `pool_size`/`fast_path`，实现业务隔离与资源治理。
 
 ## 8.5 基准测试支撑
@@ -431,7 +431,7 @@ UDP/TCP 核心链路基于 `gnet` 事件循环，配合 `multicore`、`num_event
 
 在本项目里，gnet 接收侧可调的是 `multicore`、`num_event_loop`、`read_buffer_cap`，它们主要影响并行度与读缓冲行为；并没有一个“把内部队列调大就一定不丢包”的万能开关。
 
-同时，当前 `Task` 默认使用 `ants.WithNonblocking(true)`，当 worker pool 满载时会直接返回错误并丢弃该包（有 debug 日志），这属于**应用层主动背压/丢弃策略**。
+同时，当前 `Task` 使用有界排队模式（`WithMaxBlockingTasks(queue_size)`）；当队列已满且无法继续提交时才会返回错误并丢弃该包（有日志），这属于**应用层有界背压策略**。
 
 因此要逼近“0 丢包”，建议按“端到端容量治理”实施：
 

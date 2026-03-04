@@ -28,6 +28,8 @@ type GnetTCPSender struct {
 	connsMu sync.RWMutex
 	conns   []gnet.Conn
 	rr      uint64
+
+	framePool sync.Pool
 }
 
 // NewGnetTCPSender 负责该函数对应的核心逻辑，详见实现细节。
@@ -41,6 +43,10 @@ func NewGnetTCPSender(name, remote string, withU16BELen bool, concurrency int, g
 		withU16BELen: withU16BELen,
 		concurrency:  concurrency,
 		gnetLogLevel: logx.ParseGnetLogLevel(gnetLogLevel),
+		framePool: sync.Pool{New: func() any {
+			b := make([]byte, 0, 2048)
+			return &b
+		}},
 	}
 	if err := s.ensureClientAndDial(); err != nil {
 		return nil, err
@@ -65,19 +71,34 @@ func (s *GnetTCPSender) Send(ctx context.Context, p *packet.Packet) error {
 		}
 	}
 
-	out := p.Payload
-	if s.withU16BELen {
-		n := len(p.Payload)
-		if n > 65535 {
-			return nil
+	if !s.withU16BELen {
+		if err := c.AsyncWrite(p.Payload, nil); err != nil {
+			_ = c.Close()
+			return err
 		}
-		buf := make([]byte, 2+n)
-		binary.BigEndian.PutUint16(buf[:2], uint16(n))
-		copy(buf[2:], p.Payload)
-		out = buf
+		return nil
 	}
 
-	if err := c.AsyncWrite(out, nil); err != nil {
+	n := len(p.Payload)
+	if n > 65535 {
+		return nil
+	}
+	bufPtr := s.framePool.Get().(*[]byte)
+	buf := *bufPtr
+	if cap(buf) < 2+n {
+		buf = make([]byte, 2+n)
+	} else {
+		buf = buf[:2+n]
+	}
+	binary.BigEndian.PutUint16(buf[:2], uint16(n))
+	copy(buf[2:], p.Payload)
+	*bufPtr = buf
+
+	if err := c.AsyncWrite(buf, func(gnet.Conn, error) error {
+		s.releaseFrameBuf(bufPtr)
+		return nil
+	}); err != nil {
+		s.releaseFrameBuf(bufPtr)
 		_ = c.Close()
 		return err
 	}
@@ -152,4 +173,18 @@ func (s *GnetTCPSender) pickConn() gnet.Conn {
 	}
 	i := int(atomic.AddUint64(&s.rr, 1)-1) % len(s.conns)
 	return s.conns[i]
+}
+
+func (s *GnetTCPSender) releaseFrameBuf(bufPtr *[]byte) {
+	if bufPtr == nil {
+		return
+	}
+	b := *bufPtr
+	if cap(b) > 64<<10 {
+		b = make([]byte, 0, 2048)
+	} else {
+		b = b[:0]
+	}
+	*bufPtr = b
+	s.framePool.Put(bufPtr)
 }
