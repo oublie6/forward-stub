@@ -168,7 +168,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		st.mu.Unlock()
 
 		go func(r receiver.Receiver, rn string) {
-			if err := r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) }); err != nil && logx.Enabled(zapcore.ErrorLevel) {
+			if err := r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) }); err != nil {
 				lg.Errorw("receiver stopped with error", "receiver", rn, "error", err)
 			}
 		}(r, name)

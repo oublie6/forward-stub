@@ -106,9 +106,7 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 		t.inflight.Done()
 		t.inflightCount.Add(-1)
 		pkt.Release()
-		if logx.Enabled(zapcore.InfoLevel) {
-			logx.L().Infow("task dropped packet due to full worker pool queue", "task", t.Name, "pool_size", t.PoolSize, "queue_size", t.QueueSize, "error", err)
-		}
+		logx.L().Errorw("task dropped packet due to full worker pool queue", "task", t.Name, "pool_size", t.PoolSize, "queue_size", t.QueueSize, "error", err)
 		return
 	}
 }
@@ -152,7 +150,7 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 				"eof", pkt.Meta.EOF,
 			)
 		}
-		if err := s.Send(ctx, pkt); err != nil && logx.Enabled(zapcore.WarnLevel) {
+		if err := s.Send(ctx, pkt); err != nil {
 			logx.L().Warnw("sender send failed", "task", t.Name, "sender", s.Name(), "error", err)
 		}
 	}
