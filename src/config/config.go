@@ -326,7 +326,7 @@ func (c *Config) ApplyDefaults() {
 	for name, tc := range c.Tasks {
 		if tc.QueueSize <= 0 {
 			tc.QueueSize = DefaultTaskQueueSize
-			c.Tasks[name] = tc
 		}
+		c.Tasks[name] = tc
 	}
 }
