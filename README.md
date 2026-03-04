@@ -1,814 +1,166 @@
 # forward-stub
 
-## 0. 技术架构文档
+面向高吞吐报文转发场景的 Go 服务，支持多种 receiver/sender（UDP、TCP、Kafka、SFTP）和 pipeline 编排。
 
-- 完整技术文档（含架构图、时序图、类图、数据流图、数据处理流程图）：`docs/technical-architecture.md`
+## 1. 环境准备
 
----
+- Go：`1.25.x`（与 `go.mod` 一致）
+- Docker：`20.10+`
+- Kubernetes：`1.24+`（可选）
 
-一个面向高吞吐报文转发场景的 Go 服务：支持多种接收端（UDP/TCP gnet、Kafka、SFTP）、可编排 pipeline 规则处理，以及多种发送端（UDP 单播/组播、TCP、Kafka、SFTP）。
-
----
-
-## 1. 项目目标
-
-`forward-stub` 的核心目标：
-
-- **可配置**：通过本地 JSON 或远端配置 API 驱动运行时拓扑。
-- **高性能**：基于 `gnet` 事件循环与 `ants` 协程池，兼顾吞吐与资源控制。
-- **可观测**：使用 `zap` 结构化日志，支持日志切割。
-- **可维护**：采用“全量替换 UpdateCache”策略，降低热更新复杂度。
-
-## 2. 主要依赖
-
-- `github.com/panjf2000/gnet/v2`
-- `github.com/panjf2000/ants/v2`
-- `go.uber.org/zap`
-- `gopkg.in/natefinch/lumberjack.v2`
-- `github.com/valyala/bytebufferpool`
-- `golang.org/x/sync/errgroup`
-- `go.uber.org/multierr`
-
-## 3. 目录结构
-
-```text
-.
-├── main.go                   # 程序入口
-├── configs/
-│   └── example.json          # 示例配置
-├── src/
-│   ├── app/                  # Runtime 对外封装
-│   ├── config/               # 配置定义、加载、校验
-│   ├── control/              # 远端配置 API 客户端
-│   ├── logx/                 # 日志初始化与工具
-│   ├── packet/               # 报文对象、buffer 池
-│   ├── pipeline/             # pipeline 编译与 stage
-│   ├── receiver/             # UDP/TCP/Kafka/SFTP 接收端
-│   ├── runtime/              # 核心运行时（Store、UpdateCache）
-│   ├── sender/               # UDP/TCP/Kafka/SFTP 发送端
-│   └── task/                 # 单条处理链路（pipeline + senders）
-├── scripts/                  # 构建与打包脚本
-└── deploy/k8s/               # Kubernetes 部署清单
-```
-
-## 4. 快速开始
-
-### 4.1 环境要求
-
-- Go 版本：`go 1.25`（见 `go.mod`）。
-- 网络端口：确保配置中监听和发送端口可用。
-
-### 4.2 安装依赖
-
-```bash
-go mod download
-```
-
-### 4.3 本地配置启动
+## 2. 本地运行
 
 ```bash
 go run . -config ./configs/example.json
 ```
 
-### 4.4 从配置 API 启动
+> 程序启动必须显式传入 `-config` 参数。
 
-在 `config` 文件内配置 `control.api` 与 `control.timeout_sec`，程序会先加载本地文件，再按该地址拉取远端配置。
+## 3. Docker 部署（详细步骤）
 
-```bash
-go run . -config ./configs/example.json
-```
-
-### 4.5 容器化构建（推荐在流水线中执行）
-
-当前 `Dockerfile` 使用 **单阶段构建/运行**：直接基于 `golang:1.25-alpine` 编译并运行服务，不再依赖 distroless 运行时镜像。
-默认构建目标为 `linux/arm64`（aarch64），可通过 `TARGETOS`/`TARGETARCH` 覆盖。
-
-如果希望先把基础镜像缓存到项目目录（便于离线/受限网络环境复用），可执行：
-
-```bash
-./scripts/docker-local-test.sh
-```
-
-脚本会尝试：启动独立 dockerd、拉取基础镜像并导出到 `docker/base-images/`，然后执行一次 `docker build` 验证。
-
-如网络受限，可配置多镜像源重试（逗号分隔）：
-
-```bash
-IMAGE_MIRRORS="docker.m.daocloud.io,mirror.ccs.tencentyun.com" \
-PULL_RETRIES=5 \
-./scripts/docker-local-test.sh
-```
+### 3.1 构建镜像
 
 ```bash
 docker build -t forward-stub:dev \
   --build-arg VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev) \
-  --build-arg TARGETARCH=arm64 .
+  --build-arg TARGETOS=linux \
+  --build-arg TARGETARCH=arm64 \
+  .
 ```
 
-如需构建其他架构，可配合 buildx：
+如需 amd64：把 `TARGETARCH=arm64` 改为 `TARGETARCH=amd64`。
+
+### 3.2 准备配置文件
+
+建议先复制示例配置：
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 \
-  -t your-registry/forward-stub:latest .
+cp ./configs/example.json ./configs/config.json
 ```
 
-## 5. 启动参数
+按需修改 `./configs/config.json`（例如监听端口、sender 目标地址、日志级别等）。
 
-| 参数 | 说明 | 默认值 |
-|---|---|---|
-| `-config` | 本地 JSON 配置文件路径（必填） | `""` |
+### 3.3 启动容器（在 `docker run` 指定挂载和参数）
 
-> 说明：`control`、`logging` 以及流量统计相关参数统一从配置文件读取（不再提供独立启动参数）。
-
-## 6. 配置文件说明
-
-配置结构（`src/config/config.go`）：
-
-```json
-{
-  "version": 5,
-  "control": {
-    "api": "",
-    "timeout_sec": 5
-  },
-  "logging": {
-    "level": "info",
-    "file": "",
-    "traffic_stats_interval": "5s",
-    "traffic_stats_sample_every": 1
-  },
-  "receivers": {},
-  "senders": {},
-  "pipelines": {},
-  "tasks": {}
-}
-```
-
-### 6.1 顶层字段
-
-- `version`：配置版本号。
-- `control`：配置中心拉取配置参数（可选）。
-- `logging`：日志级别、日志文件与可选 payload 收发日志开关。
-- payload 日志扩展字段：
-  - `payload_log_tasks`：需要开启 payload 日志的任务名白名单（按 task 名匹配）
-  - `payload_log_recv`：是否启用任务接收侧 payload 日志
-  - `payload_log_send`：是否启用任务发送侧 payload 日志
-  - `payload_log_max_bytes`：单条日志中最多打印多少 payload 字节（以十六进制摘要输出）
-- `receivers`：输入端定义。
-- `senders`：输出端定义。
-- `pipelines`：处理规则编排（按顺序执行 stage）。
-- `tasks`：把 receiver / pipeline / sender 连接起来的任务定义。
-
-### 6.2 receivers
-
-- `type`：`udp_gnet` / `tcp_gnet` / `kafka` / `sftp`
-- `listen`：监听地址（Kafka 场景为 broker 列表）
-- `multicore`：是否启用 gnet multicore
-- `num_event_loop`：显式设置 gnet event-loop 数量（`<=0` 使用 gnet 默认值）
-- `read_buffer_cap`：显式设置 gnet 读缓冲上限（字节，`<=0` 使用 gnet 默认值）
-- `frame`：TCP 分帧（`""` 或 `"u16be"`）
-- `topic` / `group_id`：Kafka receiver 参数
-- Kafka 扩展字段：`username`、`password`、`sasl_mechanism`（当前支持 `PLAIN`）、`tls`、`tls_skip_verify`、`client_id`、`start_offset`（`earliest/latest`）、`fetch_min_bytes`、`fetch_max_bytes`、`fetch_max_wait_ms`
-- SFTP 扩展字段：`remote_dir`、`poll_interval_sec`、`chunk_size`，并复用 `username/password` 进行登录认证
-
-### 6.3 senders
-
-- `type`：`udp_unicast` / `udp_multicast` / `tcp_gnet` / `kafka` / `sftp`
-- 常见字段：`remote`、`concurrency`、`frame`、`topic`
-- Kafka 扩展字段：`username`、`password`、`sasl_mechanism`（当前支持 `PLAIN`）、`tls`、`tls_skip_verify`、`client_id`、`acks`（`-1/1/0`）、`linger_ms`、`batch_max_bytes`、`compression`（`none/gzip/snappy/lz4/zstd`）
-- UDP 扩展字段：`local_ip`、`local_port`、`iface`、`ttl`、`loop`
-
-### 6.4 pipelines
-
-pipeline 是 stage 数组，按顺序执行。例如：`match_offset_bytes`。
-
-### 6.5 tasks
-
-一个 task 绑定：`receivers`、`pipelines`、`senders`，并可配置 `pool_size`、`queue_size`、`fast_path` 以及可选的 payload 日志开关。
-
-默认提交策略为 **blocking + 有界排队**（由 `queue_size` 控制），更适合“保序优先 + 稳吞吐”场景。
-
-- `log_payload_recv`：该任务是否允许打印接收侧 payload 日志（需全局 `payload_log_recv=true`）
-- `log_payload_send`：该任务是否允许打印发送侧 payload 日志（需全局 `payload_log_send=true`）
-
-#### 转发顺序说明（收到顺序 vs 发出顺序）
-
-- **默认不保证严格保序**：当 `fast_path=false`（默认建议用于高吞吐）时，packet 会进入 task 的 worker pool 并发处理，不同 packet 可能由不同 worker 同时执行，完成和发送时序可能重排。
-- **单 task 内部发送链路顺序**：对于“同一个 packet”，`pipelines` 与 `senders` 仍按配置顺序依次执行。
-- **保序不只 fast_path 一个开关**：
-  - 若要求“任务内近似串行”，可使用 `pool_size=1`（`fast_path=false`）降低并发重排概率；
-  - 若要求“任务处理路径严格串行”，优先使用 `fast_path=true`；
-  - 无论哪种方式，都建议将关键流量拆分为独立 task，避免与其他慢链路共享并发资源。
-- **fast_path 的保序边界**：开启后 task 在调用协程同步执行，能保证该协程内提交到 task 的先后顺序；但若上游 receiver 本身是多协程/多 event-loop（如 gnet multicore、多连接并发），则“全局跨连接顺序”仍不能保证。
-- **协议层注意事项**：即使应用层串行，UDP 天生不提供端到端可靠有序；Kafka 的顺序语义也受 partition key 影响（通常仅同 partition 内可保证有序）。
-
-#### fast_path 吞吐压测（本机示例）
-
-> 命令（4 worker、payload=512B、每档 4s）：
+> Dockerfile 中不再声明 `VOLUME` 和 `CMD`，由运行命令显式指定。
 
 ```bash
-go run ./cmd/bench --mode both --duration 4s --warmup 1s --payload-size 512 --workers 4 --pps-sweep 5000,10000,20000,40000 --task-fast-path=true --log-level info --traffic-stats-interval 1h
-```
-
-在当前容器环境下，`loss_rate=0` 的最高档位示例：
-
-- UDP：`pps_per_worker=20000` 时 `recv pps ≈ 26.9k`、`≈110 Mbps`、`loss_rate=0`
-- TCP：`pps_per_worker=40000` 时 `recv pps ≈ 49.8k`、`≈204 Mbps`、`loss_rate=0`
-
-说明：压测结果与 CPU、内核网络栈、NIC、容器限额和对端实现强相关，请以你目标环境复测为准。
-
-#### pool_size=1 吞吐压测（本机示例）
-
-> 命令（4 worker、payload=512B、每档 4s）：
-
-```bash
-go run ./cmd/bench --mode both --duration 4s --warmup 1s --payload-size 512 --workers 4 --pps-sweep 5000,10000,20000,40000 --task-fast-path=false --task-pool-size=1 --log-level info --traffic-stats-interval 1h
-```
-
-在当前容器环境下，`loss_rate=0` 的最高档位示例：
-
-- UDP：`pps_per_worker=10000` 时 `recv pps ≈ 14.0k`、`≈57.5 Mbps`、`loss_rate=0`
-- TCP：`pps_per_worker=40000` 时 `recv pps ≈ 63.2k`、`≈258.9 Mbps`、`loss_rate=0`
-
-补充：在本次环境中，UDP 在更高压测档位（`pps_per_worker>=20000`）出现了可观测丢包，说明 `pool_size=1` 虽可降低重排，但吞吐/抗压能力可能成为瓶颈，需要结合业务目标做权衡。
-
-### 6.6 Kafka receiver / sender 配置示例
-
-下面给出一个最小可用示例：从 Kafka topic 消费报文，经过任务处理后再写入另一个 Kafka topic。
-
-```json
-{
-  "version": 5,
-  "logging": {
-    "level": "info",
-    "traffic_stats_interval": "5s",
-    "traffic_stats_sample_every": 1
-  },
-  "receivers": {
-    "kafka_in": {
-      "type": "kafka",
-      "listen": "127.0.0.1:9092,127.0.0.1:9093",
-      "topic": "demo.input",
-      "group_id": "forward-stub-group",
-      "username": "kafka_user",
-      "password": "kafka_pass",
-      "sasl_mechanism": "PLAIN",
-      "tls": true,
-      "tls_skip_verify": false,
-      "client_id": "forward-stub-recv",
-      "start_offset": "latest",
-      "fetch_min_bytes": 1,
-      "fetch_max_bytes": 16777216,
-      "fetch_max_wait_ms": 100
-    }
-  },
-  "senders": {
-    "kafka_out": {
-      "type": "kafka",
-      "remote": "127.0.0.1:9092,127.0.0.1:9093",
-      "topic": "demo.output",
-      "concurrency": 2,
-      "username": "kafka_user",
-      "password": "kafka_pass",
-      "sasl_mechanism": "PLAIN",
-      "tls": true,
-      "tls_skip_verify": false,
-      "client_id": "forward-stub-send",
-      "acks": -1,
-      "linger_ms": 1,
-      "batch_max_bytes": 1048576,
-      "compression": "snappy"
-    }
-  },
-  "pipelines": {
-    "pass": []
-  },
-  "tasks": {
-    "kafka_forward": {
-      "receivers": ["kafka_in"],
-      "pipelines": ["pass"],
-      "senders": ["kafka_out"],
-      "pool_size": 128,
-      "queue_size": 512,
-      "fast_path": false
-    }
-  }
-}
-```
-
-说明：
-
-- Kafka receiver 使用 `listen` 作为 broker 列表（逗号分隔），并配合 `topic`、`group_id` 消费。
-- Kafka sender 使用 `remote` 作为 broker 列表（逗号分隔），并通过 `topic` 指定目标主题。
-- 配置了 `username/password` 时，默认按 `PLAIN` SASL 鉴权；也可显式设置 `sasl_mechanism=PLAIN`。
-- `tls=true` 可启用 TLS，测试环境可配 `tls_skip_verify=true`（生产不建议）。
-- `pipelines` 可先配置为空数组（透传），后续再按需追加 stage。
-
-
-### 6.7 SFTP receiver 配置示例（V1）
-
-V1 版本支持把 SFTP 目录中的文件按 chunk 读取为内部 packet，后续可经 pipeline 处理并转发至现有 sender。
-
-```json
-{
-  "receivers": {
-    "sftp_in": {
-      "type": "sftp",
-      "listen": "127.0.0.1:22",
-      "username": "demo",
-      "password": "demo-pass",
-      "remote_dir": "/data/in",
-      "poll_interval_sec": 5,
-      "chunk_size": 65536
-    }
-  }
-}
-```
-
-说明：
-- 同一文件按顺序分块读取，块大小由 `chunk_size` 控制（默认 64KiB）。
-- `poll_interval_sec` 控制扫描周期（默认 5 秒）。
-- 当前版本通过内存去重避免重复处理“同路径同 size+mtime”的文件。
-
-
-### 6.8 SFTP sender 配置示例（V2）
-
-V2 版本支持将带文件元信息（`file_path/offset/total_size/eof`）的 packet 分块写入 SFTP，并在完成后原子 rename 提交。
-
-```json
-{
-  "senders": {
-    "sftp_out": {
-      "type": "sftp",
-      "remote": "127.0.0.1:22",
-      "username": "demo",
-      "password": "demo-pass",
-      "remote_dir": "/data/out",
-      "temp_suffix": ".part"
-    }
-  }
-}
-```
-
-### 6.9 V3 互转 stage 示例
-
-- `mark_as_file_chunk`：将实时数据标记为文件分块语义（stream -> file）。
-- `clear_file_meta`：清理文件元信息（file -> stream）。
-
-```json
-{
-  "pipelines": {
-    "stream_to_file": [
-      {"type": "mark_as_file_chunk", "path": "stream/out.bin", "bool": true}
-    ],
-    "file_to_stream": [
-      {"type": "clear_file_meta"}
-    ]
-  }
-}
-```
-
-
-### 6.10 Envelope 统一数据模型（V3）
-
-V3 在 receiver/pipeline/sender 之间统一使用 Envelope 语义（兼容现有 `packet.Packet` 外壳），支持两类 payload：
-- `stream`：实时数据
-- `file_chunk`：文件分块
-
-关键元数据：`transfer_id`、`file_name`、`offset`、`total_size`、`checksum`、`eof`。
-
-链路规则：
-- task/pipeline 只处理 Envelope 元数据与 payload；
-- sender 按 mode 输出（如 kafka/udp/tcp 输出 stream，sftp 输出 file_chunk）；
-- 可组合实现 stream->file、file->stream、file->file。
-
-
-### 6.11 SFTP 转发专题说明（端到端）
-
-SFTP 链路的目标是让系统既能消费远端文件，也能将内部 packet 可靠落盘到 SFTP 目录。当前实现采用“分块 + 元信息 + 临时文件提交”模型。
-
-#### 6.11.1 数据模型
-
-SFTP 转发使用 `Envelope(file_chunk)` 语义，关键字段：
-
-- `transfer_id`：同一文件传输会话 ID，用于 sender 侧分块归并。
-- `file_name` / `file_path`：目标文件名与路径。
-- `offset`：当前 chunk 的写入偏移。
-- `total_size`：文件总大小。
-- `checksum`：单 chunk 校验值（SHA-256，十六进制）。
-- `eof`：是否最后一个分块。
-
-#### 6.11.2 SFTP Receiver 工作流（详细）
-
-Receiver 的实现可以理解为“**轮询扫描器 + 分块读取器 + 元信息封装器**”，核心流程如下。
-
-**A. 启动与生命周期**
-
-1. `Start` 被 runtime 调用后，会记录 `onPacket` 回调并创建可取消上下文；
-2. 启用流量统计（如果日志级别允许），用于输出 receiver 吞吐；
-3. 进入循环：`scanOnce -> sleep(poll_interval_sec) -> scanOnce ...`；
-4. `Stop` 被调用时触发 cancel，等待 `Start` 退出并回收状态。
-
-**B. 单次扫描（scanOnce）**
-
-1. 建立 SSH + SFTP 连接（本轮短连接，用完关闭）；
-2. 读取 `remote_dir` 下目录项，仅处理常规文件；
-3. 按文件名排序后顺序处理（确保行为稳定、便于排障复现）；
-4. 基于 `size + mtime` 生成文件指纹：
-   - 指纹已出现：跳过（避免重复消费未变化文件）；
-   - 指纹未出现：进入 `streamFile` 分块读取；
-5. 文件成功处理后才写入 `seen`，确保失败文件可在下一轮重试。
-
-**C. 文件分块（streamFile）**
-
-1. 按 `chunk_size` 分配缓冲区（最小兜底 1024 字节）；
-2. 循环读取文件，每次读取生成一个 `file_chunk` packet；
-3. 为每个 chunk 填充核心元信息：
-   - `transfer_id`：默认由 `filePath + totalSize` 组合；
-   - `offset`：当前块在原文件中的起始位置；
-   - `total_size`：文件总字节数；
-   - `checksum`：当前 chunk 的 SHA-256；
-   - `eof`：当前 chunk 是否文件末块；
-4. 通过 `onPacket` 将 packet 推给 task/pipeline/sender 链路。
-
-**D. Receiver 的几个设计取舍**
-
-- **短连接扫描**：每轮扫描单独建连，降低长期空闲连接失效后的异常处理复杂度；
-- **指纹去重而非落库断点**：实现简单、开销低，但进程重启后不会保留历史 `seen`；
-- **顺序处理文件**：牺牲部分并行读取能力，换取更稳定的处理顺序。
-
-建议：
-- 大文件优先增大 `chunk_size`（如 256KiB~1MiB）降低对象数量与调度开销；
-- 小文件高频目录优先缩短 `poll_interval_sec`，但要关注目录扫描与 SSH 建连成本；
-- 若目录文件非常多，建议在上游按日期/批次分目录，避免单目录扫描过重。
-
-#### 6.11.3 SFTP Sender 工作流（详细）
-
-Sender 的实现可以理解为“**按 transfer 会话聚合 + 随机写入临时文件 + 原子提交**”。
-
-**A. 输入约束与会话定位**
-
-1. 每次 `Send` 接收一个 packet；
-2. 优先使用 `meta.transfer_id` 定位会话状态；若缺失则自动生成临时会话 ID；
-3. 文件名优先级：`file_name` > `base(file_path)` > `transfer_id.bin`；
-4. 首次出现的会话会创建状态：`tempPath/finalPath/totalSize/eofSeen/writtenMax`。
-
-**B. 校验与分块写入**
-
-1. 若 packet 带 `checksum`，sender 先计算 payload SHA-256 并校验；
-2. 校验通过后，以 `WriteAt(offset)` 写入 `remote_dir/<file><temp_suffix>`；
-3. 更新会话进度：
-   - `writtenMax = max(writtenMax, offset + len(payload))`
-   - 若 `eof=true`，则标记 `eofSeen=true`。
-
-这种写法支持“按偏移写入”，对乱序 chunk 或补写场景更友好。
-
-**C. 提交条件与原子可见性**
-
-当且仅当满足以下条件才提交最终文件：
-
-- 已见到 EOF（`eofSeen=true`）；
-- 且 `total_size<=0` 或 `writtenMax >= total_size`。
-
-满足条件后执行：
-
-1. 尝试删除同名最终文件（如已存在）；
-2. `Rename(tempPath, finalPath)` 原子提交；
-3. 删除内存会话状态。
-
-通过“临时文件 + rename”机制，下游通常只能看到完整文件，避免读到半成品。
-
-**D. Sender 的几个设计取舍**
-
-- **串行锁保护**：`Send` 内部串行化，保证连接状态和会话 map 一致性；
-- **连接复用 + 按需重连**：正常路径复用 SFTP/SSH 连接，不可用时 `ensureConn` 重建；
-- **会话状态在内存中**：轻量高效，但进程重启会丢失未提交会话上下文。
-
-运维建议：
-- 将 `temp_suffix` 设为下游不会消费的后缀（如 `.part/.tmp`）；
-- 配置定期清理策略，处理异常中断后遗留的临时文件；
-- 若业务要求严格“整文件一致性”，务必保证上游正确设置 `total_size + eof`。
-
-#### 6.11.4 典型编排
-
-- **file -> stream**：`receiver(sftp)` + `pipeline(clear_file_meta)` + `sender(udp/tcp/kafka)`
-- **stream -> file**：`receiver(udp/tcp/kafka)` + `pipeline(mark_as_file_chunk)` + `sender(sftp)`
-- **file -> file**：`receiver(sftp)` + 可选处理 pipeline + `sender(sftp)`
-
-#### 6.11.5 最小可运行示例（SFTP -> Kafka）
-
-```json
-{
-  "receivers": {
-    "sftp_in": {
-      "type": "sftp",
-      "listen": "127.0.0.1:22",
-      "username": "demo",
-      "password": "demo-pass",
-      "remote_dir": "/data/in",
-      "poll_interval_sec": 5,
-      "chunk_size": 65536
-    }
-  },
-  "pipelines": {
-    "file_to_stream": [
-      {"type": "clear_file_meta"}
-    ]
-  },
-  "senders": {
-    "kafka_out": {
-      "type": "kafka",
-      "remote": "127.0.0.1:9092",
-      "topic": "demo.file.payload"
-    }
-  },
-  "tasks": {
-    "sftp_to_kafka": {
-      "receivers": ["sftp_in"],
-      "pipelines": ["file_to_stream"],
-      "senders": ["kafka_out"],
-      "pool_size": 128,
-      "queue_size": 512,
-      "fast_path": false
-    }
-  }
-}
-```
-
-## 7. 运行时流程
-
-1. 启动后加载配置（本地文件或远端 API）。
-2. 校验配置完整性与引用关系。
-3. `UpdateCache` 执行全量切换：停止旧组件并构建、启动新组件。
-4. receiver 收到报文后触发 `dispatch`，按订阅任务分发报文。
-5. task 执行 pipeline，最后写入 sender。
-
-## 8. 日志与可观测性
-
-- 日志级别：`debug` / `info` / `warn` / `error`
-- 高频路径先通过 `logx.Enabled(level)` 判断等级，减少无效字段构造。
-- 支持 `lumberjack` 滚动文件日志。
-- `logging` 关键字段：
-  - `file`：非空时写入滚动日志文件
-  - `compress`：是否压缩历史分卷（默认 `true`）
-  - `max_size_mb` / `max_backups` / `max_age_days`：分卷大小、保留份数、保留天数
-
-### 8.1 Docker/Kubernetes 日志挂载建议
-
-- Docker：挂载日志目录到宿主机（示例）
-
-```bash
-docker run --rm \
-  -v $(pwd)/configs/example.json:/app/configs/example.json:ro \
+docker run -d --name forward-stub \
+  -p 19000:19000/udp \
+  -v $(pwd)/configs/config.json:/app/config/config.json:ro \
   -v $(pwd)/logs:/var/log/forward-stub \
-  forward-stub:latest
+  forward-stub:dev \
+  -config /app/config/config.json
 ```
 
-- Kubernetes：`deploy/k8s/deployment.yaml` 已示例 `logs` volume 挂载到 `/var/log/forward-stub`，`deploy/k8s/configmap.yaml` 里将 `logging.file` 指向 `/var/log/forward-stub/app.log` 并开启 `compress=true`。
+说明：
 
-## 9. 性能与稳定性建议
+- `-v ...:/app/config/config.json:ro`：挂载配置文件（只读）
+- `-v ...:/var/log/forward-stub`：挂载日志目录
+- 最后的 `-config ...`：作为容器启动参数传给 `ENTRYPOINT`
 
-1. 高吞吐优先启用 `multicore` 并压测调参。
-2. `queue_size` 控制池满时的排队上限（有界队列），`waiting` 表示当前排队中的提交数。
-3. 轻处理链路可启用 `fast_path=true` 追求低延迟。
-4. 生产默认 `info` 或 `warn`，排障时临时升 `debug`。
-5. 多任务分发才触发 clone，减少不必要拷贝。
-
-### 9.1 保序场景下的吞吐优化（代码层）
-
-如果业务目标是“尽量保序，同时尽量提高吞吐”，建议围绕 **“保序边界明确 + 热点隔离 + 降低串行路径成本”** 做优化：
-
-1. **先明确保序粒度，再决定执行模型**：
-   - 只要求“单 task 内尽量保序”：优先 `pool_size=1`（`fast_path=false`），把接收与处理线程解耦，通常比全链路同步更稳；
-   - 要求“调用协程内严格顺序”：使用 `fast_path=true`，但要控制上游 event-loop 数和单 task 负载，避免把接收线程拖慢。
-
-2. **保序关键流量独立 task，避免被慢链路拖垮**：
-   - 关键保序流量拆到独立 task，单独配置 `pool_size/queue_size`；
-   - 非关键流量走独立 task 并发处理，避免和保序链路共享同一并发池。
-
-3. **串行路径减负：把“每包固定成本”降到最低**：
-   - 保序链路尽量减少 pipeline stage 数量和复杂度；
-   - payload 日志在高吞吐场景默认关闭，只在排障窗口短时开启；
-   - sender 侧优先减少阻塞写放大（如合理并发、连接预热、限速削峰）。
-
-4. **降低不必要拷贝，避免保序链路被 GC 放大**：
-   - 保持“单订阅不 clone，多订阅才 clone”的策略；
-   - 在保序任务上优先保证单订阅直达，减少跨任务广播带来的复制成本。
-
-5. **围绕队列水位做自适应，避免“保序=排队爆炸”**：
-   - 监控 inflight / waiting / drop；
-   - 当 waiting 持续高位时，优先做任务拆分、限流或降级，而不是盲目增大 queue；
-   - 用小步压测反推稳定工作点（`pool_size`、`num_event_loop`、`pps` 组合）。
-
-6. **分协议优化目标，避免错误预期**：
-   - TCP/Kafka 更适合承接“顺序 + 可靠”目标（仍需按连接或 partition 约束顺序）；
-   - UDP 仅能做“单链路内尽量有序 + 低丢包”，不应承诺端到端严格顺序与 0 丢包。
-
-> 实践建议：对“保序吞吐优化”优先做可量化改动（基准可复现、线上可观测），每次只动一个变量，避免结论被多因素干扰。
-
-## 10. 校验与测试
-
-### 10.1 静态检查
+### 3.4 运维命令
 
 ```bash
-go vet ./...
+# 查看日志
+docker logs -f forward-stub
+
+# 查看容器内进程参数
+docker inspect forward-stub --format='{{json .Config.Cmd}}'
+
+# 停止并删除
+docker rm -f forward-stub
 ```
 
-### 10.2 构建与测试
+## 4. Kubernetes 部署（详细步骤）
+
+仓库提供了 `deploy/k8s/` 下的基础清单（Namespace、ConfigMap、Deployment、Service、Kustomization）。
+
+### 4.1 方式 A：使用现有 YAML（推荐）
+
+1) 构建并推送镜像
 
 ```bash
-go test ./...
+docker build -t <registry>/forward-stub:<tag> .
+docker push <registry>/forward-stub:<tag>
 ```
 
-### 10.3 本地压测工具
+2) 替换镜像地址（两种任选其一）
+
+- 方式 1：改 `deploy/k8s/kustomization.yaml` 中 `images`。
+- 方式 2：直接命令行覆盖：
 
 ```bash
-go run ./cmd/bench -mode both -duration 8s -warmup 2s -payload-size 512 -workers 4
+kubectl kustomize deploy/k8s | \
+  sed 's#image: forward-stub:latest#image: <registry>/forward-stub:<tag>#g' | \
+  kubectl apply -f -
 ```
 
-也支持将压测参数收敛到 JSON 配置，避免长命令行：
+3) 部署
 
 ```bash
-go run ./cmd/bench -bench-config ./configs/bench.example.json
+kubectl apply -k deploy/k8s
 ```
 
-`configs/bench.example.json` 已覆盖 bench 常用可配置项（如 `workers`、`task_pool_size`、`pps_per_worker`、`pps_sweep`、`traffic_stats_interval` 等），可按机器规模直接调参复用。
-
-### 10.4 每次改动的回归基线（功能 + 性能）
-
-建议每次提交前执行：
+4) 查看状态
 
 ```bash
-make verify
+kubectl -n forward-stub get pods
+kubectl -n forward-stub logs -f deploy/forward-stub
 ```
 
-`make verify` 会串行执行：
-- `go test ./...`（功能回归）
-- `go test ./src/runtime -run '^$' -bench BenchmarkDispatchMatrix -benchmem -benchtime=2s`（4 协议笛卡尔积 dispatch 微基准）
-- `go run ./cmd/bench -mode both -duration 4s -warmup 1s -payload-size 512 -workers 2 -pps-sweep 2000,4000,8000 -log-level error`（UDP/TCP 端到端压测）
+### 4.2 方式 B：使用 `kubectl run`（在命令中指定参数）
 
-最近一次高压复测（3 vCPU 容器，本机 loopback）结果如下（仅供趋势比较）：
-- dispatch 微基准（`go test ./src/runtime -run '^$' -bench BenchmarkDispatchMatrix -benchmem -benchtime=1s`）：
-  - 256B 负载：约 `613~697 ns/op`
-  - 4096B 负载：约 `2.5~3.1 us/op`
-  - 分配：`6 allocs/op`，约 `592B/op(256B 载荷)` / `4432B/op(4096B 载荷)`
-- 端到端压测（高压 + 不丢包最大吞吐）：
-  - UDP（1400B，4 workers）：约 `27539 pps`（`308.43 Mbps`，`0.00% loss`）
-  - TCP（1400B，4 workers）：约 `48461 pps`（`542.77 Mbps`，`0.00% loss`）
-
-若出现以下情况，建议阻断发布并定位：
-- 功能测试失败或转发正确性异常；
-- 微基准 `ns/op` 回退超过 20%；
-- 在相同压测参数下，端到端“无丢包最大吞吐”回退超过 20%。
-
-### 10.5 UDP/TCP/Kafka 任务在 payload 日志开关下的不丢包最大吞吐基准
-
-用于验证 `log_payload_recv/log_payload_send` 开关对转发吞吐的影响，并在 benchmark 内部校验 `sent == received`，确保统计结果来自“无丢包”场景：
+如果你希望像 `docker run` 一样一次性启动，可用如下命令（示例将 ConfigMap 挂载到 `/app/config`，并传入 `-config` 参数）：
 
 ```bash
-go test ./src/runtime -run '^$' -bench BenchmarkPayloadLogSwitchThroughput -benchmem -benchtime=1s
+kubectl create namespace forward-stub
+kubectl -n forward-stub create configmap forward-stub-config \
+  --from-file=config.json=./configs/config.json
+
+kubectl -n forward-stub run forward-stub \
+  --image=<registry>/forward-stub:<tag> \
+  --restart=Never \
+  --overrides='{
+    "apiVersion": "v1",
+    "spec": {
+      "containers": [{
+        "name": "forward-stub",
+        "image": "<registry>/forward-stub:<tag>",
+        "args": ["-config", "/app/config/config.json"],
+        "volumeMounts": [{
+          "name": "config",
+          "mountPath": "/app/config",
+          "readOnly": true
+        }],
+        "ports": [{"containerPort": 19000, "protocol": "UDP"}]
+      }],
+      "volumes": [{
+        "name": "config",
+        "configMap": {"name": "forward-stub-config"}
+      }]
+    }
+  }'
 ```
 
-最近一次结果（2 vCPU 容器）如下：
-
-- UDP
-  - 256B：关闭日志 `297.04 MB/s`，开启日志 `298.90 MB/s`
-  - 4096B：关闭日志 `996.96 MB/s`，开启日志 `1097.35 MB/s`
-- TCP
-  - 256B：关闭日志 `305.89 MB/s`，开启日志 `314.99 MB/s`
-  - 4096B：关闭日志 `927.92 MB/s`，开启日志 `795.64 MB/s`
-- Kafka
-  - 256B：关闭日志 `293.32 MB/s`，开启日志 `254.41 MB/s`
-  - 4096B：关闭日志 `1039.23 MB/s`，开启日志 `2067.04 MB/s`
-
-> 说明：该 benchmark 将日志级别固定为 `error`，用于隔离“开关路径本身”开销，避免实际 `info` 日志 IO 放大对吞吐测量的干扰。
-
-## 11. 常见问题（FAQ）
-
-### Q1：启动时报 `must provide -config`
-A：必须提供本地配置文件路径。
-
-### Q2：`udp_unicast/udp_multicast` 报错 requires local_port
-A：当前实现要求显式配置 `local_port`。
-
-### Q3：如何把日志写到文件
-A：在配置文件设置 `logging.file`，例如：`"file":"/path/to/app.log"`。
-
-### Q4：如何观察配置热更新效果
-A：关注 `updating runtime cache` 与 `runtime cache updated` 两条日志。
-
-### Q5：为何没有区分 UDP 单播/组播 receiver
-A：receiver 侧统一 `udp_gnet`；单播/组播差异在 sender 侧。
-
-## 12. 一键打包与部署
-
-### 12.1 单平台打包（默认 linux/arm64，aarch64）
+查看日志：
 
 ```bash
-make package
+kubectl -n forward-stub logs -f pod/forward-stub
 ```
 
-### 12.2 多平台打包
+## 5. 目录说明（精简）
 
-```bash
-make package-all
+```text
+.
+├── main.go
+├── configs/                # 示例配置
+├── src/                    # 核心实现（runtime/receiver/sender/pipeline 等）
+├── deploy/k8s/             # Kubernetes 清单
+├── scripts/                # 构建与部署辅助脚本
+└── docs/technical-architecture.md
 ```
 
-### 12.3 Docker 构建、推送与本地运行（Makefile）
+## 6. 参考文档
 
-推荐统一使用 `make` 目标，而不是手写 `docker build/run/push` 命令。
-
-```bash
-# 仅构建镜像（默认镜像名 forward-stub:<git-version>）
-make docker-build
-
-# 构建后直接推送（一步完成）
-make docker-build-push CCR_IMAGE=ccr.ccs.tencentyun.com/<namespace>/forward-stub:latest
-
-# 构建后直接推送到腾讯云 CCR（一步完成）
-make docker-build-push-ccr CCR_NAMESPACE=<namespace>
-
-# 构建后直接本地启动容器（一步完成）
-make docker-build-run RUN_ARGS='--restart unless-stopped'
-
-# 已有镜像，单独推送（通用方式）
-make docker-push IMAGE=forward-stub:v1.0.0 CCR_IMAGE=ccr.ccs.tencentyun.com/<namespace>/forward-stub:v1.0.0
-
-# 已有镜像，单独推送到腾讯云 CCR（专用方式）
-make docker-push-ccr IMAGE=forward-stub:v1.0.0 CCR_NAMESPACE=<namespace>
-
-# 已有镜像，单独本地运行
-make docker-run IMAGE=forward-stub:v1.0.0 CONTAINER_NAME=forward-stub-dev
-```
-
-#### Make 变量与传参说明
-
-`make` 变量通过 `目标后追加 KEY=VALUE` 方式传参（如 `make docker-build VERSION=v1.0.0`）。
-
-- 通用写法：
-
-```bash
-make <target> KEY1=VALUE1 KEY2=VALUE2
-```
-
-- 每个变量含义如下：
-
-| 变量名 | 默认值 | 适用目标 | 说明 | 示例 |
-|---|---|---|---|---|
-| `APP_NAME` | `forward-stub` | `build` `build-linux` `package` `package-all` 等 | 应用名（也用于默认容器名和镜像名前缀） | `make build APP_NAME=fs` |
-| `VERSION` | `git describe --tags --always --dirty` 结果（失败时为 `dev`） | `build` `build-linux` `package` `package-all` `docker-build` | 版本号；会参与二进制 ldflags 与默认镜像标签 | `make docker-build VERSION=v1.2.3` |
-| `GOFLAGS` | `-mod=vendor` | `build` `test` `perf` `vet` | Go 命令附加参数 | `make test GOFLAGS='-mod=mod'` |
-| `IMAGE` | `$(APP_NAME):$(VERSION)` | `docker-build` `docker-push` `docker-run` `docker-build-push` `docker-build-run` | 本地镜像名（构建、推送、运行都基于该值） | `make docker-run IMAGE=forward-stub:dev` |
-| `CCR_IMAGE` | 空 | `docker-push` `docker-build-push` | 远端镜像地址；非空时会执行 `docker tag $(IMAGE) $(CCR_IMAGE)` 后推送 | `make docker-push CCR_IMAGE=ccr.ccs.tencentyun.com/ns/forward-stub:v1` |
-| `CCR_REGISTRY` | `ccr.ccs.tencentyun.com` | `docker-push-ccr` `docker-build-push-ccr` | 腾讯云 CCR 域名 | `make docker-push-ccr CCR_REGISTRY=ccr.ccs.tencentyun.com` |
-| `CCR_NAMESPACE` | 空（必填） | `docker-push-ccr` `docker-build-push-ccr` | 腾讯云 CCR 命名空间；为空会直接报错退出 | `make docker-push-ccr CCR_NAMESPACE=my-team` |
-| `CCR_REPOSITORY` | `$(APP_NAME)` | `docker-push-ccr` `docker-build-push-ccr` | CCR 仓库名 | `make docker-push-ccr CCR_NAMESPACE=my-team CCR_REPOSITORY=forward-stub` |
-| `CCR_TAG` | `$(VERSION)` | `docker-push-ccr` `docker-build-push-ccr` | CCR 镜像 tag | `make docker-push-ccr CCR_NAMESPACE=my-team CCR_TAG=v1.0.0` |
-| `CCR_TARGET_IMAGE` | `$(CCR_REGISTRY)/$(CCR_NAMESPACE)/$(CCR_REPOSITORY):$(CCR_TAG)` | `docker-push-ccr` `docker-build-push-ccr` | CCR 完整目标镜像地址（可直接覆盖） | `make docker-push-ccr CCR_TARGET_IMAGE=ccr.ccs.tencentyun.com/ns/fs:v1` |
-| `CONTAINER_NAME` | `$(APP_NAME)` | `docker-run` `docker-build-run` | 本地运行容器名；若已存在同名容器会先删除再启动 | `make docker-run CONTAINER_NAME=forward-stub-test` |
-| `RUN_ARGS` | 空 | `docker-run` `docker-build-run` | 透传给 `docker run` 的额外参数（端口无需映射，容器默认使用 `--network host`） | `make docker-run RUN_ARGS='--restart always -e TZ=Asia/Shanghai'` |
-
-#### 目标说明（逐项）
-
-- `make build`：本机构建当前平台二进制到 `bin/<APP_NAME>`。
-- `make build-linux`：构建 `linux/arm64` 二进制到 `dist/linux`。
-- `make test`：执行 `go test ./...`。
-- `make perf`：执行 runtime benchmark + 本地 bench 扫频。
-- `make verify`：串行执行 `test` 与 `perf`。
-- `make vet`：执行 `go vet ./...`。
-- `make package`：打包 `linux/arm64` 制品。
-- `make package-all`：打包 `linux/arm64`、`linux/amd64`、`windows/amd64` 制品。
-- `make docker-build`：构建 `$(IMAGE)` 镜像。
-- `make docker-push`：推送镜像；`CCR_IMAGE` 非空时先 tag 再推送到 CCR（通用方式）。
-- `make docker-push-ccr`：推送镜像到腾讯云 CCR（专用方式，要求传 `CCR_NAMESPACE`）。
-- `make docker-run`：以 `--network host` 模式本地启动容器（后台运行），同名容器会先清理。
-- `make docker-build-push`：一步执行 `docker-build` + `docker-push`。
-- `make docker-build-push-ccr`：一步执行 `docker-build` + `docker-push-ccr`。
-- `make docker-build-run`：一步执行 `docker-build` + `docker-run`。
-- `make clean`：清理 `bin` 与 `dist` 目录。
-
-### 12.4 Kubernetes 部署
-
-`deploy/k8s` 目录提供了 `namespace`、`deployment`、`service`、`configmap` 与 `kustomization` 示例，默认命名空间为 `forward-stub`。
-
-建议通过脚本统一操作：
-
-```bash
-./scripts/k8s-deploy.sh render   # 渲染最终 YAML
-./scripts/k8s-deploy.sh diff     # 对比集群差异
-./scripts/k8s-deploy.sh apply    # 部署到集群
-./scripts/k8s-deploy.sh delete   # 从集群删除
-```
-
-如需覆盖镜像，可在部署前编辑 `deploy/k8s/kustomization.yaml` 中的 `images` 字段。
-
-## 13. 后续演进方向
-
-- 增量热更新（按组件差量替换）
-- 指标体系（QPS、丢包率、发送失败率、处理耗时）
-- 更丰富 pipeline stage（解析、改写、路由）
-- 补充单元测试与 benchmark
-
-## 14. License
-
-本项目采用 Apache License 2.0，详见 [LICENSE](./LICENSE)。
+- 技术架构文档：`docs/technical-architecture.md`

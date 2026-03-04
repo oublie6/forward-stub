@@ -23,9 +23,5 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     GOFLAGS=-mod=vendor \
     go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /app/forward-stub .
 
-# 日志目录可通过 docker volume/pvc 挂载到宿主机。
-VOLUME ["/var/log/forward-stub"]
-
-# 默认使用容器内配置文件；日志级别请在配置文件 logging.level 中设置。
+# 运行参数在 docker run / kubectl run 时显式指定。
 ENTRYPOINT ["/app/forward-stub"]
-CMD ["-config", "/app/configs/example.json"]
