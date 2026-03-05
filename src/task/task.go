@@ -16,28 +16,39 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+const (
+	ExecutionModelPool     = "pool"
+	ExecutionModelFastPath = "fastpath"
+	ExecutionModelChannel  = "channel"
+)
+
 // Task 表示一条完整数据处理链路：
 // input packet -> pipelines -> senders。
 //
 // 运行模型：
-//  1. 可选 FastPath（当前 goroutine 内同步执行，低延迟）；
-//  2. 默认走 ants worker pool（高吞吐、可控并发）；
-//  3. 停机时通过 accepting + inflight 保证优雅退出。
+//  1. fastpath：当前 goroutine 内同步执行，低延迟；
+//  2. pool：走 ants worker pool（高吞吐、可控并发）；
+//  3. channel：单 goroutine + 有界 channel，顺序处理；
+//  4. 停机时通过 accepting + inflight 保证优雅退出。
 type Task struct {
 	Name string
 
 	Pipelines []*pipeline.Pipeline
 	Senders   []sender.Sender
 
-	PoolSize  int
-	FastPath  bool
-	QueueSize int
+	PoolSize       int
+	FastPath       bool
+	QueueSize      int
+	ExecutionModel string
 
 	LogPayloadRecv bool
 	LogPayloadSend bool
 	PayloadLogMax  int
 
-	pool      *ants.Pool
+	pool *ants.Pool
+	ch   chan taskRequest
+	wg   sync.WaitGroup
+
 	sendStats *logx.TrafficCounter
 
 	accepting atomic.Bool
@@ -46,10 +57,12 @@ type Task struct {
 	inflightCount atomic.Int64
 }
 
-// Start 初始化任务执行池。
-// 使用稳定第三方库 ants：
-//   - WithMaxBlockingTasks(QueueSize)：池满时进入有界排队；
-//   - WithPreAlloc(true)：预分配 worker 队列内存，减少高峰时动态扩容抖动。
+type taskRequest struct {
+	ctx context.Context
+	pkt *packet.Packet
+}
+
+// Start 初始化任务执行模型。
 func (t *Task) Start() error {
 	if t.PoolSize <= 0 {
 		// 基于仓库压测（cmd/bench）默认采用 4096，优先提升发送侧受限场景吞吐。
@@ -58,15 +71,26 @@ func (t *Task) Start() error {
 	if t.QueueSize <= 0 {
 		t.QueueSize = 4096
 	}
-	p, err := ants.NewPool(
-		t.PoolSize,
-		ants.WithMaxBlockingTasks(t.QueueSize),
-		ants.WithPreAlloc(true),
-	)
-	if err != nil {
-		return err
+	mode := t.resolveExecutionModel()
+	t.ExecutionModel = mode
+
+	switch mode {
+	case ExecutionModelPool:
+		p, err := ants.NewPool(
+			t.PoolSize,
+			ants.WithMaxBlockingTasks(t.QueueSize),
+			ants.WithPreAlloc(true),
+		)
+		if err != nil {
+			return err
+		}
+		t.pool = p
+	case ExecutionModelChannel:
+		t.ch = make(chan taskRequest, t.QueueSize)
+		t.wg.Add(1)
+		go t.channelWorker()
 	}
-	t.pool = p
+
 	t.accepting.Store(true)
 	if logx.Enabled(zapcore.InfoLevel) {
 		t.sendStats = logx.AcquireTrafficCounter(
@@ -90,24 +114,73 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 
 	t.inflightCount.Add(1)
 	t.inflight.Add(1)
-	run := func() {
+	run := func(runCtx context.Context) {
 		defer t.inflight.Done()
 		defer t.inflightCount.Add(-1)
 		defer pkt.Release()
-		t.processAndSend(ctx, pkt)
+		t.processAndSend(runCtx, pkt)
 	}
 
-	if t.FastPath {
-		run()
+	switch t.ExecutionModel {
+	case ExecutionModelFastPath:
+		run(ctx)
 		return
-	}
-
-	if err := t.pool.Submit(run); err != nil {
+	case ExecutionModelPool:
+		if err := t.pool.Submit(func() { run(ctx) }); err != nil {
+			t.inflight.Done()
+			t.inflightCount.Add(-1)
+			pkt.Release()
+			logx.L().Errorw("task dropped packet due to full worker pool queue", "task", t.Name, "pool_size", t.PoolSize, "queue_size", t.QueueSize, "error", err)
+			return
+		}
+		return
+	case ExecutionModelChannel:
+		select {
+		case t.ch <- taskRequest{ctx: ctx, pkt: pkt}:
+			return
+		case <-ctx.Done():
+			t.inflight.Done()
+			t.inflightCount.Add(-1)
+			pkt.Release()
+			logx.L().Warnw("task dropped packet due to canceled context while enqueueing channel task", "task", t.Name, "queue_size", t.QueueSize, "error", ctx.Err())
+			return
+		}
+	default:
 		t.inflight.Done()
 		t.inflightCount.Add(-1)
 		pkt.Release()
-		logx.L().Errorw("task dropped packet due to full worker pool queue", "task", t.Name, "pool_size", t.PoolSize, "queue_size", t.QueueSize, "error", err)
+		logx.L().Errorw("task dropped packet due to unknown execution model", "task", t.Name, "execution_model", t.ExecutionModel)
 		return
+	}
+}
+
+func (t *Task) channelWorker() {
+	defer t.wg.Done()
+	for req := range t.ch {
+		func(r taskRequest) {
+			defer t.inflight.Done()
+			defer t.inflightCount.Add(-1)
+			defer r.pkt.Release()
+			t.processAndSend(r.ctx, r.pkt)
+		}(req)
+	}
+}
+
+func (t *Task) resolveExecutionModel() string {
+	if t.ExecutionModel == "" {
+		if t.FastPath {
+			return ExecutionModelFastPath
+		}
+		return ExecutionModelPool
+	}
+	switch t.ExecutionModel {
+	case ExecutionModelFastPath, ExecutionModelPool, ExecutionModelChannel:
+		return t.ExecutionModel
+	default:
+		if t.FastPath {
+			return ExecutionModelFastPath
+		}
+		return ExecutionModelPool
 	}
 }
 
@@ -118,6 +191,11 @@ func (t *Task) StopGraceful() {
 	if t.pool != nil {
 		t.pool.Release()
 		t.pool = nil
+	}
+	if t.ch != nil {
+		close(t.ch)
+		t.wg.Wait()
+		t.ch = nil
 	}
 	logx.UnregisterTaskRuntimeStats(t.Name)
 	if t.sendStats != nil {
@@ -193,7 +271,7 @@ func (t *Task) runtimeStats() logx.TaskRuntimeStats {
 		PoolSize:  t.PoolSize,
 		QueueSize: t.QueueSize,
 		Inflight:  t.inflightCount.Load(),
-		FastPath:  t.FastPath,
+		FastPath:  t.ExecutionModel == ExecutionModelFastPath,
 	}
 	if t.pool != nil {
 		stats.PoolRunning = t.pool.Running()
@@ -204,6 +282,13 @@ func (t *Task) runtimeStats() logx.TaskRuntimeStats {
 			if stats.QueueAvailable < 0 {
 				stats.QueueAvailable = 0
 			}
+		}
+	}
+	if t.ch != nil && stats.QueueSize > 0 {
+		stats.PoolWaiting = len(t.ch)
+		stats.QueueAvailable = cap(t.ch) - len(t.ch)
+		if stats.QueueAvailable < 0 {
+			stats.QueueAvailable = 0
 		}
 	}
 	return stats

@@ -56,6 +56,7 @@ type benchFileConfig struct {
 	UDPSinkReadBuf       *int   `json:"udp_sink_read_buf,omitempty"`
 	TaskFastPath         *bool  `json:"task_fast_path,omitempty"`
 	TaskPoolSize         *int   `json:"task_pool_size,omitempty"`
+	TaskExecutionModel   string `json:"task_execution_model,omitempty"`
 	LogLevel             string `json:"log_level,omitempty"`
 	LogFile              string `json:"log_file,omitempty"`
 	TrafficStatsInterval string `json:"traffic_stats_interval,omitempty"`
@@ -75,7 +76,8 @@ func main() {
 	udpSinkReaders := flag.Int("udp-sink-readers", max(1, runtime.NumCPU()/2), "number of concurrent UDP sink readers")
 	udpSinkReadBuf := flag.Int("udp-sink-read-buf", 16<<20, "UDP sink socket read buffer bytes")
 	taskFastPath := flag.Bool("task-fast-path", false, "whether benchmark task uses fast_path")
-	taskPoolSize := flag.Int("task-pool-size", 2048, "benchmark task worker pool size when fast_path=false")
+	taskPoolSize := flag.Int("task-pool-size", 2048, "benchmark task worker pool size when execution_model=pool")
+	taskExecutionModel := flag.String("task-execution-model", "", "task execution model: fastpath|pool|channel (empty means derive from task-fast-path)")
 	logLevel := flag.String("log-level", "warn", "benchmark runtime log level: debug|info|warn|error")
 	logFile := flag.String("log-file", "", "optional benchmark runtime log file")
 	trafficStatsInterval := flag.Duration("traffic-stats-interval", time.Second, "aggregated traffic stats log interval (e.g. 5s, 10s)")
@@ -86,7 +88,7 @@ func main() {
 	}
 
 	if *benchConfigPath != "" {
-		if err := applyBenchConfigFile(*benchConfigPath, mode, duration, warmup, payloadSize, workers, ppsPerWorker, ppsSweep, multicore, udpSinkReaders, udpSinkReadBuf, taskFastPath, taskPoolSize, logLevel, logFile, trafficStatsInterval); err != nil {
+		if err := applyBenchConfigFile(*benchConfigPath, mode, duration, warmup, payloadSize, workers, ppsPerWorker, ppsSweep, multicore, udpSinkReaders, udpSinkReadBuf, taskFastPath, taskPoolSize, taskExecutionModel, logLevel, logFile, trafficStatsInterval); err != nil {
 			logx.L().Errorw("load bench config failed", "error", err)
 			os.Exit(2)
 		}
@@ -121,7 +123,7 @@ func main() {
 
 	benchRun := func(proto string) {
 		for _, rate := range rates {
-			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf, *taskFastPath, *taskPoolSize)
+			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf, *taskFastPath, *taskPoolSize, *taskExecutionModel)
 			if err != nil {
 				logx.L().Errorw("benchmark failed", "proto", proto, "error", err)
 				os.Exit(1)
@@ -142,7 +144,7 @@ func main() {
 	}
 }
 
-func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Duration, payloadSize, workers, ppsPerWorker *int, ppsSweep *string, multicore *bool, udpSinkReaders, udpSinkReadBuf *int, taskFastPath *bool, taskPoolSize *int, logLevel, logFile *string, trafficStatsInterval *time.Duration) error {
+func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Duration, payloadSize, workers, ppsPerWorker *int, ppsSweep *string, multicore *bool, udpSinkReaders, udpSinkReadBuf *int, taskFastPath *bool, taskPoolSize *int, taskExecutionModel *string, logLevel, logFile *string, trafficStatsInterval *time.Duration) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -195,6 +197,9 @@ func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Dura
 	if cfg.TaskPoolSize != nil {
 		*taskPoolSize = *cfg.TaskPoolSize
 	}
+	if cfg.TaskExecutionModel != "" {
+		*taskExecutionModel = cfg.TaskExecutionModel
+	}
 	if cfg.LogLevel != "" {
 		*logLevel = cfg.LogLevel
 	}
@@ -233,7 +238,7 @@ func parseSweep(in string) ([]int, error) {
 }
 
 // runForwardBenchmark 负责该函数对应的核心逻辑，详见实现细节。
-func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int, taskFastPath bool, taskPoolSize int) (*result, error) {
+func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int, taskFastPath bool, taskPoolSize int, taskExecutionModel string) (*result, error) {
 	m := &metrics{}
 	basePort := map[string]int{"udp": 19100, "tcp": 19200}[proto]
 	if basePort == 0 {
@@ -258,7 +263,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	defer func() { _ = stopSink() }()
 
 	rt := app.NewRuntime()
-	cfg := benchConfig(proto, basePort, sinkAddr, multicore, taskFastPath, taskPoolSize)
+	cfg := benchConfig(proto, basePort, sinkAddr, multicore, taskFastPath, taskPoolSize, taskExecutionModel)
 	if err := rt.UpdateCache(ctx, cfg); err != nil {
 		return nil, fmt.Errorf("update cache: %w", err)
 	}
@@ -323,7 +328,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 }
 
 // benchConfig 负责该函数对应的核心逻辑，详见实现细节。
-func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize int) config.Config {
+func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize int, taskExecutionModel string) config.Config {
 	rc := config.ReceiverConfig{Multicore: multicore}
 	sc := config.SenderConfig{Concurrency: 1}
 	switch proto {
@@ -357,11 +362,12 @@ func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFas
 		},
 		Tasks: map[string]config.TaskConfig{
 			"t": {
-				PoolSize:  taskPoolSize,
-				FastPath:  taskFastPath,
-				Receivers: []string{"in"},
-				Pipelines: []string{"p"},
-				Senders:   []string{"out"},
+				PoolSize:       taskPoolSize,
+				FastPath:       taskFastPath,
+				ExecutionModel: taskExecutionModel,
+				Receivers:      []string{"in"},
+				Pipelines:      []string{"p"},
+				Senders:        []string{"out"},
 			},
 		},
 	}
