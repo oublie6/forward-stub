@@ -267,8 +267,11 @@ type TaskConfig struct {
 	// 用法：<=0 时运行时默认取 4096；CPU 富余且发送链路受限场景可调大，轻处理链路可按压测下调。
 	PoolSize int `json:"pool_size"`
 	// FastPath 控制是否在调用协程内同步处理（低延迟）。
-	// 用法：追求极低延迟可开启；若处理耗时较长建议关闭以隔离背压。
+	// 用法：兼容历史配置；当 ExecutionModel 为空时，FastPath=true 等价于 execution_model=fastpath。
 	FastPath bool `json:"fast_path"`
+	// ExecutionModel 指定任务执行模型（fastpath/pool/channel）。
+	// 用法："channel" 表示单 goroutine + 有界队列顺序处理，适用于需要 task 内保序且希望避免 receiver 串行执行放大的场景。
+	ExecutionModel string `json:"execution_model,omitempty"`
 	// QueueSize 是任务池在“满载时允许排队等待提交”的最大长度。
 	// 用法：>0 启用有界排队；<=0 时默认取 4096。该值越大，削峰能力越强但请求等待时延可能增大。
 	QueueSize int `json:"queue_size,omitempty"`
