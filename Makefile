@@ -10,10 +10,13 @@ CCR_NAMESPACE ?=
 CCR_REPOSITORY ?= $(APP_NAME)
 CCR_TAG ?= $(VERSION)
 CCR_TARGET_IMAGE ?= $(CCR_REGISTRY)/$(CCR_NAMESPACE)/$(CCR_REPOSITORY):$(CCR_TAG)
+DOCKER_LOGIN_REGISTRY ?= $(CCR_REGISTRY)
+DOCKER_USERNAME ?= default_user
+DOCKER_PASSWORD ?= default_password
 CONTAINER_NAME ?= $(APP_NAME)
 RUN_ARGS ?=
 
-.PHONY: build build-linux test perf verify vet package package-all docker-build docker-push docker-push-ccr docker-run docker-build-push docker-build-run docker-build-push-ccr clean
+.PHONY: build build-linux test perf verify vet package package-all docker-login docker-build docker-push docker-push-ccr docker-run docker-build-push docker-build-run docker-build-push-ccr clean
 
 # build: 本机构建当前平台二进制到 bin/。
 build:
@@ -47,12 +50,17 @@ package:
 package-all:
 	APP_NAME=$(APP_NAME) VERSION=$(VERSION) TARGETS="linux/arm64 linux/amd64 windows/amd64" ./scripts/package.sh
 
+# docker-login: 登录镜像仓库；可通过 DOCKER_LOGIN_REGISTRY/DOCKER_USERNAME/DOCKER_PASSWORD 覆盖默认值。
+docker-login:
+	@echo "docker login $(DOCKER_LOGIN_REGISTRY) with user $(DOCKER_USERNAME)"
+	@printf '%s' "$(DOCKER_PASSWORD)" | docker login $(DOCKER_LOGIN_REGISTRY) -u "$(DOCKER_USERNAME)" --password-stdin
+
 # docker-build: 基于当前 Dockerfile 构建容器镜像。
-docker-build:
+docker-build: docker-login
 	docker build --build-arg VERSION=$(VERSION) -t $(IMAGE) .
 
 # docker-push: 推送镜像到仓库；可通过 CCR_IMAGE 覆盖目标仓库地址。
-docker-push:
+docker-push: docker-login
 	@if [ -n "$(CCR_IMAGE)" ]; then \
 		echo "tag $(IMAGE) -> $(CCR_IMAGE)"; \
 		docker tag $(IMAGE) $(CCR_IMAGE); \
@@ -63,7 +71,7 @@ docker-push:
 	fi
 
 # docker-run: 使用 host 网络模式启动本地容器；可通过 RUN_ARGS 追加参数。
-docker-run:
+docker-run: docker-login
 	@if docker ps -a --format '{{.Names}}' | grep -wq "$(CONTAINER_NAME)"; then \
 		echo "remove existed container $(CONTAINER_NAME)"; \
 		docker rm -f $(CONTAINER_NAME); \
@@ -74,7 +82,7 @@ docker-run:
 docker-build-push: docker-build docker-push
 
 # docker-push-ccr: 推送镜像到腾讯云 CCR 指定地址。
-docker-push-ccr:
+docker-push-ccr: docker-login
 	@if [ -z "$(CCR_NAMESPACE)" ]; then \
 		echo "CCR_NAMESPACE is required, example: make docker-push-ccr CCR_NAMESPACE=my-team"; \
 		exit 1; \
