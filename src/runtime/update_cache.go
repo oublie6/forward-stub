@@ -113,16 +113,17 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 
 		logOpts := buildTaskPayloadLogOptions(name, tc, cfg.Logging)
 		tk := &task.Task{
-			Name:           name,
-			Pipelines:      pipes,
-			Senders:        sends,
-			PoolSize:       tc.PoolSize,
-			FastPath:       tc.FastPath,
-			ExecutionModel: tc.ExecutionModel,
-			QueueSize:      tc.QueueSize,
-			LogPayloadRecv: logOpts.recv,
-			LogPayloadSend: logOpts.send,
-			PayloadLogMax:  logOpts.max,
+			Name:             name,
+			Pipelines:        pipes,
+			Senders:          sends,
+			PoolSize:         tc.PoolSize,
+			FastPath:         tc.FastPath,
+			ExecutionModel:   tc.ExecutionModel,
+			QueueSize:        tc.QueueSize,
+			ChannelQueueSize: tc.ChannelQueueSize,
+			LogPayloadRecv:   logOpts.recv,
+			LogPayloadSend:   logOpts.send,
+			PayloadLogMax:    logOpts.max,
 		}
 		if err := tk.Start(); err != nil {
 			return err

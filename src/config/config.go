@@ -275,6 +275,9 @@ type TaskConfig struct {
 	// QueueSize 是任务池在“满载时允许排队等待提交”的最大长度。
 	// 用法：>0 启用有界排队；<=0 时默认取 4096。该值越大，削峰能力越强但请求等待时延可能增大。
 	QueueSize int `json:"queue_size,omitempty"`
+	// ChannelQueueSize 是 channel 执行模型下的有界缓冲长度。
+	// 用法：仅 execution_model=channel 时生效；<=0 时默认回退到 QueueSize，确保与协程池排队上限一致。
+	ChannelQueueSize int `json:"channel_queue_size,omitempty"`
 	// Receivers 是该任务订阅的接收端名称列表。
 	// 用法：填写 Config.Receivers 中已定义 key，支持多源汇聚。
 	Receivers []string `json:"receivers"`
@@ -329,6 +332,9 @@ func (c *Config) ApplyDefaults() {
 	for name, tc := range c.Tasks {
 		if tc.QueueSize <= 0 {
 			tc.QueueSize = DefaultTaskQueueSize
+		}
+		if tc.ChannelQueueSize <= 0 {
+			tc.ChannelQueueSize = tc.QueueSize
 		}
 		c.Tasks[name] = tc
 	}

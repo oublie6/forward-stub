@@ -62,3 +62,15 @@ func TestChannelExecutionModelKeepsOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestChannelExecutionModelDefaultsChannelQueueSizeFromQueueSize(t *testing.T) {
+	tk := &Task{Name: "ch-default", ExecutionModel: ExecutionModelChannel, QueueSize: 32}
+	if err := tk.Start(); err != nil {
+		t.Fatalf("start task: %v", err)
+	}
+	defer tk.StopGraceful()
+
+	if cap(tk.ch) != 32 {
+		t.Fatalf("unexpected channel capacity: got=%d want=32", cap(tk.ch))
+	}
+}

@@ -28,4 +28,10 @@ func TestValidateTaskExecutionModel(t *testing.T) {
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected invalid execution_model error")
 	}
+
+	cfg = baseConfigForTaskModel()
+	cfg.Tasks["t"] = TaskConfig{ExecutionModel: "channel", ChannelQueueSize: -1, Receivers: []string{"r"}, Pipelines: []string{"p"}, Senders: []string{"s"}}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected invalid channel_queue_size error")
+	}
 }

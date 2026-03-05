@@ -36,10 +36,11 @@ type Task struct {
 	Pipelines []*pipeline.Pipeline
 	Senders   []sender.Sender
 
-	PoolSize       int
-	FastPath       bool
-	QueueSize      int
-	ExecutionModel string
+	PoolSize         int
+	FastPath         bool
+	QueueSize        int
+	ChannelQueueSize int
+	ExecutionModel   string
 
 	LogPayloadRecv bool
 	LogPayloadSend bool
@@ -71,6 +72,9 @@ func (t *Task) Start() error {
 	if t.QueueSize <= 0 {
 		t.QueueSize = 4096
 	}
+	if t.ChannelQueueSize <= 0 {
+		t.ChannelQueueSize = t.QueueSize
+	}
 	mode := t.resolveExecutionModel()
 	t.ExecutionModel = mode
 
@@ -86,7 +90,7 @@ func (t *Task) Start() error {
 		}
 		t.pool = p
 	case ExecutionModelChannel:
-		t.ch = make(chan taskRequest, t.QueueSize)
+		t.ch = make(chan taskRequest, t.ChannelQueueSize)
 		t.wg.Add(1)
 		go t.channelWorker()
 	}
@@ -142,7 +146,7 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 			t.inflight.Done()
 			t.inflightCount.Add(-1)
 			pkt.Release()
-			logx.L().Warnw("task dropped packet due to canceled context while enqueueing channel task", "task", t.Name, "queue_size", t.QueueSize, "error", ctx.Err())
+			logx.L().Warnw("task dropped packet due to canceled context while enqueueing channel task", "task", t.Name, "queue_size", t.ChannelQueueSize, "error", ctx.Err())
 			return
 		}
 	default:
@@ -284,7 +288,8 @@ func (t *Task) runtimeStats() logx.TaskRuntimeStats {
 			}
 		}
 	}
-	if t.ch != nil && stats.QueueSize > 0 {
+	if t.ch != nil && t.ChannelQueueSize > 0 {
+		stats.QueueSize = t.ChannelQueueSize
 		stats.PoolWaiting = len(t.ch)
 		stats.QueueAvailable = cap(t.ch) - len(t.ch)
 		if stats.QueueAvailable < 0 {

@@ -21,6 +21,7 @@ func TestRunForwardBenchmarkChannelZeroLoss(t *testing.T) {
 		4<<20,
 		false,
 		1024,
+		1024,
 		"channel",
 	)
 	if err != nil {
