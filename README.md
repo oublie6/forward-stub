@@ -266,3 +266,37 @@ go run ./cmd/bench -mode tcp -duration 3s -warmup 1s -payload-size 512 \
 |---|---:|---:|---|---:|---:|
 | UDP | 512B | 2 | 20000,40000,60000,80000,100000 | 264.70 | 64625.21 |
 | TCP | 512B | 2 | 5000,10000,15000,20000,30000 | 78.38 | 19135.83 |
+
+### 7.4 三种执行模型多轮平均（0 丢包口径）
+
+为减少单次波动影响，本次对 `fastpath` / `pool` / `channel` 三种任务执行模型分别执行 3 轮 UDP 扫描测试（同一参数口径），每轮取 `loss_rate == 0` 的最大吞吐，再对 3 轮结果取平均。
+
+执行命令（每个模型重复 3 轮）：
+
+```bash
+# fastpath
+go run ./cmd/bench -mode udp -duration 3s -warmup 1s -payload-size 512 \
+  -workers 2 -pps-sweep 20000,40000,60000,80000,100000,120000 \
+  -task-execution-model fastpath -log-level info -traffic-stats-interval 1h
+
+# pool
+go run ./cmd/bench -mode udp -duration 3s -warmup 1s -payload-size 512 \
+  -workers 2 -pps-sweep 20000,40000,60000,80000,100000,120000 \
+  -task-execution-model pool -task-pool-size 2048 -log-level info -traffic-stats-interval 1h
+
+# channel
+go run ./cmd/bench -mode udp -duration 3s -warmup 1s -payload-size 512 \
+  -workers 2 -pps-sweep 20000,40000,60000,80000,100000,120000 \
+  -task-execution-model channel -task-channel-queue-size 4096 \
+  -log-level info -traffic-stats-interval 1h
+```
+
+各轮 0 丢包最大吞吐（Mbps）：
+
+| 执行模型 | 第 1 轮 | 第 2 轮 | 第 3 轮 | 3 轮平均 Mbps | 3 轮平均 pps |
+|---|---:|---:|---:|---:|---:|
+| fastpath | 156.44 | 316.66 | 296.93 | 256.68 | 62665.99 |
+| pool | 174.40 | 80.83 | 116.57 | 123.93 | 30257.15 |
+| channel | 215.95 | 221.96 | 196.79 | 211.57 | 51651.91 |
+
+结论（本机 3 轮均值）：`fastpath > channel > pool`。

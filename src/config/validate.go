@@ -34,6 +34,12 @@ func (c *Config) Validate() error {
 		if len(t.Senders) == 0 {
 			return fmt.Errorf("task %s has no senders", tn)
 		}
+		if t.ExecutionModel != "" && t.ExecutionModel != "fastpath" && t.ExecutionModel != "pool" && t.ExecutionModel != "channel" {
+			return fmt.Errorf("task %s unsupported execution_model %q", tn, t.ExecutionModel)
+		}
+		if t.ChannelQueueSize < 0 {
+			return fmt.Errorf("task %s channel_queue_size must be >= 0", tn)
+		}
 		for _, rn := range t.Receivers {
 			if _, ok := c.Receivers[rn]; !ok {
 				return fmt.Errorf("task %s receiver %s not found", tn, rn)
