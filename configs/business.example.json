@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "receivers": {
+    "recv_udp": {
+      "type": "udp_gnet",
+      "listen": "0.0.0.0:9000"
+    }
+  },
+  "senders": {
+    "send_tcp": {
+      "type": "tcp_gnet",
+      "remote": "127.0.0.1:9100"
+    }
+  },
+  "pipelines": {
+    "noop": []
+  },
+  "tasks": {
+    "task_demo": {
+      "execution_model": "pool",
+      "receivers": ["recv_udp"],
+      "pipelines": ["noop"],
+      "senders": ["send_tcp"]
+    }
+  }
+}

@@ -45,6 +45,34 @@ type Config struct {
 	Tasks map[string]TaskConfig `json:"tasks"`
 }
 
+// SystemConfig 仅包含需要重启后生效的系统级配置。
+type SystemConfig struct {
+	Control ControlConfig `json:"control,omitempty"`
+	Logging LoggingConfig `json:"logging"`
+}
+
+// BusinessConfig 仅包含支持热重载的业务拓扑配置。
+type BusinessConfig struct {
+	Version   int64                     `json:"version"`
+	Receivers map[string]ReceiverConfig `json:"receivers"`
+	Senders   map[string]SenderConfig   `json:"senders"`
+	Pipelines map[string][]StageConfig  `json:"pipelines"`
+	Tasks     map[string]TaskConfig     `json:"tasks"`
+}
+
+// Merge 将系统配置与业务配置拼装为运行时使用的完整 Config。
+func (s SystemConfig) Merge(b BusinessConfig) Config {
+	return Config{
+		Version:   b.Version,
+		Control:   s.Control,
+		Logging:   s.Logging,
+		Receivers: b.Receivers,
+		Senders:   b.Senders,
+		Pipelines: b.Pipelines,
+		Tasks:     b.Tasks,
+	}
+}
+
 // ControlConfig 描述远端配置中心参数。
 type ControlConfig struct {
 	// API 是控制面接口地址（例如 http(s)://host:port/path）。
