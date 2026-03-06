@@ -16,6 +16,76 @@ go run . -config ./configs/example.json
 
 > 程序启动必须显式传入 `-config` 参数。
 
+
+### 2.1 运行中配置热更新（ConfigMap/本地文件）
+
+- 服务启动后支持通过 `kill` 信号触发重读配置文件并热更新任务：
+  - `kill -HUP <pid>`
+  - `kill -USR1 <pid>`
+- 建议在 Kubernetes 中先更新 ConfigMap 并等待挂载文件刷新，再发送信号触发加载。
+- 当 `receivers/senders/pipelines` 不变时走任务级增量更新（新增/更新/删除 task）；否则自动全量替换。
+- 启动后会立即输出 `traffic stats summary`，无流量时也会打印全量任务运行信息。
+
+## 配置完整示例与字段说明
+
+```json
+{
+  "version": 1001,
+  "control": {"api": "", "timeout_sec": 5},
+  "logging": {
+    "level": "info",
+    "file": "",
+    "max_size_mb": 100,
+    "max_backups": 5,
+    "max_age_days": 30,
+    "compress": true,
+    "traffic_stats_interval": "1s",
+    "traffic_stats_sample_every": 1,
+    "payload_log_tasks": ["task_udp_to_tcp"],
+    "payload_log_recv": true,
+    "payload_log_send": true,
+    "payload_log_max_bytes": 256
+  },
+  "receivers": {
+    "rx_udp": {"type": "udp_gnet", "listen": "0.0.0.0:19000", "multicore": true},
+    "rx_tcp": {"type": "tcp_gnet", "listen": "0.0.0.0:19001", "frame": "u16be", "multicore": true},
+    "rx_kafka": {"type": "kafka", "listen": "127.0.0.1:9092", "topic": "in-topic", "group": "forward-stub-group", "start_offset": "latest"},
+    "rx_sftp": {"type": "sftp", "listen": "127.0.0.1:22", "username": "demo", "password": "demo", "remote_dir": "/input", "poll_interval_sec": 3, "chunk_size": 65536}
+  },
+  "senders": {
+    "tx_udp": {"type": "udp_unicast", "local_ip": "0.0.0.0", "local_port": 20000, "remote": "127.0.0.1:21000"},
+    "tx_mcast": {"type": "udp_multicast", "local_ip": "0.0.0.0", "local_port": 20001, "remote": "239.0.0.10:21001", "iface": "eth0", "ttl": 16, "loop": false},
+    "tx_tcp": {"type": "tcp_gnet", "remote": "127.0.0.1:21002", "frame": "u16be", "concurrency": 4},
+    "tx_kafka": {"type": "kafka", "remote": "127.0.0.1:9092", "topic": "out-topic", "acks": -1, "linger_ms": 5, "batch_max_bytes": 1048576, "compression": "lz4"},
+    "tx_sftp": {"type": "sftp", "remote": "127.0.0.1:22", "username": "demo", "password": "demo", "remote_dir": "/output", "temp_suffix": ".tmp"}
+  },
+  "pipelines": {
+    "pipe_bytes": [{"type": "trim"}, {"type": "append", "value": "0a"}]
+  },
+  "tasks": {
+    "task_udp_to_tcp": {
+      "receivers": ["rx_udp"],
+      "pipelines": ["pipe_bytes"],
+      "senders": ["tx_tcp"],
+      "pool_size": 4096,
+      "execution_model": "pool",
+      "queue_size": 4096,
+      "channel_queue_size": 0,
+      "log_payload_recv": true,
+      "log_payload_send": true
+    }
+  }
+}
+```
+
+字段要点：
+- `logging.traffic_stats_interval`：聚合日志周期。
+- `logging.payload_log_*`：payload 日志开关 + 白名单。
+- `receivers/senders.<name>.type`：决定协议和可用字段。
+- `tasks.<name>.execution_model`：`fastpath | pool | channel`。
+- `tasks.<name>.receivers/pipelines/senders`：引用关系，必须在对应 map 中存在。
+
+
 ## 3. Docker 部署（详细步骤）
 
 ### 3.1 构建镜像
