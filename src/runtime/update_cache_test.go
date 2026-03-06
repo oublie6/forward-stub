@@ -2,9 +2,11 @@ package runtime
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
+	"forward-stub/src/config"
 	"forward-stub/src/packet"
 	"forward-stub/src/sender"
 	"forward-stub/src/task"
@@ -139,5 +141,53 @@ func TestDispatchSingleSubscriberReusesOriginalPacket(t *testing.T) {
 	}
 	if released != 1 {
 		t.Fatalf("original packet should be released once by task, got=%d", released)
+	}
+}
+
+type spyReceiver struct {
+	name      string
+	stopCalls int
+}
+
+func (r *spyReceiver) Name() string { return r.name }
+
+func (r *spyReceiver) Key() string { return r.name }
+
+func (r *spyReceiver) Start(_ context.Context, _ func(*packet.Packet)) error { return nil }
+
+func (r *spyReceiver) Stop(_ context.Context) error {
+	r.stopCalls++
+	return nil
+}
+
+func TestReplaceAllCompileErrorKeepsExistingRuntime(t *testing.T) {
+	ctx := context.Background()
+
+	r := &spyReceiver{name: "r1"}
+	s := &captureSender{name: "s1"}
+
+	st := NewStore()
+	st.receivers["r1"] = &ReceiverState{Name: "r1", Running: true, Recv: r}
+	st.senders["s1"] = &SenderState{Name: "s1", S: s, Refs: 1}
+
+	cfg := config.Config{
+		Version: 2,
+		Pipelines: map[string][]config.StageConfig{
+			"broken": {{Type: "definitely_unknown_stage"}},
+		},
+	}
+
+	err := st.replaceAll(ctx, cfg)
+	if err == nil {
+		t.Fatalf("replaceAll should fail for invalid pipeline")
+	}
+	if !strings.Contains(err.Error(), "unknown stage type") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if r.stopCalls != 0 {
+		t.Fatalf("existing receivers should keep running on compile failure, stop calls=%d", r.stopCalls)
+	}
+	if len(st.receivers) != 1 || st.receivers["r1"] == nil {
+		t.Fatalf("existing runtime state should remain intact after compile failure")
 	}
 }

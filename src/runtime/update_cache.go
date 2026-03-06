@@ -99,59 +99,44 @@ func (st *Store) canApplyTaskDelta(cfg config.Config) bool {
 }
 
 func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
-	_ = st.StopAll(ctx)
-
 	compiled, err := CompilePipelines(cfg.Pipelines)
 	if err != nil {
 		return err
 	}
 
-	// 一次性替换 store 内部索引，确保新配置以完整快照生效。
-	st.mu.Lock()
-	st.receivers = make(map[string]*ReceiverState)
-	st.senders = make(map[string]*SenderState)
-	st.tasks = make(map[string]*TaskState)
-	st.pipelines = compiled
-	st.pipelineCfg = cfg.Pipelines
-	st.subs = make(map[string]map[string]struct{})
-	st.version = cfg.Version
-	st.mu.Unlock()
-	st.setDispatchSubs(map[string][]*TaskState{})
-
-	// 1) 构建 senders：任务阶段需要引用 sender 实例。
+	newSenders := make(map[string]*SenderState, len(cfg.Senders))
 	for name, sc := range cfg.Senders {
 		s, err := buildSender(name, sc, cfg.Logging.Level)
 		if err != nil {
 			return err
 		}
-		st.mu.Lock()
-		st.senders[name] = &SenderState{Name: name, Cfg: sc, S: s, Refs: 0}
-		st.mu.Unlock()
+		newSenders[name] = &SenderState{Name: name, Cfg: sc, S: s, Refs: 0}
 	}
 
-	// 2) 构建 tasks：绑定 pipeline + sender，并建立 receiver 订阅关系。
+	newTasks := make(map[string]*TaskState, len(cfg.Tasks))
+	newSubs := make(map[string]map[string]struct{})
+	startedTasks := make([]*task.Task, 0, len(cfg.Tasks))
 	for name, tc := range cfg.Tasks {
 		pipes := make([]*pipeline.Pipeline, 0, len(tc.Pipelines))
 		for _, pn := range tc.Pipelines {
 			cp, ok := compiled[pn]
 			if !ok {
+				cleanupPreparedRuntime(startedTasks, newSenders, nil)
 				return fmt.Errorf("task %s pipeline %s not found", name, pn)
 			}
 			pipes = append(pipes, cp.P)
 		}
 
 		sends := make([]sender.Sender, 0, len(tc.Senders))
-		st.mu.Lock()
 		for _, sn := range tc.Senders {
-			ss, ok := st.senders[sn]
+			ss, ok := newSenders[sn]
 			if !ok {
-				st.mu.Unlock()
+				cleanupPreparedRuntime(startedTasks, newSenders, nil)
 				return fmt.Errorf("task %s sender %s not found", name, sn)
 			}
 			ss.Refs++
 			sends = append(sends, ss.S)
 		}
-		st.mu.Unlock()
 
 		logOpts := buildTaskPayloadLogOptions(name, tc, cfg.Logging)
 		tk := &task.Task{
@@ -168,19 +153,48 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 			PayloadLogMax:    logOpts.max,
 		}
 		if err := tk.Start(); err != nil {
+			cleanupPreparedRuntime(startedTasks, newSenders, nil)
 			return err
 		}
+		startedTasks = append(startedTasks, tk)
 
-		st.mu.Lock()
-		st.tasks[name] = &TaskState{Name: name, Cfg: tc, T: tk}
+		newTasks[name] = &TaskState{Name: name, Cfg: tc, T: tk}
 		for _, rn := range tc.Receivers {
-			if _, ok := st.subs[rn]; !ok {
-				st.subs[rn] = make(map[string]struct{})
+			if _, ok := newSubs[rn]; !ok {
+				newSubs[rn] = make(map[string]struct{})
 			}
-			st.subs[rn][name] = struct{}{}
+			newSubs[rn][name] = struct{}{}
 		}
-		st.mu.Unlock()
 	}
+
+	newReceivers := make(map[string]*ReceiverState, len(cfg.Receivers))
+	for name, rc := range cfg.Receivers {
+		r, err := buildReceiver(name, rc, cfg.Logging.Level)
+		if err != nil {
+			cleanupPreparedRuntime(startedTasks, newSenders, newReceivers)
+			return err
+		}
+		newReceivers[name] = &ReceiverState{Name: name, Cfg: rc, Recv: r, Running: true}
+		if _, ok := newSubs[name]; !ok {
+			newSubs[name] = make(map[string]struct{})
+		}
+	}
+
+	if err := st.StopAll(ctx); err != nil {
+		cleanupPreparedRuntime(startedTasks, newSenders, newReceivers)
+		return err
+	}
+
+	// 一次性替换 store 内部索引，确保新配置以完整快照生效。
+	st.mu.Lock()
+	st.receivers = newReceivers
+	st.senders = newSenders
+	st.tasks = newTasks
+	st.pipelines = compiled
+	st.pipelineCfg = cfg.Pipelines
+	st.subs = newSubs
+	st.version = cfg.Version
+	st.mu.Unlock()
 
 	// 3) 先生成 dispatch 只读快照，再启动 receivers，避免热更新窗口漏转。
 	dispatchSubs := make(map[string][]*TaskState, len(st.subs))
@@ -197,20 +211,9 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	st.mu.RUnlock()
 	st.setDispatchSubs(dispatchSubs)
 
-	// 4) 构建并启动 receivers：消息入口最终回调 dispatch。
-	for name, rc := range cfg.Receivers {
-		r, err := buildReceiver(name, rc, cfg.Logging.Level)
-		if err != nil {
-			return err
-		}
-		rs := &ReceiverState{Name: name, Cfg: rc, Recv: r, Running: true}
-		st.mu.Lock()
-		st.receivers[name] = rs
-		if _, ok := st.subs[name]; !ok {
-			st.subs[name] = make(map[string]struct{})
-		}
-		st.mu.Unlock()
-
+	// 4) 启动预构建 receivers：消息入口最终回调 dispatch。
+	for name, rs := range newReceivers {
+		r := rs.Recv
 		go func(r receiver.Receiver, rn string) {
 			if err := r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) }); err != nil {
 				logx.L().Errorw("receiver stopped with error", "receiver", rn, "error", err)
@@ -219,6 +222,18 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	}
 
 	return nil
+}
+
+func cleanupPreparedRuntime(startedTasks []*task.Task, newSenders map[string]*SenderState, newReceivers map[string]*ReceiverState) {
+	for _, started := range startedTasks {
+		started.StopGraceful()
+	}
+	for _, ss := range newSenders {
+		_ = ss.S.Close(context.Background())
+	}
+	for _, rs := range newReceivers {
+		_ = rs.Recv.Stop(context.Background())
+	}
 }
 
 func (st *Store) applyTaskDelta(ctx context.Context, cfg config.Config) error {
