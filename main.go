@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"syscall"
 	"time"
 
 	"forward-stub/src/app"
@@ -68,12 +67,13 @@ func main() {
 	}
 
 	lg.Info("forward-stub started. Press Ctrl+C to stop.")
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGUSR1)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, supportedSignals()...)
+	defer signal.Stop(sigCh)
+
 	for {
-		s := <-sig
-		switch s {
-		case syscall.SIGHUP, syscall.SIGUSR1:
+		s := <-sigCh
+		if isReloadSignal(s) {
 			lg.Infow("received reload signal", "signal", s.String())
 			next, err := loadRuntimeConfig(*localPath)
 			if err != nil {
@@ -85,13 +85,17 @@ func main() {
 				continue
 			}
 			lg.Infow("reload config success", "signal", s.String(), "version", next.Version)
-		case syscall.SIGINT, syscall.SIGTERM:
+			continue
+		}
+
+		if isStopSignal(s) {
 			_ = rt.Stop(context.Background())
 			lg.Info("forward-stub stopped.")
 			return
 		}
-	}
 
+		lg.Infow("received unsupported signal", "signal", s.String())
+	}
 }
 
 func loadRuntimeConfig(localPath string) (config.Config, error) {
