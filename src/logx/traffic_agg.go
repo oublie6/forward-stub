@@ -97,6 +97,19 @@ func lookupTaskRuntimeStats(task string) (TaskRuntimeStats, bool) {
 	return fn(), true
 }
 
+func listTaskRuntimeStats() map[string]TaskRuntimeStats {
+	taskRuntimeStatsMu.RLock()
+	defer taskRuntimeStatsMu.RUnlock()
+	out := make(map[string]TaskRuntimeStats, len(taskRuntimeStatsFn))
+	for task, fn := range taskRuntimeStatsFn {
+		if fn == nil {
+			continue
+		}
+		out[task] = fn()
+	}
+	return out
+}
+
 type trafficCounter struct {
 	msg    string
 	fields []any
@@ -197,6 +210,7 @@ func (h *trafficStatsHub) release(key string) {
 func (h *trafficStatsHub) loop() {
 	startedAt := time.Now()
 	interval := trafficStatsInterval()
+	h.flush(time.Since(startedAt), interval)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -218,17 +232,24 @@ func (h *trafficStatsHub) flush(elapsed, interval time.Duration) {
 		cs = append(cs, c)
 	}
 	h.mu.RUnlock()
-	if len(cs) == 0 {
-		return
-	}
 	summary := newTrafficSummary(elapsed)
+	seenTask := make(map[string]struct{})
 	for _, c := range cs {
 		pkts := c.packets.Load()
 		b := c.bytes.Load()
-		if pkts == 0 {
+		if pkts == 0 && c.role != "task" {
 			continue
 		}
 		summary.add(c, pkts, b, interval)
+		if c.role == "task" && c.name != "" {
+			seenTask[c.name] = struct{}{}
+		}
+	}
+	for task, runtime := range listTaskRuntimeStats() {
+		if _, ok := seenTask[task]; ok {
+			continue
+		}
+		summary.addRuntimeOnlyTask(task, runtime)
 	}
 	summary.setMemoryPool()
 	if summary.hasData() {
@@ -334,11 +355,28 @@ func (s *trafficSummary) setMemoryPool() {
 }
 
 func (s *trafficSummary) hasData() bool {
-	return len(s.tasks) > 0
+	return len(s.tasks) > 0 || s.memoryPool != ""
 }
 
 func (s *trafficSummary) log() {
 	L().Infow("traffic stats summary", "uptime", s.uptime, "memory_pool", s.memoryPool, "tasks", s.tasks)
+}
+
+func (s *trafficSummary) addRuntimeOnlyTask(task string, runtime TaskRuntimeStats) {
+	s.tasks = append(s.tasks, taskAggregateStats{
+		Task:      task,
+		Direction: "send",
+		WorkerPool: &workerPoolStats{
+			Size:           runtime.PoolSize,
+			Running:        runtime.PoolRunning,
+			Free:           runtime.PoolFree,
+			Waiting:        runtime.PoolWaiting,
+			QueueSize:      runtime.QueueSize,
+			QueueAvailable: runtime.QueueAvailable,
+			Inflight:       runtime.Inflight,
+			FastPath:       runtime.FastPath,
+		},
+	})
 }
 
 func parseTrafficMeta(fields []any) (role string, name string, key string) {

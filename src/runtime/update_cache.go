@@ -4,6 +4,8 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -58,6 +60,45 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		lg.Infow("updating runtime cache", "version", cfg.Version, "receivers", len(cfg.Receivers), "tasks", len(cfg.Tasks), "senders", len(cfg.Senders))
 	}
 
+	if st.canApplyTaskDelta(cfg) {
+		if err := st.applyTaskDelta(ctx, cfg); err != nil {
+			return err
+		}
+	} else {
+		if err := st.replaceAll(ctx, cfg); err != nil {
+			return err
+		}
+	}
+
+	if logx.Enabled(zapcore.InfoLevel) {
+		lg.Infow("active tasks snapshot", "tasks", st.taskSnapshot())
+	}
+
+	// 给 gnet 一个很短的启动时间，避免立即 Stop/Update 时边界问题。
+	time.Sleep(10 * time.Millisecond)
+	if logx.Enabled(zapcore.InfoLevel) {
+		lg.Infow("runtime cache updated", "version", cfg.Version, "cost", time.Since(start))
+	}
+	return nil
+}
+
+func (st *Store) canApplyTaskDelta(cfg config.Config) bool {
+	st.mu.RLock()
+	defer st.mu.RUnlock()
+	if len(st.tasks) == 0 {
+		return false
+	}
+	for _, rs := range st.receivers {
+		if !rs.Running {
+			return false
+		}
+	}
+	return reflect.DeepEqual(cfg.Receivers, receiverConfigSnapshot(st.receivers)) &&
+		reflect.DeepEqual(cfg.Senders, senderConfigSnapshot(st.senders)) &&
+		reflect.DeepEqual(cfg.Pipelines, st.pipelineCfg)
+}
+
+func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	_ = st.StopAll(ctx)
 
 	compiled, err := CompilePipelines(cfg.Pipelines)
@@ -71,6 +112,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	st.senders = make(map[string]*SenderState)
 	st.tasks = make(map[string]*TaskState)
 	st.pipelines = compiled
+	st.pipelineCfg = cfg.Pipelines
 	st.subs = make(map[string]map[string]struct{})
 	st.version = cfg.Version
 	st.mu.Unlock()
@@ -171,17 +213,205 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 
 		go func(r receiver.Receiver, rn string) {
 			if err := r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) }); err != nil {
-				lg.Errorw("receiver stopped with error", "receiver", rn, "error", err)
+				logx.L().Errorw("receiver stopped with error", "receiver", rn, "error", err)
 			}
 		}(r, name)
 	}
 
-	// 给 gnet 一个很短的启动时间，避免立即 Stop/Update 时边界问题。
-	time.Sleep(10 * time.Millisecond)
+	return nil
+}
+
+func (st *Store) applyTaskDelta(ctx context.Context, cfg config.Config) error {
+	st.mu.Lock()
+	oldTasks := make(map[string]config.TaskConfig, len(st.tasks))
+	for name, ts := range st.tasks {
+		oldTasks[name] = ts.Cfg
+	}
+	st.version = cfg.Version
+	st.mu.Unlock()
+
+	removed := make([]string, 0)
+	updated := make([]string, 0)
+	added := make([]string, 0)
+
+	for name := range oldTasks {
+		newCfg, ok := cfg.Tasks[name]
+		if !ok {
+			removed = append(removed, name)
+			continue
+		}
+		if !reflect.DeepEqual(oldTasks[name], newCfg) {
+			updated = append(updated, name)
+		}
+	}
+	for name := range cfg.Tasks {
+		if _, ok := oldTasks[name]; !ok {
+			added = append(added, name)
+		}
+	}
+
+	sort.Strings(removed)
+	sort.Strings(updated)
+	sort.Strings(added)
+
+	for _, name := range removed {
+		st.removeTask(name)
+	}
+	for _, name := range updated {
+		st.removeTask(name)
+		if err := st.addTask(name, cfg.Tasks[name], cfg.Logging); err != nil {
+			return err
+		}
+	}
+	for _, name := range added {
+		if err := st.addTask(name, cfg.Tasks[name], cfg.Logging); err != nil {
+			return err
+		}
+	}
+
+	st.rebuildDispatchSubs()
 	if logx.Enabled(zapcore.InfoLevel) {
-		lg.Infow("runtime cache updated", "version", cfg.Version, "cost", time.Since(start))
+		logx.L().Infow("runtime task delta applied", "version", cfg.Version, "added", added, "updated", updated, "removed", removed)
 	}
 	return nil
+}
+
+func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingConfig) error {
+	st.mu.RLock()
+	compiled := st.pipelines
+	st.mu.RUnlock()
+
+	pipes := make([]*pipeline.Pipeline, 0, len(tc.Pipelines))
+	for _, pn := range tc.Pipelines {
+		cp, ok := compiled[pn]
+		if !ok {
+			return fmt.Errorf("task %s pipeline %s not found", name, pn)
+		}
+		pipes = append(pipes, cp.P)
+	}
+
+	sends := make([]sender.Sender, 0, len(tc.Senders))
+	st.mu.Lock()
+	for _, sn := range tc.Senders {
+		ss, ok := st.senders[sn]
+		if !ok {
+			st.mu.Unlock()
+			return fmt.Errorf("task %s sender %s not found", name, sn)
+		}
+		ss.Refs++
+		sends = append(sends, ss.S)
+	}
+	st.mu.Unlock()
+
+	logOpts := buildTaskPayloadLogOptions(name, tc, lc)
+	tk := &task.Task{
+		Name:             name,
+		Pipelines:        pipes,
+		Senders:          sends,
+		PoolSize:         tc.PoolSize,
+		FastPath:         tc.FastPath,
+		ExecutionModel:   tc.ExecutionModel,
+		QueueSize:        tc.QueueSize,
+		ChannelQueueSize: tc.ChannelQueueSize,
+		LogPayloadRecv:   logOpts.recv,
+		LogPayloadSend:   logOpts.send,
+		PayloadLogMax:    logOpts.max,
+	}
+	if err := tk.Start(); err != nil {
+		return err
+	}
+
+	st.mu.Lock()
+	st.tasks[name] = &TaskState{Name: name, Cfg: tc, T: tk}
+	for _, rn := range tc.Receivers {
+		if _, ok := st.subs[rn]; !ok {
+			st.subs[rn] = make(map[string]struct{})
+		}
+		st.subs[rn][name] = struct{}{}
+	}
+	st.mu.Unlock()
+	return nil
+}
+
+func (st *Store) removeTask(name string) {
+	st.mu.Lock()
+	ts := st.tasks[name]
+	if ts != nil {
+		delete(st.tasks, name)
+		for _, rn := range ts.Cfg.Receivers {
+			if sub, ok := st.subs[rn]; ok {
+				delete(sub, name)
+			}
+		}
+		for _, sn := range ts.Cfg.Senders {
+			if ss, ok := st.senders[sn]; ok {
+				ss.Refs--
+			}
+		}
+	}
+	st.mu.Unlock()
+	if ts != nil {
+		ts.T.StopGraceful()
+	}
+}
+
+func (st *Store) rebuildDispatchSubs() {
+	dispatchSubs := make(map[string][]*TaskState)
+	st.mu.Lock()
+	for name, ss := range st.senders {
+		if ss.Refs > 0 {
+			continue
+		}
+		_ = ss.S.Close(context.Background())
+		delete(st.senders, name)
+	}
+	for rn, sub := range st.subs {
+		tasks := make([]*TaskState, 0, len(sub))
+		for tn := range sub {
+			if ts := st.tasks[tn]; ts != nil {
+				tasks = append(tasks, ts)
+			}
+		}
+		dispatchSubs[rn] = tasks
+	}
+	st.mu.Unlock()
+	st.setDispatchSubs(dispatchSubs)
+}
+
+func (st *Store) taskSnapshot() []map[string]any {
+	st.mu.RLock()
+	defer st.mu.RUnlock()
+	out := make([]map[string]any, 0, len(st.tasks))
+	for name, ts := range st.tasks {
+		out = append(out, map[string]any{
+			"task":            name,
+			"receivers":       ts.Cfg.Receivers,
+			"pipelines":       ts.Cfg.Pipelines,
+			"senders":         ts.Cfg.Senders,
+			"execution_model": ts.T.ExecutionModel,
+			"queue_size":      ts.T.QueueSize,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i]["task"].(string) < out[j]["task"].(string)
+	})
+	return out
+}
+
+func receiverConfigSnapshot(m map[string]*ReceiverState) map[string]config.ReceiverConfig {
+	out := make(map[string]config.ReceiverConfig, len(m))
+	for n, s := range m {
+		out[n] = s.Cfg
+	}
+	return out
+}
+
+func senderConfigSnapshot(m map[string]*SenderState) map[string]config.SenderConfig {
+	out := make(map[string]config.SenderConfig, len(m))
+	for n, s := range m {
+		out[n] = s.Cfg
+	}
+	return out
 }
 
 // dispatch 将单个输入包 fan-out 到订阅当前 receiver 的所有任务。

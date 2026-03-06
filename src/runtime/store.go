@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"context"
+	"forward-stub/src/config"
 	"sync"
 	"sync/atomic"
 
@@ -25,7 +26,8 @@ type Store struct {
 	senders   map[string]*SenderState
 	tasks     map[string]*TaskState
 
-	pipelines map[string]*CompiledPipeline
+	pipelines   map[string]*CompiledPipeline
+	pipelineCfg map[string][]config.StageConfig
 
 	subs map[string]map[string]struct{}
 
@@ -36,11 +38,12 @@ type Store struct {
 // NewStore 负责该函数对应的核心逻辑，详见实现细节。
 func NewStore() *Store {
 	s := &Store{
-		receivers: make(map[string]*ReceiverState),
-		senders:   make(map[string]*SenderState),
-		tasks:     make(map[string]*TaskState),
-		pipelines: make(map[string]*CompiledPipeline),
-		subs:      make(map[string]map[string]struct{}),
+		receivers:   make(map[string]*ReceiverState),
+		senders:     make(map[string]*SenderState),
+		tasks:       make(map[string]*TaskState),
+		pipelines:   make(map[string]*CompiledPipeline),
+		pipelineCfg: make(map[string][]config.StageConfig),
+		subs:        make(map[string]map[string]struct{}),
 	}
 	s.dispatchSubs.Store(map[string][]*TaskState{})
 	return s
