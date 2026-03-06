@@ -108,6 +108,7 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	for name, sc := range cfg.Senders {
 		s, err := buildSender(name, sc, cfg.Logging.Level)
 		if err != nil {
+			cleanupPreparedRuntime(nil, newSenders, nil)
 			return err
 		}
 		newSenders[name] = &SenderState{Name: name, Cfg: sc, S: s, Refs: 0}
