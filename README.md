@@ -19,12 +19,14 @@ go run . -config ./configs/example.json
 
 ### 2.1 运行中配置热更新（ConfigMap/本地文件）
 
-- 服务启动后支持通过 `kill` 信号触发重读配置文件并热更新任务：
+- 服务启动后默认开启配置文件监听（轮询间隔 2 秒），当挂载的 ConfigMap 文件内容变化时会自动重读配置并热更新任务。
+- 同时保留手动信号触发重载能力：
   - `kill -HUP <pid>`
   - `kill -USR1 <pid>`
-- 建议在 Kubernetes 中先更新 ConfigMap 并等待挂载文件刷新，再发送信号触发加载。
+- Kubernetes 场景下推荐先更新 ConfigMap，待容器内挂载文件刷新后即可自动生效；如需立即触发也可继续发送上面的信号。
 - 当 `receivers/senders/pipelines` 不变时走任务级增量更新（新增/更新/删除 task）；否则自动全量替换。
 - 启动后会立即输出 `traffic stats summary`，无流量时也会打印全量任务运行信息。
+- 聚合统计日志以**格式化 JSON**打印，`tasks` 项不再输出 `direction` 字段，重点展示 task 维度吞吐和 worker pool 运行态。
 
 ## 配置完整示例与字段说明
 
@@ -219,7 +221,21 @@ kubectl -n forward-stub run forward-stub \
 kubectl -n forward-stub logs -f pod/forward-stub
 ```
 
-## 5. 目录说明（精简）
+## 5. 功能测试（配置热更新）
+
+执行命令：
+
+```bash
+go test ./... 
+go test ./... -run TestReadConfigFingerprintChangesWithContent
+```
+
+验证点：
+- 修改配置文件内容后，指纹发生变化，可触发监听重载。
+- 手动信号重载路径保持兼容（`SIGHUP`/`SIGUSR1` 逻辑未移除）。
+- 流量聚合日志为 JSON 格式化输出，且 `direction` 字段已移除。
+
+## 6. 目录说明（精简）
 
 ```text
 .
@@ -231,11 +247,11 @@ kubectl -n forward-stub logs -f pod/forward-stub
 └── docs/technical-architecture.md
 ```
 
-## 6. 参考文档
+## 7. 参考文档
 
 - 技术架构文档：`docs/technical-architecture.md`
 
-## 7. 吞吐量测试复验（多次实验取平均）
+## 8. 吞吐量测试复验（多次实验取平均）
 
 为复验当前仓库中的吞吐相关 benchmark，本次在同一环境下执行了 5 轮重复实验（`-count=5`），并对每个子用例计算平均值。
 

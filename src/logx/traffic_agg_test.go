@@ -1,7 +1,6 @@
 package logx
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -26,11 +25,11 @@ func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
 	s := newTrafficSummary(3 * time.Second)
 	c := &trafficCounter{role: "task", name: "task-a", key: "send"}
 	s.add(c, 10, 100, time.Second)
-	if len(s.tasks) != 1 {
-		t.Fatalf("expected one task summary item, got %d", len(s.tasks))
+	if len(s.Tasks) != 1 {
+		t.Fatalf("expected one task summary item, got %d", len(s.Tasks))
 	}
-	item := s.tasks[0]
-	if item.Task != "task-a" || item.Direction != "send" {
+	item := s.Tasks[0]
+	if item.Task != "task-a" {
 		t.Fatalf("unexpected task aggregate identity: %+v", item)
 	}
 	if item.TotalPackets != 10 || item.TotalBytes != 100 {
@@ -61,18 +60,14 @@ func TestTrafficSummaryMemoryPoolRenderedOnceInSummary(t *testing.T) {
 
 	s := newTrafficSummary(2 * time.Second)
 	s.setMemoryPool()
-	checks := []string{
-		"inuse_buffers=",
-		"inuse_bytes=",
-		"cached_bytes=",
-		"total_bytes=",
-		"gets=",
-		"puts=",
+	if s.MemoryPool.InUseBuffers <= 0 {
+		t.Fatalf("expected in-use buffers > 0, got %+v", s.MemoryPool)
 	}
-	for _, want := range checks {
-		if !strings.Contains(s.memoryPool, want) {
-			t.Fatalf("memory pool summary missing %q: %s", want, s.memoryPool)
-		}
+	if s.MemoryPool.InUseBytes <= 0 || s.MemoryPool.TotalBytes <= 0 {
+		t.Fatalf("expected byte counters > 0, got %+v", s.MemoryPool)
+	}
+	if s.MemoryPool.Gets <= 0 {
+		t.Fatalf("expected gets > 0, got %+v", s.MemoryPool)
 	}
 }
 
@@ -80,11 +75,11 @@ func TestTrafficSummaryIncludesRuntimeOnlyTaskWithoutTraffic(t *testing.T) {
 	stats := TaskRuntimeStats{PoolSize: 16, QueueSize: 64}
 	s := newTrafficSummary(time.Second)
 	s.addRuntimeOnlyTask("task-empty", stats)
-	if len(s.tasks) != 1 {
-		t.Fatalf("expected one runtime-only task, got %d", len(s.tasks))
+	if len(s.Tasks) != 1 {
+		t.Fatalf("expected one runtime-only task, got %d", len(s.Tasks))
 	}
-	item := s.tasks[0]
-	if item.Task != "task-empty" || item.Direction != "send" {
+	item := s.Tasks[0]
+	if item.Task != "task-empty" {
 		t.Fatalf("unexpected runtime-only task item: %+v", item)
 	}
 	if item.TotalPackets != 0 || item.TotalBytes != 0 {

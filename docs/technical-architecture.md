@@ -338,9 +338,14 @@ flowchart LR
 - **FastPath**：同步执行，极低调度开销，适合轻量规则/低延迟场景。
 - **Worker Pool**：基于 `ants`，启用 `WithMaxBlockingTasks(queue_size)` + `WithPreAlloc(true)`，在高压场景通过有界排队吸收突发并减少抖动。
 
-## 7.4 统一生命周期与全量热更新
+## 7.4 统一生命周期与热更新（文件监听 + 信号）
 
-`UpdateCache` 采用“先停旧、后建新、再启动入口”的全量替换策略：
+运行期支持两条热更新入口：
+
+1. **配置文件监听自动重载**：默认轮询配置文件内容指纹（2s），当 ConfigMap/本地文件发生变化时自动触发重载。
+2. **手动信号重载**：保留 `SIGHUP`/`SIGUSR1` 触发重载，兼容既有运维流程。
+
+配置应用阶段由 `UpdateCache` 统一执行，策略为：
 
 1. 先 `StopAll` 清理旧 runtime
 2. 编译 pipeline
@@ -352,7 +357,7 @@ flowchart LR
 ## 7.5 可观测性
 
 - 结构化日志（zap）
-- Receiver/Task 方向流量聚合统计
+- Task 维度流量聚合统计（格式化 JSON 输出，去除无效 `direction` 字段）
 - Payload 日志支持全局 + task 白名单 + 字节截断
 - Task 暴露运行态统计（inflight、pool running/free/waiting）
 
