@@ -296,7 +296,8 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 		}
 	}
 
-	st.rebuildDispatchSubs()
+	st.refreshDispatchSubs()
+	st.gcUnusedSenders()
 	if logx.Enabled(zapcore.InfoLevel) {
 		logx.L().Infow("runtime business delta applied", "version", cfg.Version, "receiver_changed", receiverChanged, "sender_changed", senderChanged, "pipeline_changed", pipelineChanged, "added", added, "updated", updated, "removed", removed)
 	}
@@ -447,6 +448,7 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 		st.subs[rn][name] = struct{}{}
 	}
 	st.mu.Unlock()
+	st.refreshDispatchSubs()
 	return nil
 }
 
@@ -467,21 +469,15 @@ func (st *Store) removeTask(name string) {
 		}
 	}
 	st.mu.Unlock()
+	st.refreshDispatchSubs()
 	if ts != nil {
 		ts.T.StopGraceful()
 	}
 }
 
-func (st *Store) rebuildDispatchSubs() {
+func (st *Store) refreshDispatchSubs() {
 	dispatchSubs := make(map[string][]*TaskState)
-	st.mu.Lock()
-	for name, ss := range st.senders {
-		if ss.Refs > 0 {
-			continue
-		}
-		_ = ss.S.Close(context.Background())
-		delete(st.senders, name)
-	}
+	st.mu.RLock()
 	for rn, sub := range st.subs {
 		tasks := make([]*TaskState, 0, len(sub))
 		for tn := range sub {
@@ -491,8 +487,24 @@ func (st *Store) rebuildDispatchSubs() {
 		}
 		dispatchSubs[rn] = tasks
 	}
-	st.mu.Unlock()
+	st.mu.RUnlock()
 	st.setDispatchSubs(dispatchSubs)
+}
+
+func (st *Store) gcUnusedSenders() {
+	unused := make([]sender.Sender, 0)
+	st.mu.Lock()
+	for name, ss := range st.senders {
+		if ss.Refs > 0 {
+			continue
+		}
+		unused = append(unused, ss.S)
+		delete(st.senders, name)
+	}
+	st.mu.Unlock()
+	for _, s := range unused {
+		_ = s.Close(context.Background())
+	}
 }
 
 func (st *Store) taskSnapshot() []map[string]any {

@@ -52,3 +52,22 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 		t.Fatalf("expected only t2 remains, got tasks=%v", st.taskSnapshot())
 	}
 }
+
+func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
+	st := NewStore()
+	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
+	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
+	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
+
+	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}); err != nil {
+		t.Fatalf("add task: %v", err)
+	}
+	if got := len(st.getDispatchTasks("r1")); got != 1 {
+		t.Fatalf("expected dispatch snapshot has 1 task, got %d", got)
+	}
+
+	st.removeTask("t1")
+	if got := len(st.getDispatchTasks("r1")); got != 0 {
+		t.Fatalf("expected dispatch snapshot has 0 task after remove, got %d", got)
+	}
+}
