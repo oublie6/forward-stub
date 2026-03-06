@@ -15,6 +15,7 @@ DOCKER_USERNAME ?= default_user
 DOCKER_PASSWORD ?= default_password
 CONTAINER_NAME ?= $(APP_NAME)
 RUN_ARGS ?=
+SERVICE_ARGS ?=
 
 .PHONY: build build-linux test perf verify vet package package-all docker-login docker-build docker-push docker-push-ccr docker-run docker-build-push docker-build-run docker-build-push-ccr clean
 
@@ -70,13 +71,13 @@ docker-push: docker-login
 		docker push $(IMAGE); \
 	fi
 
-# docker-run: 使用 host 网络模式启动本地容器；可通过 RUN_ARGS 追加参数。
+# docker-run: 使用 host 网络模式启动本地容器；可通过 RUN_ARGS 追加容器参数，通过 SERVICE_ARGS 追加服务启动参数。
 docker-run: docker-login
 	@if docker ps -a --format '{{.Names}}' | grep -wq "$(CONTAINER_NAME)"; then \
 		echo "remove existed container $(CONTAINER_NAME)"; \
 		docker rm -f $(CONTAINER_NAME); \
 	fi
-	docker run -d --network host --name $(CONTAINER_NAME) $(RUN_ARGS) $(IMAGE)
+	docker run -d --network host --name $(CONTAINER_NAME) $(RUN_ARGS) $(IMAGE) $(SERVICE_ARGS)
 
 # docker-build-push: 一次完成镜像构建并推送。
 docker-build-push: docker-build docker-push
