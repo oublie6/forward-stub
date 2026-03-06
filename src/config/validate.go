@@ -83,6 +83,9 @@ func (c *Config) Validate() error {
 			if r.RemoteDir == "" {
 				return fmt.Errorf("receiver %s sftp requires remote_dir", rn)
 			}
+			if r.HostKeyFingerprint == "" {
+				return fmt.Errorf("receiver %s sftp requires host_key_fingerprint", rn)
+			}
 		default:
 			return fmt.Errorf("receiver %s unknown type %s", rn, r.Type)
 		}
@@ -113,6 +116,9 @@ func (c *Config) Validate() error {
 			}
 			if s.RemoteDir == "" {
 				return fmt.Errorf("sender %s sftp requires remote_dir", sn)
+			}
+			if s.HostKeyFingerprint == "" {
+				return fmt.Errorf("sender %s sftp requires host_key_fingerprint", sn)
 			}
 		default:
 			return fmt.Errorf("sender %s unknown type %s", sn, s.Type)

@@ -4,6 +4,7 @@ package receiver
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -259,7 +260,7 @@ func (r *SFTPReceiver) connect() (*ssh.Client, *sftp.Client, error) {
 	sshCfg := &ssh.ClientConfig{
 		User:            strings.TrimSpace(r.cfg.Username),
 		Auth:            []ssh.AuthMethod{ssh.Password(r.cfg.Password)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: r.hostKeyCallback(),
 		Timeout:         10 * time.Second,
 	}
 	cli, err := ssh.Dial("tcp", addr, sshCfg)
@@ -272,6 +273,17 @@ func (r *SFTPReceiver) connect() (*ssh.Client, *sftp.Client, error) {
 		return nil, nil, err
 	}
 	return cli, scli, nil
+}
+
+func (r *SFTPReceiver) hostKeyCallback() ssh.HostKeyCallback {
+	want := strings.TrimSpace(r.cfg.HostKeyFingerprint)
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		got := ssh.FingerprintSHA256(key)
+		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1 {
+			return nil
+		}
+		return fmt.Errorf("sftp host key mismatch for %s: got=%s want=%s", hostname, got, want)
+	}
 }
 
 // isSeen 判断文件指纹是否已处理。

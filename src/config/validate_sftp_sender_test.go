@@ -8,7 +8,7 @@ func TestValidateSFTPSenderRequiresFields(t *testing.T) {
 			"r1": {Type: "udp_gnet", Listen: "127.0.0.1:10001"},
 		},
 		Senders: map[string]SenderConfig{
-			"s1": {Type: "sftp", Remote: "127.0.0.1:22", Username: "u", Password: "p", RemoteDir: "/out"},
+			"s1": {Type: "sftp", Remote: "127.0.0.1:22", Username: "u", Password: "p", RemoteDir: "/out", HostKeyFingerprint: "SHA256:test"},
 		},
 		Pipelines: map[string][]StageConfig{"p1": {}},
 		Tasks: map[string]TaskConfig{
@@ -22,5 +22,10 @@ func TestValidateSFTPSenderRequiresFields(t *testing.T) {
 	cfg.Senders["s1"] = SenderConfig{Type: "sftp", Remote: "127.0.0.1:22", Username: "u", Password: "", RemoteDir: "/out"}
 	if err := cfg.Validate(); err == nil {
 		t.Fatalf("expected error for missing sftp sender password")
+	}
+
+	cfg.Senders["s1"] = SenderConfig{Type: "sftp", Remote: "127.0.0.1:22", Username: "u", Password: "p", RemoteDir: "/out"}
+	if err := cfg.Validate(); err == nil {
+		t.Fatalf("expected error for missing sftp sender host key fingerprint")
 	}
 }

@@ -52,14 +52,14 @@ go run . -system-config ./configs/system.example.json -business-config ./configs
     "rx_udp": {"type": "udp_gnet", "listen": "0.0.0.0:19000", "multicore": true},
     "rx_tcp": {"type": "tcp_gnet", "listen": "0.0.0.0:19001", "frame": "u16be", "multicore": true},
     "rx_kafka": {"type": "kafka", "listen": "127.0.0.1:9092", "topic": "in-topic", "group": "forward-stub-group", "start_offset": "latest"},
-    "rx_sftp": {"type": "sftp", "listen": "127.0.0.1:22", "username": "demo", "password": "demo", "remote_dir": "/input", "poll_interval_sec": 3, "chunk_size": 65536}
+    "rx_sftp": {"type": "sftp", "listen": "127.0.0.1:22", "username": "demo", "password": "demo", "remote_dir": "/input", "poll_interval_sec": 3, "chunk_size": 65536, "host_key_fingerprint": "SHA256:replace-with-server-fingerprint"}
   },
   "senders": {
     "tx_udp": {"type": "udp_unicast", "local_ip": "0.0.0.0", "local_port": 20000, "remote": "127.0.0.1:21000"},
     "tx_mcast": {"type": "udp_multicast", "local_ip": "0.0.0.0", "local_port": 20001, "remote": "239.0.0.10:21001", "iface": "eth0", "ttl": 16, "loop": false},
     "tx_tcp": {"type": "tcp_gnet", "remote": "127.0.0.1:21002", "frame": "u16be", "concurrency": 4},
     "tx_kafka": {"type": "kafka", "remote": "127.0.0.1:9092", "topic": "out-topic", "acks": -1, "linger_ms": 5, "batch_max_bytes": 1048576, "compression": "lz4"},
-    "tx_sftp": {"type": "sftp", "remote": "127.0.0.1:22", "username": "demo", "password": "demo", "remote_dir": "/output", "temp_suffix": ".tmp"}
+    "tx_sftp": {"type": "sftp", "remote": "127.0.0.1:22", "username": "demo", "password": "demo", "remote_dir": "/output", "temp_suffix": ".tmp", "host_key_fingerprint": "SHA256:replace-with-server-fingerprint"}
   },
   "pipelines": {
     "pipe_bytes": [{"type": "trim"}, {"type": "append", "value": "0a"}]
