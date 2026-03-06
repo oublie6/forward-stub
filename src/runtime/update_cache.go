@@ -60,8 +60,8 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		lg.Infow("updating runtime cache", "version", cfg.Version, "receivers", len(cfg.Receivers), "tasks", len(cfg.Tasks), "senders", len(cfg.Senders))
 	}
 
-	if st.canApplyTaskDelta(cfg) {
-		if err := st.applyTaskDelta(ctx, cfg); err != nil {
+	if st.canApplyBusinessDelta(cfg) {
+		if err := st.applyBusinessDelta(ctx, cfg); err != nil {
 			return err
 		}
 	} else {
@@ -82,10 +82,10 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	return nil
 }
 
-func (st *Store) canApplyTaskDelta(cfg config.Config) bool {
+func (st *Store) canApplyBusinessDelta(cfg config.Config) bool {
 	st.mu.RLock()
 	defer st.mu.RUnlock()
-	if len(st.tasks) == 0 {
+	if len(st.receivers) == 0 && len(st.senders) == 0 && len(st.tasks) == 0 {
 		return false
 	}
 	for _, rs := range st.receivers {
@@ -93,9 +93,7 @@ func (st *Store) canApplyTaskDelta(cfg config.Config) bool {
 			return false
 		}
 	}
-	return reflect.DeepEqual(cfg.Receivers, receiverConfigSnapshot(st.receivers)) &&
-		reflect.DeepEqual(cfg.Senders, senderConfigSnapshot(st.senders)) &&
-		reflect.DeepEqual(cfg.Pipelines, st.pipelineCfg)
+	return true
 }
 
 func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
@@ -221,62 +219,208 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	return nil
 }
 
-func (st *Store) applyTaskDelta(ctx context.Context, cfg config.Config) error {
+func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) error {
 	st.mu.Lock()
 	oldTasks := make(map[string]config.TaskConfig, len(st.tasks))
 	for name, ts := range st.tasks {
 		oldTasks[name] = ts.Cfg
 	}
+	oldSenders := senderConfigSnapshot(st.senders)
+	oldReceivers := receiverConfigSnapshot(st.receivers)
+	oldPipelines := st.pipelineCfg
 	st.version = cfg.Version
 	st.mu.Unlock()
 
-	removed := make([]string, 0)
-	updated := make([]string, 0)
-	added := make([]string, 0)
+	receiverAdded, receiverRemoved := splitDeltaWithReplace(oldReceivers, cfg.Receivers)
+	senderAdded, senderRemoved := splitDeltaWithReplace(oldSenders, cfg.Senders)
+	pipelineAdded, pipelineRemoved := splitDeltaWithReplace(oldPipelines, cfg.Pipelines)
+	taskAdded, taskRemoved := splitDeltaWithReplace(oldTasks, cfg.Tasks)
 
-	for name := range oldTasks {
-		newCfg, ok := cfg.Tasks[name]
-		if !ok {
-			removed = append(removed, name)
+	receiverChanged := len(receiverAdded) > 0 || len(receiverRemoved) > 0
+	senderChanged := len(senderAdded) > 0 || len(senderRemoved) > 0
+	pipelineChanged := len(pipelineAdded) > 0 || len(pipelineRemoved) > 0
+
+	if pipelineChanged {
+		compiled, err := CompilePipelines(cfg.Pipelines)
+		if err != nil {
+			return err
+		}
+		st.mu.Lock()
+		st.pipelines = compiled
+		st.pipelineCfg = cfg.Pipelines
+		st.mu.Unlock()
+	}
+
+	if receiverChanged {
+		if err := st.applyReceiverDelta(ctx, cfg.Receivers, cfg.Logging.Level); err != nil {
+			return err
+		}
+	}
+	if senderChanged {
+		if err := st.applySenderDelta(cfg.Senders, cfg.Logging.Level); err != nil {
+			return err
+		}
+	}
+
+	removeSet := make(map[string]struct{}, len(taskRemoved))
+	for _, name := range taskRemoved {
+		removeSet[name] = struct{}{}
+	}
+	addSet := make(map[string]struct{}, len(taskAdded))
+	for _, name := range taskAdded {
+		addSet[name] = struct{}{}
+	}
+
+	for _, name := range taskRemoved {
+		_, reAdd := addSet[name]
+		counter := st.removeTask(name, reAdd)
+		if reAdd {
+			if err := st.addTask(name, cfg.Tasks[name], cfg.Logging, counter); err != nil {
+				return err
+			}
+		}
+	}
+	for _, name := range taskAdded {
+		if _, already := removeSet[name]; already {
 			continue
 		}
-		if !reflect.DeepEqual(oldTasks[name], newCfg) {
-			updated = append(updated, name)
-		}
-	}
-	for name := range cfg.Tasks {
-		if _, ok := oldTasks[name]; !ok {
-			added = append(added, name)
-		}
-	}
-
-	sort.Strings(removed)
-	sort.Strings(updated)
-	sort.Strings(added)
-
-	for _, name := range removed {
-		st.removeTask(name)
-	}
-	for _, name := range updated {
-		st.removeTask(name)
-		if err := st.addTask(name, cfg.Tasks[name], cfg.Logging); err != nil {
-			return err
-		}
-	}
-	for _, name := range added {
-		if err := st.addTask(name, cfg.Tasks[name], cfg.Logging); err != nil {
+		if err := st.addTask(name, cfg.Tasks[name], cfg.Logging, nil); err != nil {
 			return err
 		}
 	}
 
-	st.rebuildDispatchSubs()
+	st.refreshDispatchSubs()
+	st.gcUnusedSenders()
 	if logx.Enabled(zapcore.InfoLevel) {
-		logx.L().Infow("runtime task delta applied", "version", cfg.Version, "added", added, "updated", updated, "removed", removed)
+		logx.L().Infow(
+			"runtime business delta applied",
+			"version", cfg.Version,
+			"receiver_added", receiverAdded,
+			"receiver_removed", receiverRemoved,
+			"sender_added", senderAdded,
+			"sender_removed", senderRemoved,
+			"pipeline_added", pipelineAdded,
+			"pipeline_removed", pipelineRemoved,
+			"task_added", taskAdded,
+			"task_removed", taskRemoved,
+		)
 	}
 	return nil
 }
 
-func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingConfig) error {
+func splitDeltaWithReplace[T any](oldMap, newMap map[string]T) (added []string, removed []string) {
+	for name, oldCfg := range oldMap {
+		newCfg, ok := newMap[name]
+		if !ok {
+			removed = append(removed, name)
+			continue
+		}
+		if !reflect.DeepEqual(oldCfg, newCfg) {
+			removed = append(removed, name)
+			added = append(added, name)
+		}
+	}
+	for name := range newMap {
+		if _, ok := oldMap[name]; !ok {
+			added = append(added, name)
+		}
+	}
+	sort.Strings(added)
+	sort.Strings(removed)
+	return added, removed
+}
+
+func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLevel string) error {
+	st.mu.Lock()
+	oldStates := make(map[string]*SenderState, len(st.senders))
+	for n, ss := range st.senders {
+		oldStates[n] = ss
+	}
+	st.mu.Unlock()
+
+	for name, sc := range next {
+		old, ok := oldStates[name]
+		if ok && reflect.DeepEqual(old.Cfg, sc) {
+			continue
+		}
+		s, err := buildSender(name, sc, gnetLogLevel)
+		if err != nil {
+			return err
+		}
+		st.mu.Lock()
+		refs := 0
+		if cur, ok := st.senders[name]; ok {
+			refs = cur.Refs
+		}
+		st.senders[name] = &SenderState{Name: name, Cfg: sc, S: s, Refs: refs}
+		st.mu.Unlock()
+		if ok {
+			_ = old.S.Close(context.Background())
+		}
+	}
+
+	st.mu.Lock()
+	for name, old := range st.senders {
+		if _, ok := next[name]; ok {
+			continue
+		}
+		if old.Refs == 0 {
+			delete(st.senders, name)
+			go old.S.Close(context.Background())
+		}
+	}
+	st.mu.Unlock()
+	return nil
+}
+
+func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.ReceiverConfig, gnetLogLevel string) error {
+	st.mu.Lock()
+	oldStates := make(map[string]*ReceiverState, len(st.receivers))
+	for n, rs := range st.receivers {
+		oldStates[n] = rs
+	}
+	st.mu.Unlock()
+
+	for name, rc := range next {
+		old, ok := oldStates[name]
+		if ok && reflect.DeepEqual(old.Cfg, rc) {
+			continue
+		}
+		r, err := buildReceiver(name, rc, gnetLogLevel)
+		if err != nil {
+			return err
+		}
+		rs := &ReceiverState{Name: name, Cfg: rc, Recv: r, Running: true}
+		st.mu.Lock()
+		st.receivers[name] = rs
+		if _, ok := st.subs[name]; !ok {
+			st.subs[name] = make(map[string]struct{})
+		}
+		st.mu.Unlock()
+		go func(r receiver.Receiver, rn string) {
+			if err := r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) }); err != nil {
+				logx.L().Errorw("receiver stopped with error", "receiver", rn, "error", err)
+			}
+		}(r, name)
+		if ok {
+			_ = old.Recv.Stop(ctx)
+		}
+	}
+
+	st.mu.Lock()
+	for name, rs := range st.receivers {
+		if _, ok := next[name]; ok {
+			continue
+		}
+		delete(st.receivers, name)
+		delete(st.subs, name)
+		go rs.Recv.Stop(ctx)
+	}
+	st.mu.Unlock()
+	return nil
+}
+
+func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingConfig, counter *logx.TrafficCounter) error {
 	st.mu.RLock()
 	compiled := st.pipelines
 	st.mu.RUnlock()
@@ -317,7 +461,13 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 		LogPayloadSend:   logOpts.send,
 		PayloadLogMax:    logOpts.max,
 	}
+	if counter != nil {
+		tk.ReuseTrafficCounter(counter)
+	}
 	if err := tk.Start(); err != nil {
+		if counter != nil {
+			counter.Close()
+		}
 		return err
 	}
 
@@ -330,10 +480,11 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 		st.subs[rn][name] = struct{}{}
 	}
 	st.mu.Unlock()
+	st.refreshDispatchSubs()
 	return nil
 }
 
-func (st *Store) removeTask(name string) {
+func (st *Store) removeTask(name string, preserveCounter bool) *logx.TrafficCounter {
 	st.mu.Lock()
 	ts := st.tasks[name]
 	if ts != nil {
@@ -350,21 +501,20 @@ func (st *Store) removeTask(name string) {
 		}
 	}
 	st.mu.Unlock()
+	st.refreshDispatchSubs()
+	var counter *logx.TrafficCounter
 	if ts != nil {
+		if preserveCounter {
+			counter = ts.T.DetachTrafficCounter()
+		}
 		ts.T.StopGraceful()
 	}
+	return counter
 }
 
-func (st *Store) rebuildDispatchSubs() {
+func (st *Store) refreshDispatchSubs() {
 	dispatchSubs := make(map[string][]*TaskState)
-	st.mu.Lock()
-	for name, ss := range st.senders {
-		if ss.Refs > 0 {
-			continue
-		}
-		_ = ss.S.Close(context.Background())
-		delete(st.senders, name)
-	}
+	st.mu.RLock()
 	for rn, sub := range st.subs {
 		tasks := make([]*TaskState, 0, len(sub))
 		for tn := range sub {
@@ -374,8 +524,24 @@ func (st *Store) rebuildDispatchSubs() {
 		}
 		dispatchSubs[rn] = tasks
 	}
-	st.mu.Unlock()
+	st.mu.RUnlock()
 	st.setDispatchSubs(dispatchSubs)
+}
+
+func (st *Store) gcUnusedSenders() {
+	unused := make([]sender.Sender, 0)
+	st.mu.Lock()
+	for name, ss := range st.senders {
+		if ss.Refs > 0 {
+			continue
+		}
+		unused = append(unused, ss.S)
+		delete(st.senders, name)
+	}
+	st.mu.Unlock()
+	for _, s := range unused {
+		_ = s.Close(context.Background())
+	}
 }
 
 func (st *Store) taskSnapshot() []map[string]any {

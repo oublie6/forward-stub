@@ -96,7 +96,7 @@ func (t *Task) Start() error {
 	}
 
 	t.accepting.Store(true)
-	if logx.Enabled(zapcore.InfoLevel) {
+	if t.sendStats == nil && logx.Enabled(zapcore.InfoLevel) {
 		t.sendStats = logx.AcquireTrafficCounter(
 			"task send traffic stats",
 			"role", "task",
@@ -186,6 +186,24 @@ func (t *Task) resolveExecutionModel() string {
 		}
 		return ExecutionModelPool
 	}
+}
+
+// ReuseTrafficCounter 允许在任务重建时复用已有聚合统计对象。
+func (t *Task) ReuseTrafficCounter(counter *logx.TrafficCounter) {
+	if t == nil || counter == nil {
+		return
+	}
+	t.sendStats = counter
+}
+
+// DetachTrafficCounter 从任务实例上分离统计对象，交由新任务继续复用。
+func (t *Task) DetachTrafficCounter() *logx.TrafficCounter {
+	if t == nil {
+		return nil
+	}
+	c := t.sendStats
+	t.sendStats = nil
+	return c
 }
 
 // StopGraceful 关闭接收入口并等待在途任务完成，再释放资源池。
