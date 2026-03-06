@@ -2,6 +2,7 @@
 package logx
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -258,14 +259,13 @@ func (h *trafficStatsHub) flush(elapsed, interval time.Duration) {
 }
 
 type trafficSummary struct {
-	uptime     string
-	tasks      []taskAggregateStats
-	memoryPool string
+	Uptime     string               `json:"uptime"`
+	Tasks      []taskAggregateStats `json:"tasks"`
+	MemoryPool memoryPoolStats      `json:"memory_pool"`
 }
 
 type taskAggregateStats struct {
 	Task            string           `json:"task"`
-	Direction       string           `json:"direction"`
 	TotalPackets    uint64           `json:"total_packets"`
 	TotalBytes      uint64           `json:"total_bytes"`
 	IntervalPackets uint64           `json:"interval_packets,omitempty"`
@@ -273,6 +273,17 @@ type taskAggregateStats struct {
 	PPS             float64          `json:"pps,omitempty"`
 	BPS             float64          `json:"bps,omitempty"`
 	WorkerPool      *workerPoolStats `json:"worker_pool,omitempty"`
+}
+
+type memoryPoolStats struct {
+	InUseBuffers  int64 `json:"inuse_buffers"`
+	InUseBytes    int64 `json:"inuse_bytes"`
+	CachedBuffers int64 `json:"cached_buffers"`
+	CachedBytes   int64 `json:"cached_bytes"`
+	TotalBuffers  int64 `json:"total_buffers"`
+	TotalBytes    int64 `json:"total_bytes"`
+	Gets          int64 `json:"gets"`
+	Puts          int64 `json:"puts"`
 }
 
 type workerPoolStats struct {
@@ -287,7 +298,7 @@ type workerPoolStats struct {
 }
 
 func newTrafficSummary(elapsed time.Duration) *trafficSummary {
-	return &trafficSummary{uptime: elapsed.Truncate(time.Millisecond).String()}
+	return &trafficSummary{Uptime: elapsed.Truncate(time.Millisecond).String()}
 }
 
 func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, interval time.Duration) {
@@ -297,7 +308,6 @@ func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, interval 
 
 	item := taskAggregateStats{
 		Task:         c.name,
-		Direction:    c.key,
 		TotalPackets: packets,
 		TotalBytes:   bytes,
 	}
@@ -329,7 +339,7 @@ func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, interval 
 		}
 	}
 
-	s.tasks = append(s.tasks, item)
+	s.Tasks = append(s.Tasks, item)
 }
 
 func diffCounter(cur, prev uint64) uint64 {
@@ -341,31 +351,34 @@ func diffCounter(cur, prev uint64) uint64 {
 
 func (s *trafficSummary) setMemoryPool() {
 	pool := packet.SnapshotPayloadPoolStats()
-	s.memoryPool = fmt.Sprintf(
-		"inuse_buffers=%d inuse_bytes=%d cached_buffers=%d cached_bytes=%d total_buffers=%d total_bytes=%d gets=%d puts=%d",
-		pool.InUseBuffers,
-		pool.InUseBytes,
-		pool.CachedBuffers,
-		pool.CachedBytes,
-		pool.TotalBuffers,
-		pool.TotalBytes,
-		pool.Gets,
-		pool.Puts,
-	)
+	s.MemoryPool = memoryPoolStats{
+		InUseBuffers:  pool.InUseBuffers,
+		InUseBytes:    pool.InUseBytes,
+		CachedBuffers: pool.CachedBuffers,
+		CachedBytes:   pool.CachedBytes,
+		TotalBuffers:  pool.TotalBuffers,
+		TotalBytes:    pool.TotalBytes,
+		Gets:          pool.Gets,
+		Puts:          pool.Puts,
+	}
 }
 
 func (s *trafficSummary) hasData() bool {
-	return len(s.tasks) > 0 || s.memoryPool != ""
+	return len(s.Tasks) > 0
 }
 
 func (s *trafficSummary) log() {
-	L().Infow("traffic stats summary", "uptime", s.uptime, "memory_pool", s.memoryPool, "tasks", s.tasks)
+	b, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		L().Errorw("marshal traffic stats summary failed", "error", err)
+		return
+	}
+	L().Info("traffic stats summary\n" + string(b))
 }
 
 func (s *trafficSummary) addRuntimeOnlyTask(task string, runtime TaskRuntimeStats) {
-	s.tasks = append(s.tasks, taskAggregateStats{
-		Task:      task,
-		Direction: "send",
+	s.Tasks = append(s.Tasks, taskAggregateStats{
+		Task: task,
 		WorkerPool: &workerPoolStats{
 			Size:           runtime.PoolSize,
 			Running:        runtime.PoolRunning,
