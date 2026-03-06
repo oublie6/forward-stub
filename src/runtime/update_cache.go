@@ -60,8 +60,8 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		lg.Infow("updating runtime cache", "version", cfg.Version, "receivers", len(cfg.Receivers), "tasks", len(cfg.Tasks), "senders", len(cfg.Senders))
 	}
 
-	if st.canApplyTaskDelta(cfg) {
-		if err := st.applyTaskDelta(ctx, cfg); err != nil {
+	if st.canApplyBusinessDelta(cfg) {
+		if err := st.applyBusinessDelta(ctx, cfg); err != nil {
 			return err
 		}
 	} else {
@@ -82,10 +82,10 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	return nil
 }
 
-func (st *Store) canApplyTaskDelta(cfg config.Config) bool {
+func (st *Store) canApplyBusinessDelta(cfg config.Config) bool {
 	st.mu.RLock()
 	defer st.mu.RUnlock()
-	if len(st.tasks) == 0 {
+	if len(st.receivers) == 0 && len(st.senders) == 0 && len(st.tasks) == 0 {
 		return false
 	}
 	for _, rs := range st.receivers {
@@ -93,9 +93,7 @@ func (st *Store) canApplyTaskDelta(cfg config.Config) bool {
 			return false
 		}
 	}
-	return reflect.DeepEqual(cfg.Receivers, receiverConfigSnapshot(st.receivers)) &&
-		reflect.DeepEqual(cfg.Senders, senderConfigSnapshot(st.senders)) &&
-		reflect.DeepEqual(cfg.Pipelines, st.pipelineCfg)
+	return true
 }
 
 func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
@@ -221,14 +219,32 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	return nil
 }
 
-func (st *Store) applyTaskDelta(ctx context.Context, cfg config.Config) error {
+func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) error {
 	st.mu.Lock()
 	oldTasks := make(map[string]config.TaskConfig, len(st.tasks))
 	for name, ts := range st.tasks {
 		oldTasks[name] = ts.Cfg
 	}
+	oldSenders := senderConfigSnapshot(st.senders)
+	oldReceivers := receiverConfigSnapshot(st.receivers)
+	oldPipelines := st.pipelineCfg
 	st.version = cfg.Version
 	st.mu.Unlock()
+
+	receiverChanged := !reflect.DeepEqual(oldReceivers, cfg.Receivers)
+	senderChanged := !reflect.DeepEqual(oldSenders, cfg.Senders)
+	pipelineChanged := !reflect.DeepEqual(oldPipelines, cfg.Pipelines)
+
+	if pipelineChanged {
+		compiled, err := CompilePipelines(cfg.Pipelines)
+		if err != nil {
+			return err
+		}
+		st.mu.Lock()
+		st.pipelines = compiled
+		st.pipelineCfg = cfg.Pipelines
+		st.mu.Unlock()
+	}
 
 	removed := make([]string, 0)
 	updated := make([]string, 0)
@@ -240,7 +256,7 @@ func (st *Store) applyTaskDelta(ctx context.Context, cfg config.Config) error {
 			removed = append(removed, name)
 			continue
 		}
-		if !reflect.DeepEqual(oldTasks[name], newCfg) {
+		if receiverChanged || senderChanged || pipelineChanged || !reflect.DeepEqual(oldTasks[name], newCfg) {
 			updated = append(updated, name)
 		}
 	}
@@ -253,6 +269,17 @@ func (st *Store) applyTaskDelta(ctx context.Context, cfg config.Config) error {
 	sort.Strings(removed)
 	sort.Strings(updated)
 	sort.Strings(added)
+
+	if receiverChanged {
+		if err := st.applyReceiverDelta(ctx, cfg.Receivers, cfg.Logging.Level); err != nil {
+			return err
+		}
+	}
+	if senderChanged {
+		if err := st.applySenderDelta(cfg.Senders, cfg.Logging.Level); err != nil {
+			return err
+		}
+	}
 
 	for _, name := range removed {
 		st.removeTask(name)
@@ -271,8 +298,98 @@ func (st *Store) applyTaskDelta(ctx context.Context, cfg config.Config) error {
 
 	st.rebuildDispatchSubs()
 	if logx.Enabled(zapcore.InfoLevel) {
-		logx.L().Infow("runtime task delta applied", "version", cfg.Version, "added", added, "updated", updated, "removed", removed)
+		logx.L().Infow("runtime business delta applied", "version", cfg.Version, "receiver_changed", receiverChanged, "sender_changed", senderChanged, "pipeline_changed", pipelineChanged, "added", added, "updated", updated, "removed", removed)
 	}
+	return nil
+}
+
+func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLevel string) error {
+	st.mu.Lock()
+	oldStates := make(map[string]*SenderState, len(st.senders))
+	for n, ss := range st.senders {
+		oldStates[n] = ss
+	}
+	st.mu.Unlock()
+
+	for name, sc := range next {
+		old, ok := oldStates[name]
+		if ok && reflect.DeepEqual(old.Cfg, sc) {
+			continue
+		}
+		s, err := buildSender(name, sc, gnetLogLevel)
+		if err != nil {
+			return err
+		}
+		st.mu.Lock()
+		refs := 0
+		if cur, ok := st.senders[name]; ok {
+			refs = cur.Refs
+		}
+		st.senders[name] = &SenderState{Name: name, Cfg: sc, S: s, Refs: refs}
+		st.mu.Unlock()
+		if ok {
+			_ = old.S.Close(context.Background())
+		}
+	}
+
+	st.mu.Lock()
+	for name, old := range st.senders {
+		if _, ok := next[name]; ok {
+			continue
+		}
+		if old.Refs == 0 {
+			delete(st.senders, name)
+			go old.S.Close(context.Background())
+		}
+	}
+	st.mu.Unlock()
+	return nil
+}
+
+func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.ReceiverConfig, gnetLogLevel string) error {
+	st.mu.Lock()
+	oldStates := make(map[string]*ReceiverState, len(st.receivers))
+	for n, rs := range st.receivers {
+		oldStates[n] = rs
+	}
+	st.mu.Unlock()
+
+	for name, rc := range next {
+		old, ok := oldStates[name]
+		if ok && reflect.DeepEqual(old.Cfg, rc) {
+			continue
+		}
+		r, err := buildReceiver(name, rc, gnetLogLevel)
+		if err != nil {
+			return err
+		}
+		rs := &ReceiverState{Name: name, Cfg: rc, Recv: r, Running: true}
+		st.mu.Lock()
+		st.receivers[name] = rs
+		if _, ok := st.subs[name]; !ok {
+			st.subs[name] = make(map[string]struct{})
+		}
+		st.mu.Unlock()
+		go func(r receiver.Receiver, rn string) {
+			if err := r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) }); err != nil {
+				logx.L().Errorw("receiver stopped with error", "receiver", rn, "error", err)
+			}
+		}(r, name)
+		if ok {
+			_ = old.Recv.Stop(ctx)
+		}
+	}
+
+	st.mu.Lock()
+	for name, rs := range st.receivers {
+		if _, ok := next[name]; ok {
+			continue
+		}
+		delete(st.receivers, name)
+		delete(st.subs, name)
+		go rs.Recv.Stop(ctx)
+	}
+	st.mu.Unlock()
 	return nil
 }
 

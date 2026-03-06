@@ -20,7 +20,10 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	}
 
 	cfg := config.Config{
-		Version: 2,
+		Version:   2,
+		Receivers: map[string]config.ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":1"}},
+		Senders:   map[string]config.SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:12345"}},
+		Pipelines: map[string][]config.StageConfig{"p1": {}},
 		Tasks: map[string]config.TaskConfig{
 			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "pool", QueueSize: 1024},
 			"t2": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"},
@@ -28,7 +31,7 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 		Logging: config.LoggingConfig{},
 	}
 
-	if err := st.applyTaskDelta(context.Background(), cfg); err != nil {
+	if err := st.applyBusinessDelta(context.Background(), cfg); err != nil {
 		t.Fatalf("apply delta: %v", err)
 	}
 	if len(st.tasks) != 2 {
@@ -42,7 +45,7 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	cfg2.Tasks = map[string]config.TaskConfig{
 		"t2": cfg.Tasks["t2"],
 	}
-	if err := st.applyTaskDelta(context.Background(), cfg2); err != nil {
+	if err := st.applyBusinessDelta(context.Background(), cfg2); err != nil {
 		t.Fatalf("apply delta remove: %v", err)
 	}
 	if len(st.tasks) != 1 || st.tasks["t2"] == nil {

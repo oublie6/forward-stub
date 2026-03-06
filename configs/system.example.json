@@ -1,0 +1,15 @@
+{
+  "control": {
+    "timeout_sec": 5
+  },
+  "logging": {
+    "level": "info",
+    "file": "",
+    "max_size_mb": 100,
+    "max_backups": 5,
+    "max_age_days": 30,
+    "compress": true,
+    "traffic_stats_interval": "1s",
+    "traffic_stats_sample_every": 1
+  }
+}

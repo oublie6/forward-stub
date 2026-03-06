@@ -11,10 +11,10 @@
 ## 2. 本地运行
 
 ```bash
-go run . -config ./configs/example.json
+go run . -system-config ./configs/system.example.json -business-config ./configs/business.example.json
 ```
 
-> 程序启动必须显式传入 `-config` 参数。
+> 推荐使用 `-system-config` + `-business-config` 两个文件；`-config` 仅用于兼容旧版单文件模式。
 
 
 ### 2.1 运行中配置热更新（ConfigMap/本地文件）
@@ -24,7 +24,7 @@ go run . -config ./configs/example.json
   - `kill -HUP <pid>`
   - `kill -USR1 <pid>`
 - Kubernetes 场景下推荐先更新 ConfigMap，待容器内挂载文件刷新后即可自动生效；如需立即触发也可继续发送上面的信号。
-- 当 `receivers/senders/pipelines` 不变时走任务级增量更新（新增/更新/删除 task）；否则自动全量替换。
+- 热重载仅监听业务配置文件，并按 receiver/sender/pipeline/task 的新增、更新、删除做增量生效；系统配置（control/logging）变更需重启服务。
 - 启动后会立即输出 `traffic stats summary`，无流量时也会打印全量任务运行信息。
 - 聚合统计日志以**格式化 JSON**打印，`tasks` 项不再输出 `direction` 字段，重点展示 task 维度吞吐和 worker pool 运行态。
 
