@@ -15,7 +15,7 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
 	st.subs["r1"] = map[string]struct{}{}
 
-	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}); err != nil {
+	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
 		t.Fatalf("add initial task: %v", err)
 	}
 
@@ -59,14 +59,14 @@ func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
 	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
 
-	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}); err != nil {
+	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
 		t.Fatalf("add task: %v", err)
 	}
 	if got := len(st.getDispatchTasks("r1")); got != 1 {
 		t.Fatalf("expected dispatch snapshot has 1 task, got %d", got)
 	}
 
-	st.removeTask("t1")
+	_ = st.removeTask("t1", false)
 	if got := len(st.getDispatchTasks("r1")); got != 0 {
 		t.Fatalf("expected dispatch snapshot has 0 task after remove, got %d", got)
 	}
