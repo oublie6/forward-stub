@@ -4,9 +4,9 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
-	"syscall"
 	"time"
 
 	"forward-stub/src/app"
@@ -28,31 +28,14 @@ func main() {
 		return
 	}
 
-	var cfg config.Config
-	var err error
-
 	if *localPath == "" {
 		_, _ = os.Stderr.WriteString("must provide -config\n")
 		os.Exit(1)
 	}
-	cfg, err = config.LoadLocal(*localPath)
 
+	cfg, err := loadRuntimeConfig(*localPath)
 	if err != nil {
-		_, _ = os.Stderr.WriteString("load config error: " + err.Error() + "\n")
-		os.Exit(1)
-	}
-	cfg.ApplyDefaults()
-	if cfg.Control.API != "" {
-		cli := control.NewConfigAPIClient(cfg.Control.API, cfg.Control.TimeoutSec)
-		cfg, err = cli.FetchConfig(context.Background())
-		if err != nil {
-			_, _ = os.Stderr.WriteString("fetch config from api error: " + err.Error() + "\n")
-			os.Exit(1)
-		}
-		cfg.ApplyDefaults()
-	}
-	if err := cfg.Validate(); err != nil {
-		_, _ = os.Stderr.WriteString("config validate error: " + err.Error() + "\n")
+		_, _ = os.Stderr.WriteString(err.Error() + "\n")
 		os.Exit(1)
 	}
 
@@ -84,10 +67,53 @@ func main() {
 	}
 
 	lg.Info("forward-stub started. Press Ctrl+C to stop.")
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, supportedSignals()...)
+	defer signal.Stop(sigCh)
 
-	_ = rt.Stop(context.Background())
-	lg.Info("forward-stub stopped.")
+	for {
+		s := <-sigCh
+		if isReloadSignal(s) {
+			lg.Infow("received reload signal", "signal", s.String())
+			next, err := loadRuntimeConfig(*localPath)
+			if err != nil {
+				lg.Errorw("reload config failed", "signal", s.String(), "error", err)
+				continue
+			}
+			if err := rt.UpdateCache(context.Background(), next); err != nil {
+				lg.Errorw("apply reloaded config failed", "signal", s.String(), "error", err)
+				continue
+			}
+			lg.Infow("reload config success", "signal", s.String(), "version", next.Version)
+			continue
+		}
+
+		if isStopSignal(s) {
+			_ = rt.Stop(context.Background())
+			lg.Info("forward-stub stopped.")
+			return
+		}
+
+		lg.Infow("received unsupported signal", "signal", s.String())
+	}
+}
+
+func loadRuntimeConfig(localPath string) (config.Config, error) {
+	cfg, err := config.LoadLocal(localPath)
+	if err != nil {
+		return config.Config{}, fmt.Errorf("load config error: %w", err)
+	}
+	cfg.ApplyDefaults()
+	if cfg.Control.API != "" {
+		cli := control.NewConfigAPIClient(cfg.Control.API, cfg.Control.TimeoutSec)
+		cfg, err = cli.FetchConfig(context.Background())
+		if err != nil {
+			return config.Config{}, fmt.Errorf("fetch config from api error: %w", err)
+		}
+		cfg.ApplyDefaults()
+	}
+	if err := cfg.Validate(); err != nil {
+		return config.Config{}, fmt.Errorf("config validate error: %w", err)
+	}
+	return cfg, nil
 }

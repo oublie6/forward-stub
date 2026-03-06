@@ -75,3 +75,22 @@ func TestTrafficSummaryMemoryPoolRenderedOnceInSummary(t *testing.T) {
 		}
 	}
 }
+
+func TestTrafficSummaryIncludesRuntimeOnlyTaskWithoutTraffic(t *testing.T) {
+	stats := TaskRuntimeStats{PoolSize: 16, QueueSize: 64}
+	s := newTrafficSummary(time.Second)
+	s.addRuntimeOnlyTask("task-empty", stats)
+	if len(s.tasks) != 1 {
+		t.Fatalf("expected one runtime-only task, got %d", len(s.tasks))
+	}
+	item := s.tasks[0]
+	if item.Task != "task-empty" || item.Direction != "send" {
+		t.Fatalf("unexpected runtime-only task item: %+v", item)
+	}
+	if item.TotalPackets != 0 || item.TotalBytes != 0 {
+		t.Fatalf("runtime-only task should have zero counters: %+v", item)
+	}
+	if item.WorkerPool == nil || item.WorkerPool.Size != 16 || item.WorkerPool.QueueSize != 64 {
+		t.Fatalf("unexpected runtime-only worker stats: %+v", item.WorkerPool)
+	}
+}
