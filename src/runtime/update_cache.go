@@ -235,6 +235,14 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	senderAdded, senderRemoved := splitDeltaWithReplace(oldSenders, cfg.Senders)
 	pipelineAdded, pipelineRemoved := splitDeltaWithReplace(oldPipelines, cfg.Pipelines)
 	taskAdded, taskRemoved := splitDeltaWithReplace(oldTasks, cfg.Tasks)
+	taskAddedSet := make(map[string]struct{}, len(taskAdded))
+	taskRemovedSet := make(map[string]struct{}, len(taskRemoved))
+	for _, name := range taskAdded {
+		taskAddedSet[name] = struct{}{}
+	}
+	for _, name := range taskRemoved {
+		taskRemovedSet[name] = struct{}{}
+	}
 
 	receiverChanged := len(receiverAdded) > 0 || len(receiverRemoved) > 0
 	senderChanged := len(senderAdded) > 0 || len(senderRemoved) > 0
@@ -256,23 +264,33 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 			return err
 		}
 	}
+	if senderChanged || pipelineChanged {
+		affectedSenders := toNameSet(senderAdded, senderRemoved)
+		affectedPipelines := toNameSet(pipelineAdded, pipelineRemoved)
+		for name, tc := range cfg.Tasks {
+			if !taskDependsOnAny(tc, affectedSenders, affectedPipelines) {
+				continue
+			}
+			taskAddedSet[name] = struct{}{}
+			if _, existed := oldTasks[name]; existed {
+				taskRemovedSet[name] = struct{}{}
+			}
+		}
+		taskAdded = setKeysSorted(taskAddedSet)
+		taskRemoved = setKeysSorted(taskRemovedSet)
+	}
+
+	closeSenders := make([]sender.Sender, 0)
 	if senderChanged {
-		if err := st.applySenderDelta(cfg.Senders, cfg.Logging.Level); err != nil {
+		toClose, err := st.applySenderDelta(cfg.Senders, cfg.Logging.Level)
+		if err != nil {
 			return err
 		}
-	}
-
-	removeSet := make(map[string]struct{}, len(taskRemoved))
-	for _, name := range taskRemoved {
-		removeSet[name] = struct{}{}
-	}
-	addSet := make(map[string]struct{}, len(taskAdded))
-	for _, name := range taskAdded {
-		addSet[name] = struct{}{}
+		closeSenders = append(closeSenders, toClose...)
 	}
 
 	for _, name := range taskRemoved {
-		_, reAdd := addSet[name]
+		_, reAdd := taskAddedSet[name]
 		counter := st.removeTask(name, reAdd)
 		if reAdd {
 			if err := st.addTask(name, cfg.Tasks[name], cfg.Logging, counter); err != nil {
@@ -281,7 +299,7 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 		}
 	}
 	for _, name := range taskAdded {
-		if _, already := removeSet[name]; already {
+		if _, already := taskRemovedSet[name]; already {
 			continue
 		}
 		if err := st.addTask(name, cfg.Tasks[name], cfg.Logging, nil); err != nil {
@@ -291,6 +309,9 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 
 	st.refreshDispatchSubs()
 	st.gcUnusedSenders()
+	for _, s := range closeSenders {
+		_ = s.Close(context.Background())
+	}
 	if logx.Enabled(zapcore.InfoLevel) {
 		logx.L().Infow(
 			"runtime business delta applied",
@@ -330,13 +351,14 @@ func splitDeltaWithReplace[T any](oldMap, newMap map[string]T) (added []string, 
 	return added, removed
 }
 
-func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLevel string) error {
+func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLevel string) ([]sender.Sender, error) {
 	st.mu.Lock()
 	oldStates := make(map[string]*SenderState, len(st.senders))
 	for n, ss := range st.senders {
 		oldStates[n] = ss
 	}
 	st.mu.Unlock()
+	toClose := make([]sender.Sender, 0)
 
 	for name, sc := range next {
 		old, ok := oldStates[name]
@@ -345,7 +367,7 @@ func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLe
 		}
 		s, err := buildSender(name, sc, gnetLogLevel)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		st.mu.Lock()
 		refs := 0
@@ -355,7 +377,7 @@ func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLe
 		st.senders[name] = &SenderState{Name: name, Cfg: sc, S: s, Refs: refs}
 		st.mu.Unlock()
 		if ok {
-			_ = old.S.Close(context.Background())
+			toClose = append(toClose, old.S)
 		}
 	}
 
@@ -370,7 +392,40 @@ func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLe
 		}
 	}
 	st.mu.Unlock()
-	return nil
+	return toClose, nil
+}
+
+func toNameSet(groups ...[]string) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, names := range groups {
+		for _, n := range names {
+			out[n] = struct{}{}
+		}
+	}
+	return out
+}
+
+func taskDependsOnAny(tc config.TaskConfig, sendersSet, pipelinesSet map[string]struct{}) bool {
+	for _, sn := range tc.Senders {
+		if _, ok := sendersSet[sn]; ok {
+			return true
+		}
+	}
+	for _, pn := range tc.Pipelines {
+		if _, ok := pipelinesSet[pn]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func setKeysSorted(in map[string]struct{}) []string {
+	out := make([]string, 0, len(in))
+	for n := range in {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.ReceiverConfig, gnetLogLevel string) error {
