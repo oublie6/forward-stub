@@ -1,471 +1,123 @@
-# forward-stub 技术架构与实现说明
+# forward-stub 技术架构（2026 复审版）
 
-> 本文面向开发、运维和架构评审，系统性说明 `forward-stub` 的模块边界、运行机制、关键特性，以及为何该项目具备高吞吐、高可扩展、高可用的工程特征。
+本文聚焦：模块边界、数据路径、性能设计、扩展点、安全基线与演进建议。
 
-## 1. 项目定位与目标
+## 1. 架构分层
 
-`forward-stub` 是一个 Go 实现的高吞吐报文转发引擎，支持多协议接入、可编排处理、以及多协议输出：
-
-- **接收端（Receiver）**：`udp_gnet` / `tcp_gnet` / `kafka` / `sftp`
-- **处理层（Pipeline）**：可组合的 stage 链
-- **发送端（Sender）**：`udp_unicast` / `udp_multicast` / `tcp_gnet` / `kafka` / `sftp`
-- **编排层（Task）**：将 receiver、pipeline、sender 绑定成业务链路
-- **运行时（Runtime/Store）**：统一管理生命周期、热更新、订阅分发
-
-该定位可覆盖“协议转换”“流量复制”“规则过滤”“文件分块转发”等典型集成场景。
-
----
-
-## 2. 总体架构图（Architecture Diagram）
-
-### 2.1 当前生产架构（As-Is）
-
-```mermaid
-flowchart LR
-    A[配置来源\n本地JSON / Control API] --> B[Runtime.UpdateCache]
-    B --> C[CompilePipelines]
-    B --> D[Build Senders]
-    B --> E[Build Tasks]
-    B --> F[Build Receivers]
-
-    subgraph Ingress[接入层 Receivers]
-      R1[UDP gnet]
-      R2[TCP gnet]
-      R3[Kafka]
-      R4[SFTP]
-    end
-
-    subgraph Core[核心处理层]
-      G[dispatch\nreceiver->tasks 快照路由]
-      T[Task\nFastPath / ants Pool]
-      P[Pipeline Stages\nmatch/replace/drop/file-meta]
-    end
-
-    subgraph Egress[输出层 Senders]
-      S1[UDP Unicast/Multicast]
-      S2[TCP gnet]
-      S3[Kafka]
-      S4[SFTP]
-    end
-
-    R1 --> G
-    R2 --> G
-    R3 --> G
-    R4 --> G
-
-    G --> T --> P --> S1
-    P --> S2
-    P --> S3
-    P --> S4
-
-    H[(Packet Payload Pool)] <--> G
-    H <--> T
+```text
+控制层: config + validate + reload trigger
+运行层: runtime(store/update_cache/compiler)
+处理层: task(execution model) + pipeline(stages)
+协议层: receiver/* + sender/*
+可观测: logx + traffic counter
 ```
 
-### 2.2 演进目标架构（To-Be）
+### 1.1 控制层
 
-> 在保持当前“receiver → task/pipeline → sender”主干稳定的前提下，新增控制平面、流量治理与数据平面加速能力，形成“**可热更新、可弹性、可灰度、可观测**”的一体化转发平台。
+- 负责配置加载、默认值填充、语义校验。
+- 分系统配置与业务配置，业务配置支持热更新。
+- 通过版本号驱动 runtime 更新。
 
-```mermaid
-flowchart TB
-    subgraph CP[控制平面 Control Plane]
-      API[配置中心 API / GitOps]
-      CFG[配置聚合与校验\nSchema + 签名 + 版本]
-      ORCH[编排器\n全量发布 + 增量任务切换]
-      POLICY[策略中心\n限流/熔断/降级/灰度]
-      OBS[可观测控制\n指标/日志/链路追踪配置]
-      API --> CFG --> ORCH
-      POLICY --> ORCH
-      OBS --> ORCH
-    end
+### 1.2 运行层
 
-    subgraph DP[数据平面 Data Plane]
-      ING[Ingress\nUDP/TCP/Kafka/SFTP/HTTP]
-      RX[Receiver 层\ngnet / Kafka client / SFTP client]
-      SCH[调度与路由\natomic snapshot + task graph]
-      PL[Pipeline 引擎\nmatch/replace/drop/file-meta]
-      GOV[流量治理层\nRateLimit + CircuitBreaker + Backpressure]
-      TX[Egress\nUDP/TCP/Kafka/SFTP/ObjectStorage]
-      ING --> RX --> SCH --> PL --> GOV --> TX
-    end
+- `UpdateCache` 负责编译 pipeline、构建 sender/task/receiver。
+- `Store` 保存活跃实例并提供 dispatch 快照。
+- 生命周期遵循“构建成功后切换、失败不污染现网状态”的思路。
 
-    subgraph ACC[性能加速层 Acceleration]
-      DPDK[DPDK/XDP 加速通道\n零拷贝 + 旁路内核]
-      BATCH[批处理与向量化\nBatch Send / SIMD 字节处理]
-      POOL[内存池与对象复用\npayload pool / lock-free queue]
-    end
+### 1.3 数据层
 
-    ORCH -- 下发版本化配置 --> SCH
-    ORCH -- 动态装载 pipeline --> PL
-    POLICY -- 实时策略 --> GOV
-    OBS -- telemetry 策略 --> DP
-    DPDK -. 可选旁路 .-> RX
-    BATCH -. 吞吐优化 .-> PL
-    POOL -. GC 压力控制 .-> SCH
-```
-
-### 2.3 现有能力与规划能力矩阵
-
-| 维度 | 现有能力（Current） | 规划能力（Roadmap） |
-| --- | --- | --- |
-| 配置管理 | 本地配置加载 + 进程内热更新 | 从配置中心 API 拉取配置（支持鉴权、签名校验、版本回滚、灰度发布） |
-| 更新策略 | 全量替换（先停后建再放流） | 任务级增量切换（Task Incremental Switch）、双版本并行与流量镜像验证 |
-| 流量治理 | 基础背压（pool queue + 有界等待） | 多级限流（实例/任务/租户）、熔断、自动降级、优先级队列 |
-| 性能优化 | gnet + payload pool + snapshot 路由 | DPDK/XDP 快路径、批量收发、NUMA 亲和、零拷贝路径优化 |
-| 可用性保障 | sender 失败隔离、graceful stop | 自适应重试预算、故障域隔离、跨可用区容灾、配置发布熔断 |
-| 可观测性 | 结构化日志 + 吞吐统计 | OpenTelemetry 全链路追踪、RED/USE 指标体系、异常画像与根因分析 |
-| 安全与合规 | 基础网络连通 | mTLS、API Token 轮换、配置审计追踪、敏感字段脱敏 |
-
-### 2.4 建议纳入技术文档的演进功能清单
-
-1. **DPDK/XDP 数据面加速**：在高 PPS 场景引入用户态网络栈与零拷贝收发，降低内核协议栈开销。  
-2. **分层限流与服务降级**：支持按入口、任务、下游目标多级令牌桶 + 熔断降级（丢弃、采样、旁路）。  
-3. **任务增量切换（Task Incremental Switch）**：实现任务级热切换、蓝绿并行、回滚秒级生效。  
-4. **配置中心 API 化**：支持 Pull/Watch 模式、配置版本签名、差异对比、审计日志。  
-5. **运行时策略引擎**：将限流、重试、超时、路由权重外置为 Policy，支持动态生效。  
-6. **智能流量调度**：引入基于负载和时延的自适应路由（Latency-Aware / EWMA）。  
-7. **弹性伸缩联动**：将任务队列深度、发送失败率、CPU 使用率接入 HPA/KEDA。  
-8. **可观测性升级**：统一 metrics/log/trace，支持链路拓扑自动发现与异常告警收敛。  
-9. **可靠投递增强**：为 Kafka/SFTP 等路径补充幂等键、重放保护与失败死信队列。  
-10. **多租户与安全隔离**：引入租户级资源配额、命名空间隔离、细粒度 RBAC。  
+- receiver 收到数据后包装为 `packet.Packet`。
+- dispatch 按 receiver 订阅映射 fan-out 到 task。
+- task 执行 pipeline，再发送到一个或多个 sender。
 
 ---
 
-## 3. 核心时序图（Sequence Diagram）
+## 2. 核心时序
 
-### 3.1 启动与全量热更新时序
+## 2.1 启动/更新
 
-```mermaid
-sequenceDiagram
-    participant Main as main/app.Runtime
-    participant Store as runtime.Store
-    participant UC as runtime.UpdateCache
-    participant Sender as buildSender
-    participant Task as task.Task
-    participant Receiver as buildReceiver
+1. 读取并校验配置。
+2. 编译 pipeline。
+3. 构建 sender。
+4. 构建 task（初始化执行模型）。
+5. 构建 receiver 并启动。
+6. 原子切换 dispatch 快照。
 
-    Main->>UC: 传入新 Config
-    UC->>Store: StopAll(ctx) 停止旧实例
-    UC->>UC: CompilePipelines()
-    UC->>Store: 全量替换 maps + version
+### 2.2 单包路径
 
-    loop 所有 senders
-      UC->>Sender: buildSender(name, cfg)
-      Sender-->>UC: Sender 实例
-      UC->>Store: 注册 sender
-    end
-
-    loop 所有 tasks
-      UC->>Task: Task.Start() 创建 ants pool
-      Task-->>UC: task ready
-      UC->>Store: 建立 receiver->task 订阅
-    end
-
-    UC->>Store: 生成 dispatch 只读快照
-
-    loop 所有 receivers
-      UC->>Receiver: buildReceiver(name, cfg)
-      UC->>Receiver: Start(ctx, onPacket=dispatch)
-      Receiver-->>UC: goroutine 运行
-    end
-```
-
-### 3.2 单包处理时序（多订阅 fan-out）
-
-```mermaid
-sequenceDiagram
-    participant Recv as Receiver
-    participant Disp as dispatch
-    participant TaskA as Task A
-    participant TaskB as Task B
-    participant Pipe as Pipeline
-    participant Send as Sender
-
-    Recv->>Disp: onPacket(pkt)
-    Disp->>Disp: 读取 dispatchSubs 快照
-    alt 仅 1 个订阅 task
-      Disp->>TaskA: Handle(原始 pkt)
-    else 多 task
-      Disp->>TaskA: Handle(pkt.Clone())
-      Disp->>TaskB: Handle(pkt.Clone())
-      Disp->>Disp: Release(原始 pkt)
-    end
-
-    TaskA->>Pipe: 顺序执行 stages
-    Pipe-->>TaskA: true/false
-    alt 未被丢弃
-      TaskA->>Send: Send(pkt)
-    end
-```
+1. receiver 生成 packet。
+2. dispatch 查快照并投递 task。
+3. task 依据 execution_model 执行。
+4. pipeline 阶段处理；任一 stage 返回 false 则丢弃。
+5. sender 发送；失败记录告警但不阻断其他 sender。
 
 ---
 
-## 4. 类图（Class Diagram）
+## 3. 高吞吐设计点
 
-```mermaid
-classDiagram
-    class Store {
-      -RWMutex mu
-      -map receivers
-      -map senders
-      -map tasks
-      -map pipelines
-      -atomic dispatchSubs
-      +StopAll(ctx) error
-      +getDispatchTasks(receiver) []*TaskState
-    }
-
-    class Task {
-      +Name string
-      +Pipelines []*Pipeline
-      +Senders []Sender
-      +PoolSize int
-      +FastPath bool
-      -pool ants.Pool
-      +Start() error
-      +Handle(ctx,pkt)
-      +StopGraceful()
-    }
-
-    class Packet {
-      +Envelope
-      +ReleaseFn func()
-      +Release()
-      +Clone() *Packet
-    }
-
-    class Pipeline {
-      +Name string
-      +Stages []StageFunc
-      +Process(pkt) bool
-    }
-
-    class Receiver {
-      <<interface>>
-      +Start(ctx,onPacket)
-      +Stop(ctx)
-      +Name()
-      +Key()
-    }
-
-    class Sender {
-      <<interface>>
-      +Send(ctx,pkt) error
-      +Close(ctx) error
-      +Name()
-      +Key()
-    }
-
-    Store --> Task
-    Task --> Pipeline
-    Task --> Sender
-    Receiver --> Packet
-    Task --> Packet
-```
+- gnet 驱动 UDP/TCP IO，降低调度开销。
+- ants pool 支撑高并发任务执行。
+- packet payload 复用减少 GC。
+- 有界队列与 in-flight 计数实现可控背压。
+- 运行时统计聚合常驻，降低业务路径额外成本。
 
 ---
 
-## 5. 数据流图（Data Flow Diagram）
+## 4. 执行模型的工程选择
 
-```mermaid
-flowchart TD
-    I[外部数据源\nUDP/TCP/Kafka/SFTP] --> R[Receiver 解包]
-    R --> P1[packet.CopyFrom\n进入 PayloadPool]
-    P1 --> D[dispatch 路由]
-    D --> T[Task 执行模型\nFastPath 或 ants pool]
-    T --> PL[Pipeline 规则处理\nFlags/Meta/Payload]
-    PL --> O[Sender 协议输出]
-    O --> E[外部目标系统]
+- `fastpath`：低延迟、低开销，适合轻处理+稳定下游。
+- `pool`：吞吐和隔离更强，适合重处理或波峰场景。
+- `channel`：顺序语义最佳，单协程处理。
 
-    PL --> M[(Meta 字段更新\nProto/Flags/TransferID...)]
-    M --> O
+建议：
 
-    D --> C1[单订阅: 复用原包]
-    D --> C2[多订阅: Clone 隔离]
-```
+- 默认选择 `pool`，上线初期更稳。
+- 极低延迟链路再评估 `fastpath`。
+- 强顺序链路用 `channel`。
 
 ---
 
-## 6. 数据处理流程图（Data Process Flow）
+## 5. 安全基线（复审后）
 
-```mermaid
-flowchart LR
-    A[收到 Packet] --> B{Task.FastPath?}
-    B -- 是 --> C[当前 goroutine 同步执行]
-    B -- 否 --> D[提交 ants 池]
+### 5.1 SFTP 主机身份校验
 
-    C --> E[依次执行 pipelines]
-    D --> E
+- receiver/sender 连接 SFTP 均要求 `host_key_fingerprint`。
+- 使用 `SHA256` 指纹做校验，拒绝未知主机键。
+- 校验流程覆盖配置校验与构造阶段，避免绕过配置校验时出现“静默不安全”。
 
-    E --> F{stage 返回 false?}
-    F -- 是 --> G[终止处理并 Release]
-    F -- 否 --> H[遍历 senders 发送]
+### 5.2 Kafka TLS
 
-    H --> I{发送失败?}
-    I -- 是 --> J[记录 warn 日志]
-    I -- 否 --> K[继续]
+- 支持 TLS 与 skip verify 开关。
+- 生产建议 `tls=true` 且 `tls_skip_verify=false`。
 
-    J --> K
-    K --> L[处理结束 Release]
-```
+### 5.3 凭据治理建议
+
+- 用户名/密码建议由 Secret 注入。
+- 避免将生产密钥放入配置仓库。
 
 ---
 
-## 7. 关键特性详解
+## 6. 可扩展点
 
-## 7.1 多协议接入与输出
-
-- 通过 `buildReceiver` / `buildSender` 按配置实例化具体协议组件，形成“插件式”拓扑。
-- TCP 支持可选 `u16be` 分帧，Kafka/SFTP 支持专有参数，满足异构系统互联。
-- 统一 `packet.Packet` 结构承载跨协议数据和元信息，避免协议耦合扩散到业务处理层。
-
-## 7.2 Pipeline 可编排规则引擎
-
-当前支持 stage：
-
-- `match_offset_bytes`
-- `replace_offset_bytes`
-- `drop_if_flag`
-- `mark_as_file_chunk`
-- `clear_file_meta`
-
-通过 `CompilePipelines` 在配置加载时编译，运行期直接执行函数链，减少解释开销。
-
-## 7.3 可控并发模型
-
-`Task` 提供两种执行路径：
-
-- **FastPath**：同步执行，极低调度开销，适合轻量规则/低延迟场景。
-- **Worker Pool**：基于 `ants`，启用 `WithMaxBlockingTasks(queue_size)` + `WithPreAlloc(true)`，在高压场景通过有界排队吸收突发并减少抖动。
-
-## 7.4 统一生命周期与热更新（文件监听 + 信号）
-
-运行期支持两条热更新入口：
-
-1. **配置文件监听自动重载**：默认轮询配置文件内容指纹（2s），当 ConfigMap/本地文件发生变化时自动触发重载。
-2. **手动信号重载**：保留 `SIGHUP`/`SIGUSR1` 触发重载，兼容既有运维流程。
-
-配置应用阶段由 `UpdateCache` 统一执行，策略为：
-
-1. 先 `StopAll` 清理旧 runtime
-2. 编译 pipeline
-3. 重建 sender/task/receiver
-4. 先生成 dispatch 快照，再启动 receivers
-
-该顺序确保“拓扑完整后再放流量”，降低更新窗口风险。
-
-## 7.5 可观测性
-
-- 结构化日志（zap）
-- Task 维度流量聚合统计（格式化 JSON 输出，去除无效 `direction` 字段）
-- Payload 日志支持全局 + task 白名单 + 字节截断
-- Task 暴露运行态统计（inflight、pool running/free/waiting）
+- 新协议接入：实现 receiver/sender 接口并在 runtime build 注册。
+- 新 stage：在 compiler 增加 stage 编译分支。
+- 新执行模型：扩展 task.Start/Handle 即可。
+- 新可观测：在 logx 增加聚合器或导出器。
 
 ---
 
-## 8. 为什么吞吐量高
+## 7. 可运维性与可观测
 
-## 8.1 事件驱动网络栈
-
-UDP/TCP 核心链路基于 `gnet` 事件循环，配合 `multicore`、`num_event_loop`、`read_buffer_cap` 可调，实现更高 IO 吞吐能力。
-
-## 8.2 热路径优化
-
-- `dispatchSubs` 使用 `atomic.Value` 持有只读快照，分发路径无锁读取。
-- 单订阅场景直接复用 packet，避免不必要 clone。
-- 多订阅场景才 clone，按需付费。
-
-## 8.3 内存复用
-
-`packet.CopyFrom` 基于 `bytebufferpool` 管理 payload 缓冲，显著降低高频分配/GC 压力。
-
-## 8.4 并发与背压策略
-
-- Task 通过 `queue_size` 提供有界排队，避免无限阻塞扩散并控制内存上界。
-- 可按 task 粒度调节 `pool_size`/`fast_path`，实现业务隔离与资源治理。
-
-## 8.5 基准测试支撑
-
-仓库内置压测入口（`cmd/bench`）和多组 benchmark（dispatch matrix、payload log 开关吞吐），可用于持续验证性能回归。
+- `traffic stats summary` 输出任务维度统计。
+- payload 观察可按任务开关，避免全局日志放大。
+- runtime 更新有清晰日志事件：updating/updated + cost。
 
 ---
 
-## 9. 为什么可扩展性高
+## 8. 演进建议
 
-## 9.1 组件解耦
+1. 增加 OpenTelemetry 指标与 trace。
+2. receiver/sender 增加细粒度重试预算与熔断策略。
+3. 完善配置 schema 导出与 CI 校验。
+4. 增强大规模配置（上千 task）下的更新性能压测。
 
-- receiver / pipeline / sender / task 职责清晰。
-- 协议扩展只需实现对应接口并在构建工厂注册。
-
-## 9.2 配置驱动拓扑
-
-新增链路通常只需要改配置（新增 receiver/sender/pipeline/task），无需改主流程代码。
-
-## 9.3 Pipeline Stage 可增量扩展
-
-新增规则类型只需在 `compileStage` 增加 case，并提供 StageFunc 实现，不影响现有 stage。
-
-## 9.4 部署扩展友好
-
-项目提供基于 `golang:1.25-alpine` 的单阶段 Docker 构建与 Kubernetes 部署清单，可横向扩容实例并结合上游负载分流。
-
----
-
-## 10. 为什么可用性强
-
-## 10.1 生命周期管理稳健
-
-`StopAll` 采用快照后并发关闭 receiver/sender，task 采用 graceful wait in-flight，兼顾停机速度和数据完整性。
-
-## 10.2 更新策略简单可靠
-
-全量替换避免差量更新带来的状态漂移和复杂回滚路径；在高可靠优先场景更易审计与运维。
-
-## 10.3 容错与降级行为明确
-
-- sender 发送失败仅影响当前发送动作，记录告警，不阻塞其他 sender。
-- worker pool 满载时可控丢弃（有日志），保护系统整体稳定。
-
-## 10.4 可观测与排障友好
-
-流量统计 + payload 摘要 + 任务运行态指标，便于快速定位“入口拥塞、规则丢弃、出口失败”等问题。
-
-## 10.5 关于“事件循环队列调大能否实现 0 丢包”
-
-先说结论：**单纯把事件循环相关参数调大，不能保证 0 丢包**。
-
-在本项目里，gnet 接收侧可调的是 `multicore`、`num_event_loop`、`read_buffer_cap`，它们主要影响并行度与读缓冲行为；并没有一个“把内部队列调大就一定不丢包”的万能开关。
-
-同时，当前 `Task` 使用有界排队模式（`WithMaxBlockingTasks(queue_size)`）；当队列已满且无法继续提交时才会返回错误并丢弃该包（有日志），这属于**应用层有界背压策略**。
-
-因此要逼近“0 丢包”，建议按“端到端容量治理”实施：
-
-1. **入口不丢**：按 CPU 拓扑调优 `num_event_loop` 与网卡队列（RSS/RPS），放大 socket rmem / backlog，避免内核先丢。  
-2. **处理不丢**：关键链路优先使用 `FastPath` 或提升 `pool_size`；对慢任务拆分独立 task，防止互相挤占。  
-3. **出口不丢**：为下游 sender 建立重试预算、超时与熔断策略，避免慢下游反向拖垮全链路。  
-4. **链路可削峰**：在 receiver 与 task 间引入可观测的有界缓冲（ring/channel）与水位告警，而不是无限堆积。  
-5. **协议级兜底**：若业务要求“严格 0 丢失”，优先选可确认与可重放的链路（如 Kafka + 幂等键 + offset 管理）；UDP 语义上只能做到“极低丢包”，无法数学意义保证 0。  
-6. **持续压测校准**：使用 `cmd/bench` 以真实包长、真实并发做容量曲线，找到 `pool_size / event_loop / batch` 的稳定工作点并预留冗余。
-
-> 工程实践里通常将目标定义为“在给定 SLA 与故障域下可验证的近零丢包”，并通过可重放机制实现最终不丢。
-
----
-
-## 11. 模块映射速查
-
-- **入口启动**：`main.go`、`src/app/runtime.go`
-- **配置定义与校验**：`src/config/*`
-- **运行时编排**：`src/runtime/update_cache.go`、`src/runtime/store.go`、`src/runtime/compiler.go`
-- **任务执行**：`src/task/task.go`
-- **协议接入/输出**：`src/receiver/*`、`src/sender/*`
-- **数据载体与内存池**：`src/packet/*`
-- **压测与性能验证**：`cmd/bench/main.go`、`src/runtime/*benchmark_test.go`
-
----
-
-## 12. 落地建议（用于生产）
-
-1. **先压测后上线**：按业务包长和协议组合运行 `cmd/bench` 做容量基线。
-2. **按任务隔离资源**：关键任务使用独立 sender、合理 `pool_size`，避免噪声互扰。
-3. **渐进开启 payload 日志**：仅在问题排查时按任务白名单开启，并限制 `payload_log_max_bytes`。
-4. **K8s 结合探针与滚动发布**：利用全量替换更新策略，降低热更新复杂度。

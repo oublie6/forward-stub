@@ -4,6 +4,7 @@ package sender
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -62,6 +63,9 @@ type SFTPSender struct {
 	// tempSuffix 是临时文件后缀。
 	// 用法：下游可据此过滤未完成文件。
 	tempSuffix string
+	// hostKeyFingerprint 是预期服务端主机公钥指纹（SSH SHA256）。
+	// 用法：用于 SSH 握手阶段校验服务端身份，抵御中间人攻击。
+	hostKeyFingerprint string
 
 	// mu 串行化 Send 与连接状态变更，避免并发写冲突。
 	mu sync.Mutex
@@ -86,18 +90,22 @@ func NewSFTPSender(name string, sc config.SenderConfig) (*SFTPSender, error) {
 	if strings.TrimSpace(sc.RemoteDir) == "" {
 		return nil, fmt.Errorf("sftp sender requires remote_dir")
 	}
+	if err := config.ValidateSSHHostKeyFingerprint(sc.HostKeyFingerprint); err != nil {
+		return nil, fmt.Errorf("sftp sender invalid host_key_fingerprint: %w", err)
+	}
 	suffix := strings.TrimSpace(sc.TempSuffix)
 	if suffix == "" {
 		suffix = ".part"
 	}
 	s := &SFTPSender{
-		name:       name,
-		addr:       strings.TrimSpace(sc.Remote),
-		username:   strings.TrimSpace(sc.Username),
-		password:   sc.Password,
-		remoteDir:  strings.TrimSpace(sc.RemoteDir),
-		tempSuffix: suffix,
-		states:     make(map[string]*sftpTransferState),
+		name:               name,
+		addr:               strings.TrimSpace(sc.Remote),
+		username:           strings.TrimSpace(sc.Username),
+		password:           sc.Password,
+		remoteDir:          strings.TrimSpace(sc.RemoteDir),
+		tempSuffix:         suffix,
+		hostKeyFingerprint: strings.TrimSpace(sc.HostKeyFingerprint),
+		states:             make(map[string]*sftpTransferState),
 	}
 	if err := s.ensureConn(); err != nil {
 		return nil, err
@@ -213,7 +221,7 @@ func (s *SFTPSender) ensureConn() error {
 	sshCfg := &ssh.ClientConfig{
 		User:            s.username,
 		Auth:            []ssh.AuthMethod{ssh.Password(s.password)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: s.hostKeyCallback(),
 		Timeout:         10 * time.Second,
 	}
 	cli, err := ssh.Dial("tcp", s.addr, sshCfg)
@@ -233,4 +241,15 @@ func (s *SFTPSender) ensureConn() error {
 	s.sshClient = cli
 	s.sftpCli = scli
 	return nil
+}
+
+func (s *SFTPSender) hostKeyCallback() ssh.HostKeyCallback {
+	want := strings.TrimSpace(s.hostKeyFingerprint)
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		got := ssh.FingerprintSHA256(key)
+		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1 {
+			return nil
+		}
+		return fmt.Errorf("sftp host key mismatch for %s: got=%s want=%s", hostname, got, want)
+	}
 }

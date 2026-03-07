@@ -4,6 +4,7 @@ package receiver
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -57,7 +58,7 @@ type SFTPReceiver struct {
 }
 
 // NewSFTPReceiver 构造并校验 SFTPReceiver。
-// 需要 listen/username/password/remote_dir 四个核心字段。
+// 需要 listen/username/password/remote_dir/host_key_fingerprint 五个核心字段。
 func NewSFTPReceiver(name string, rc config.ReceiverConfig) (*SFTPReceiver, error) {
 	if strings.TrimSpace(rc.Listen) == "" {
 		return nil, fmt.Errorf("sftp receiver requires listen")
@@ -70,6 +71,9 @@ func NewSFTPReceiver(name string, rc config.ReceiverConfig) (*SFTPReceiver, erro
 	}
 	if strings.TrimSpace(rc.RemoteDir) == "" {
 		return nil, fmt.Errorf("sftp receiver requires remote_dir")
+	}
+	if err := config.ValidateSSHHostKeyFingerprint(rc.HostKeyFingerprint); err != nil {
+		return nil, fmt.Errorf("sftp receiver invalid host_key_fingerprint: %w", err)
 	}
 	return &SFTPReceiver{name: name, cfg: rc, seen: make(map[string]string)}, nil
 }
@@ -259,7 +263,7 @@ func (r *SFTPReceiver) connect() (*ssh.Client, *sftp.Client, error) {
 	sshCfg := &ssh.ClientConfig{
 		User:            strings.TrimSpace(r.cfg.Username),
 		Auth:            []ssh.AuthMethod{ssh.Password(r.cfg.Password)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: r.hostKeyCallback(),
 		Timeout:         10 * time.Second,
 	}
 	cli, err := ssh.Dial("tcp", addr, sshCfg)
@@ -272,6 +276,17 @@ func (r *SFTPReceiver) connect() (*ssh.Client, *sftp.Client, error) {
 		return nil, nil, err
 	}
 	return cli, scli, nil
+}
+
+func (r *SFTPReceiver) hostKeyCallback() ssh.HostKeyCallback {
+	want := strings.TrimSpace(r.cfg.HostKeyFingerprint)
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		got := ssh.FingerprintSHA256(key)
+		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1 {
+			return nil
+		}
+		return fmt.Errorf("sftp host key mismatch for %s: got=%s want=%s", hostname, got, want)
+	}
 }
 
 // isSeen 判断文件指纹是否已处理。
