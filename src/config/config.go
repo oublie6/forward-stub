@@ -191,6 +191,9 @@ type ReceiverConfig struct {
 	// ChunkSize 是 SFTP 文件分块读取大小（字节）。
 	// 用法：大块提升吞吐，小块降低单包延迟与内存峰值。
 	ChunkSize int `json:"chunk_size,omitempty"`
+	// HostKeyFingerprint 是 SFTP 服务端主机公钥指纹（SSH SHA256 格式）。
+	// 用法：必须与服务端实际指纹一致，防止中间人攻击；示例：SHA256:AbCd....
+	HostKeyFingerprint string `json:"host_key_fingerprint,omitempty"`
 }
 
 // SenderConfig 描述单个发送端实例。
@@ -265,6 +268,9 @@ type SenderConfig struct {
 	// TempSuffix 是上传临时文件后缀，完成后 rename 为正式文件。
 	// 用法：下游可按后缀过滤未完成文件，避免读到半成品。
 	TempSuffix string `json:"temp_suffix,omitempty"`
+	// HostKeyFingerprint 是 SFTP 服务端主机公钥指纹（SSH SHA256 格式）。
+	// 用法：必须与服务端实际指纹一致，防止中间人攻击；示例：SHA256:AbCd....
+	HostKeyFingerprint string `json:"host_key_fingerprint,omitempty"`
 }
 
 // StageConfig 描述 pipeline 中一个 stage 的参数集合。

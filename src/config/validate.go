@@ -2,8 +2,10 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Validate 负责该函数对应的核心逻辑，详见实现细节。
@@ -83,6 +85,12 @@ func (c *Config) Validate() error {
 			if r.RemoteDir == "" {
 				return fmt.Errorf("receiver %s sftp requires remote_dir", rn)
 			}
+			if r.HostKeyFingerprint == "" {
+				return fmt.Errorf("receiver %s sftp requires host_key_fingerprint", rn)
+			}
+			if err := ValidateSSHHostKeyFingerprint(r.HostKeyFingerprint); err != nil {
+				return fmt.Errorf("receiver %s sftp host_key_fingerprint invalid: %w", rn, err)
+			}
 		default:
 			return fmt.Errorf("receiver %s unknown type %s", rn, r.Type)
 		}
@@ -114,6 +122,12 @@ func (c *Config) Validate() error {
 			if s.RemoteDir == "" {
 				return fmt.Errorf("sender %s sftp requires remote_dir", sn)
 			}
+			if s.HostKeyFingerprint == "" {
+				return fmt.Errorf("sender %s sftp requires host_key_fingerprint", sn)
+			}
+			if err := ValidateSSHHostKeyFingerprint(s.HostKeyFingerprint); err != nil {
+				return fmt.Errorf("sender %s sftp host_key_fingerprint invalid: %w", sn, err)
+			}
 		default:
 			return fmt.Errorf("sender %s unknown type %s", sn, s.Type)
 		}
@@ -132,4 +146,25 @@ func validateKafkaAuth(kind, name, mechanism, username, password string) error {
 		return nil
 	}
 	return fmt.Errorf("%s %s kafka unsupported sasl_mechanism %s", kind, name, mechanism)
+}
+
+// ValidateSSHHostKeyFingerprint 校验 SSH SHA256 主机公钥指纹格式。
+// 合法格式示例：SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A
+func ValidateSSHHostKeyFingerprint(f string) error {
+	v := strings.TrimSpace(f)
+	if v == "" {
+		return errors.New("empty fingerprint")
+	}
+	const prefix = "SHA256:"
+	if !strings.HasPrefix(v, prefix) {
+		return fmt.Errorf("must start with %q", prefix)
+	}
+	raw := strings.TrimSpace(strings.TrimPrefix(v, prefix))
+	if raw == "" {
+		return errors.New("missing base64 digest")
+	}
+	if _, err := base64.RawStdEncoding.DecodeString(raw); err != nil {
+		return fmt.Errorf("invalid base64 digest: %w", err)
+	}
+	return nil
 }
