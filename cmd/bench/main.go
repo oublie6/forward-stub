@@ -58,6 +58,10 @@ type benchFileConfig struct {
 	TaskPoolSize         *int   `json:"task_pool_size,omitempty"`
 	TaskChannelQueueSize *int   `json:"task_channel_queue_size,omitempty"`
 	TaskExecutionModel   string `json:"task_execution_model,omitempty"`
+	ReceiverEventLoops   *int   `json:"receiver_event_loops,omitempty"`
+	ReceiverReadBuffer   *int   `json:"receiver_read_buffer_cap,omitempty"`
+	TCPSenderConcurrency *int   `json:"tcp_sender_concurrency,omitempty"`
+	BasePort             *int   `json:"base_port,omitempty"`
 	LogLevel             string `json:"log_level,omitempty"`
 	LogFile              string `json:"log_file,omitempty"`
 	TrafficStatsInterval string `json:"traffic_stats_interval,omitempty"`
@@ -80,6 +84,10 @@ func main() {
 	taskPoolSize := flag.Int("task-pool-size", 2048, "benchmark task worker pool size when execution_model=pool")
 	taskChannelQueueSize := flag.Int("task-channel-queue-size", 0, "benchmark task channel queue size when execution_model=channel (<=0 means fallback to queue_size)")
 	taskExecutionModel := flag.String("task-execution-model", "", "task execution model: fastpath|pool|channel (empty means derive from task-fast-path)")
+	receiverEventLoops := flag.Int("receiver-event-loops", runtime.NumCPU(), "receiver gnet num_event_loop")
+	receiverReadBufferCap := flag.Int("receiver-read-buffer-cap", 0, "receiver read buffer cap bytes (0 means use default)")
+	tcpSenderConcurrency := flag.Int("tcp-sender-concurrency", 4, "tcp sender internal connection concurrency")
+	basePort := flag.Int("base-port", 0, "benchmark receiver base port (0 uses default by proto: udp=19100,tcp=19200)")
 	logLevel := flag.String("log-level", "warn", "benchmark runtime log level: debug|info|warn|error")
 	logFile := flag.String("log-file", "", "optional benchmark runtime log file")
 	trafficStatsInterval := flag.Duration("traffic-stats-interval", time.Second, "aggregated traffic stats log interval (e.g. 5s, 10s)")
@@ -90,7 +98,7 @@ func main() {
 	}
 
 	if *benchConfigPath != "" {
-		if err := applyBenchConfigFile(*benchConfigPath, mode, duration, warmup, payloadSize, workers, ppsPerWorker, ppsSweep, multicore, udpSinkReaders, udpSinkReadBuf, taskFastPath, taskPoolSize, taskChannelQueueSize, taskExecutionModel, logLevel, logFile, trafficStatsInterval); err != nil {
+		if err := applyBenchConfigFile(*benchConfigPath, mode, duration, warmup, payloadSize, workers, ppsPerWorker, ppsSweep, multicore, udpSinkReaders, udpSinkReadBuf, taskFastPath, taskPoolSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort, logLevel, logFile, trafficStatsInterval); err != nil {
 			logx.L().Errorw("load bench config failed", "error", err)
 			os.Exit(2)
 		}
@@ -125,7 +133,7 @@ func main() {
 
 	benchRun := func(proto string) {
 		for _, rate := range rates {
-			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf, *taskFastPath, *taskPoolSize, *taskChannelQueueSize, *taskExecutionModel)
+			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf, *taskFastPath, *taskPoolSize, *taskChannelQueueSize, *taskExecutionModel, *receiverEventLoops, *receiverReadBufferCap, *tcpSenderConcurrency, *basePort)
 			if err != nil {
 				logx.L().Errorw("benchmark failed", "proto", proto, "error", err)
 				os.Exit(1)
@@ -146,7 +154,7 @@ func main() {
 	}
 }
 
-func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Duration, payloadSize, workers, ppsPerWorker *int, ppsSweep *string, multicore *bool, udpSinkReaders, udpSinkReadBuf *int, taskFastPath *bool, taskPoolSize, taskChannelQueueSize *int, taskExecutionModel *string, logLevel, logFile *string, trafficStatsInterval *time.Duration) error {
+func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Duration, payloadSize, workers, ppsPerWorker *int, ppsSweep *string, multicore *bool, udpSinkReaders, udpSinkReadBuf *int, taskFastPath *bool, taskPoolSize, taskChannelQueueSize *int, taskExecutionModel *string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort *int, logLevel, logFile *string, trafficStatsInterval *time.Duration) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -205,6 +213,19 @@ func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Dura
 	if cfg.TaskExecutionModel != "" {
 		*taskExecutionModel = cfg.TaskExecutionModel
 	}
+
+	if cfg.ReceiverEventLoops != nil {
+		*receiverEventLoops = *cfg.ReceiverEventLoops
+	}
+	if cfg.ReceiverReadBuffer != nil {
+		*receiverReadBufferCap = *cfg.ReceiverReadBuffer
+	}
+	if cfg.TCPSenderConcurrency != nil {
+		*tcpSenderConcurrency = *cfg.TCPSenderConcurrency
+	}
+	if cfg.BasePort != nil {
+		*basePort = *cfg.BasePort
+	}
 	if cfg.LogLevel != "" {
 		*logLevel = cfg.LogLevel
 	}
@@ -243,9 +264,11 @@ func parseSweep(in string) ([]int, error) {
 }
 
 // runForwardBenchmark 负责该函数对应的核心逻辑，详见实现细节。
-func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int, taskFastPath bool, taskPoolSize, taskChannelQueueSize int, taskExecutionModel string) (*result, error) {
+func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int, taskFastPath bool, taskPoolSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort int) (*result, error) {
 	m := &metrics{}
-	basePort := map[string]int{"udp": 19100, "tcp": 19200}[proto]
+	if basePort == 0 {
+		basePort = map[string]int{"udp": 19100, "tcp": 19200}[proto]
+	}
 	if basePort == 0 {
 		return nil, fmt.Errorf("unknown proto %s", proto)
 	}
@@ -268,7 +291,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	defer func() { _ = stopSink() }()
 
 	rt := app.NewRuntime()
-	cfg := benchConfig(proto, basePort, sinkAddr, multicore, taskFastPath, taskPoolSize, taskChannelQueueSize, taskExecutionModel)
+	cfg := benchConfig(proto, basePort, sinkAddr, multicore, taskFastPath, taskPoolSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency)
 	if err := rt.UpdateCache(ctx, cfg); err != nil {
 		return nil, fmt.Errorf("update cache: %w", err)
 	}
@@ -301,7 +324,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	elapsed := time.Since(start)
 	close(stopGen)
 	wg.Wait()
-	time.Sleep(300 * time.Millisecond)
+	waitForSinkDrain(m, 2*time.Second, 150*time.Millisecond)
 
 	sentPackets := atomic.LoadUint64(&m.sentPackets)
 	sentBytes := atomic.LoadUint64(&m.sentBytes)
@@ -332,9 +355,30 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	}, nil
 }
 
+func waitForSinkDrain(m *metrics, maxWait, stableFor time.Duration) {
+	if m == nil || maxWait <= 0 {
+		return
+	}
+	deadline := time.Now().Add(maxWait)
+	last := atomic.LoadUint64(&m.recvPackets)
+	stableSince := time.Now()
+	for time.Now().Before(deadline) {
+		time.Sleep(25 * time.Millisecond)
+		cur := atomic.LoadUint64(&m.recvPackets)
+		if cur != last {
+			last = cur
+			stableSince = time.Now()
+			continue
+		}
+		if time.Since(stableSince) >= stableFor {
+			return
+		}
+	}
+}
+
 // benchConfig 负责该函数对应的核心逻辑，详见实现细节。
-func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize, taskChannelQueueSize int, taskExecutionModel string) config.Config {
-	rc := config.ReceiverConfig{Multicore: multicore}
+func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency int) config.Config {
+	rc := config.ReceiverConfig{Multicore: multicore, NumEventLoop: receiverEventLoops, ReadBufferCap: receiverReadBufferCap}
 	sc := config.SenderConfig{Concurrency: 1}
 	switch proto {
 	case "udp":
@@ -351,7 +395,7 @@ func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFas
 		sc.Type = "tcp_gnet"
 		sc.Remote = sinkAddr
 		sc.Frame = "u16be"
-		sc.Concurrency = 4
+		sc.Concurrency = tcpSenderConcurrency
 	}
 	return config.Config{
 		Version: 1,
@@ -482,8 +526,9 @@ func udpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 		payload[i] = byte(i)
 	}
 
+	limiter := newPPSLimiter(ppsPerWorker)
 	for {
-		throttle(ppsPerWorker)
+		limiter.Wait()
 		select {
 		case <-stop:
 			return
@@ -526,8 +571,9 @@ func tcpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 		frame[2+i] = byte(i)
 	}
 
+	limiter := newPPSLimiter(ppsPerWorker)
 	for {
-		throttle(ppsPerWorker)
+		limiter.Wait()
 		select {
 		case <-stop:
 			return
@@ -547,12 +593,37 @@ func tcpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 	}
 }
 
-// throttle 负责该函数对应的核心逻辑，详见实现细节。
-func throttle(pps int) {
-	if pps <= 0 {
+type ppsLimiter struct {
+	pps         int
+	tokens      float64
+	lastRefill  time.Time
+	refillEvery time.Duration
+}
+
+func newPPSLimiter(pps int) *ppsLimiter {
+	return &ppsLimiter{pps: pps, lastRefill: time.Now(), refillEvery: 2 * time.Millisecond}
+}
+
+func (l *ppsLimiter) Wait() {
+	if l == nil || l.pps <= 0 {
 		return
 	}
-	time.Sleep(time.Second / time.Duration(pps))
+	for {
+		now := time.Now()
+		elapsed := now.Sub(l.lastRefill)
+		if elapsed > 0 {
+			l.tokens += elapsed.Seconds() * float64(l.pps)
+			if l.tokens > float64(l.pps) {
+				l.tokens = float64(l.pps)
+			}
+			l.lastRefill = now
+		}
+		if l.tokens >= 1 {
+			l.tokens--
+			return
+		}
+		time.Sleep(l.refillEvery)
+	}
 }
 
 // printResult 负责该函数对应的核心逻辑，详见实现细节。

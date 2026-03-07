@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -23,6 +24,10 @@ func TestRunForwardBenchmarkChannelZeroLoss(t *testing.T) {
 		1024,
 		1024,
 		"channel",
+		runtime.NumCPU(),
+		0,
+		4,
+		29000,
 	)
 	if err != nil {
 		t.Fatalf("run benchmark: %v", err)
