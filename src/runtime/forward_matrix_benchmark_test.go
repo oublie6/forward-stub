@@ -58,3 +58,40 @@ func BenchmarkDispatchMatrix(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkDispatchMatrixPoolSizesNoPayloadLog(b *testing.B) {
+	protos := []string{"udp", "tcp", "kafka", "sftp"}
+	poolSizes := []int{1024, 4096, 8192}
+	payloadSize := 4096
+
+	for _, proto := range protos {
+		for _, poolSize := range poolSizes {
+			b.Run(fmt.Sprintf("%s_pool_%d_%dB", proto, poolSize, payloadSize), func(b *testing.B) {
+				cap := &benchCounterSender{name: proto}
+				tk := &task.Task{
+					Name:           "bench-task-pool",
+					ExecutionModel: task.ExecutionModelPool,
+					PoolSize:       poolSize,
+					QueueSize:      poolSize,
+					Senders:        []sender.Sender{cap},
+				}
+				if err := tk.Start(); err != nil {
+					b.Fatalf("task start: %v", err)
+				}
+				defer tk.StopGraceful()
+
+				st := NewStore()
+				st.setDispatchSubs(map[string][]*TaskState{proto: []*TaskState{{Name: "bench-task-pool", T: tk}}})
+				payload := make([]byte, payloadSize)
+				ctx := context.Background()
+
+				b.SetBytes(int64(payloadSize))
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					pktPayload, rel := packet.CopyFrom(payload)
+					dispatch(ctx, st, proto, &packet.Packet{Envelope: packet.Envelope{Payload: pktPayload}, ReleaseFn: rel})
+				}
+			})
+		}
+	}
+}

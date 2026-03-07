@@ -106,3 +106,39 @@ go test ./src/runtime -run '^$' \
    - 独立发包机（避免同机竞争）；
    - NIC/RPS/XPS 与 socket 缓冲联合调优；
    - 进一步减少每包路径中的原子计数与日志开销。
+
+
+---
+
+## 7. 按你的要求：关闭 payload_log_recv / payload_log_send，按不同 pool size 重测四协议
+
+说明：
+
+- 本轮使用 `BenchmarkDispatchMatrixPoolSizesNoPayloadLog`；任务未开启 `LogPayloadRecv/LogPayloadSend`（默认关闭）。
+- 协议覆盖：UDP / TCP / Kafka / SFTP。
+- pool size：`1024 / 4096 / 8192`。
+- 基准口径为同进程转发，不统计丢包字段；该基准路径视为“0 丢包处理能力上限”。
+
+命令：
+
+```bash
+go test ./src/runtime -run '^$'   -bench 'BenchmarkDispatchMatrixPoolSizesNoPayloadLog'   -benchmem -benchtime=8s
+```
+
+结果（4096B payload）：
+
+| 协议 | pool=1024 | pool=4096 | pool=8192 | 0丢包极限吞吐（取最大） |
+|---|---:|---:|---:|---:|
+| UDP | 1204.33 MB/s | **1328.79 MB/s** | 1233.51 MB/s | **1328.79 MB/s** |
+| TCP | **1306.88 MB/s** | 1259.52 MB/s | 1160.85 MB/s | **1306.88 MB/s** |
+| Kafka | **1350.60 MB/s** | 1142.60 MB/s | 1215.68 MB/s | **1350.60 MB/s** |
+| SFTP | 1245.67 MB/s | 1143.03 MB/s | **1307.93 MB/s** | **1307.93 MB/s** |
+
+结论：
+
+- 在本机同进程基准下，不同协议的最优 pool size 并不一致；不能用单一 pool size 覆盖全部协议最优。
+- 当前组合下建议的“协议默认值”可先设为：
+  - UDP: 4096
+  - TCP: 1024
+  - Kafka: 1024
+  - SFTP: 8192
