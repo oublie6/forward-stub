@@ -324,7 +324,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	elapsed := time.Since(start)
 	close(stopGen)
 	wg.Wait()
-	time.Sleep(300 * time.Millisecond)
+	waitForSinkDrain(m, 2*time.Second, 150*time.Millisecond)
 
 	sentPackets := atomic.LoadUint64(&m.sentPackets)
 	sentBytes := atomic.LoadUint64(&m.sentBytes)
@@ -353,6 +353,27 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 		pps:            float64(recvPackets) / elapsed.Seconds(),
 		mbps:           float64(recvBytes*8) / elapsed.Seconds() / 1_000_000,
 	}, nil
+}
+
+func waitForSinkDrain(m *metrics, maxWait, stableFor time.Duration) {
+	if m == nil || maxWait <= 0 {
+		return
+	}
+	deadline := time.Now().Add(maxWait)
+	last := atomic.LoadUint64(&m.recvPackets)
+	stableSince := time.Now()
+	for time.Now().Before(deadline) {
+		time.Sleep(25 * time.Millisecond)
+		cur := atomic.LoadUint64(&m.recvPackets)
+		if cur != last {
+			last = cur
+			stableSince = time.Now()
+			continue
+		}
+		if time.Since(stableSince) >= stableFor {
+			return
+		}
+	}
 }
 
 // benchConfig 负责该函数对应的核心逻辑，详见实现细节。
@@ -505,8 +526,9 @@ func udpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 		payload[i] = byte(i)
 	}
 
+	limiter := newPPSLimiter(ppsPerWorker)
 	for {
-		throttle(ppsPerWorker)
+		limiter.Wait()
 		select {
 		case <-stop:
 			return
@@ -549,8 +571,9 @@ func tcpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 		frame[2+i] = byte(i)
 	}
 
+	limiter := newPPSLimiter(ppsPerWorker)
 	for {
-		throttle(ppsPerWorker)
+		limiter.Wait()
 		select {
 		case <-stop:
 			return
@@ -570,12 +593,37 @@ func tcpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 	}
 }
 
-// throttle 负责该函数对应的核心逻辑，详见实现细节。
-func throttle(pps int) {
-	if pps <= 0 {
+type ppsLimiter struct {
+	pps         int
+	tokens      float64
+	lastRefill  time.Time
+	refillEvery time.Duration
+}
+
+func newPPSLimiter(pps int) *ppsLimiter {
+	return &ppsLimiter{pps: pps, lastRefill: time.Now(), refillEvery: 2 * time.Millisecond}
+}
+
+func (l *ppsLimiter) Wait() {
+	if l == nil || l.pps <= 0 {
 		return
 	}
-	time.Sleep(time.Second / time.Duration(pps))
+	for {
+		now := time.Now()
+		elapsed := now.Sub(l.lastRefill)
+		if elapsed > 0 {
+			l.tokens += elapsed.Seconds() * float64(l.pps)
+			if l.tokens > float64(l.pps) {
+				l.tokens = float64(l.pps)
+			}
+			l.lastRefill = now
+		}
+		if l.tokens >= 1 {
+			l.tokens--
+			return
+		}
+		time.Sleep(l.refillEvery)
+	}
 }
 
 // printResult 负责该函数对应的核心逻辑，详见实现细节。
