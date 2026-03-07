@@ -162,10 +162,10 @@ func TestForwardMatrixKafkaAndSFTPSimulated(t *testing.T) {
 		t.Fatalf("expected kafka sender build to fail when topic is missing")
 	}
 
-	if _, err := buildReceiver("sr", config.ReceiverConfig{Type: "sftp", Listen: "127.0.0.1:22", Username: "u", Password: "p", RemoteDir: "/tmp"}, "error"); err != nil {
+	if _, err := buildReceiver("sr", config.ReceiverConfig{Type: "sftp", Listen: "127.0.0.1:22", Username: "u", Password: "p", RemoteDir: "/tmp", HostKeyFingerprint: "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"}, "error"); err != nil {
 		t.Fatalf("expected sftp receiver build success with valid config: %v", err)
 	}
-	if _, err := buildSender("ss", config.SenderConfig{Type: "sftp", Remote: "127.0.0.1:1", Username: "u", Password: "p", RemoteDir: "/tmp"}, "error"); err == nil {
+	if _, err := buildSender("ss", config.SenderConfig{Type: "sftp", Remote: "127.0.0.1:1", Username: "u", Password: "p", RemoteDir: "/tmp", HostKeyFingerprint: "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"}, "error"); err == nil {
 		t.Fatalf("expected sftp sender build to fail without ssh service")
 	}
 }

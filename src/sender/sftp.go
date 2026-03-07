@@ -90,6 +90,9 @@ func NewSFTPSender(name string, sc config.SenderConfig) (*SFTPSender, error) {
 	if strings.TrimSpace(sc.RemoteDir) == "" {
 		return nil, fmt.Errorf("sftp sender requires remote_dir")
 	}
+	if err := config.ValidateSSHHostKeyFingerprint(sc.HostKeyFingerprint); err != nil {
+		return nil, fmt.Errorf("sftp sender invalid host_key_fingerprint: %w", err)
+	}
 	suffix := strings.TrimSpace(sc.TempSuffix)
 	if suffix == "" {
 		suffix = ".part"

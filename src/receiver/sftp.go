@@ -58,7 +58,7 @@ type SFTPReceiver struct {
 }
 
 // NewSFTPReceiver 构造并校验 SFTPReceiver。
-// 需要 listen/username/password/remote_dir 四个核心字段。
+// 需要 listen/username/password/remote_dir/host_key_fingerprint 五个核心字段。
 func NewSFTPReceiver(name string, rc config.ReceiverConfig) (*SFTPReceiver, error) {
 	if strings.TrimSpace(rc.Listen) == "" {
 		return nil, fmt.Errorf("sftp receiver requires listen")
@@ -71,6 +71,9 @@ func NewSFTPReceiver(name string, rc config.ReceiverConfig) (*SFTPReceiver, erro
 	}
 	if strings.TrimSpace(rc.RemoteDir) == "" {
 		return nil, fmt.Errorf("sftp receiver requires remote_dir")
+	}
+	if err := config.ValidateSSHHostKeyFingerprint(rc.HostKeyFingerprint); err != nil {
+		return nil, fmt.Errorf("sftp receiver invalid host_key_fingerprint: %w", err)
 	}
 	return &SFTPReceiver{name: name, cfg: rc, seen: make(map[string]string)}, nil
 }

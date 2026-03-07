@@ -1,34 +1,223 @@
 # forward-stub
 
-面向高吞吐报文转发场景的 Go 服务，支持多种 receiver/sender（UDP、TCP、Kafka、SFTP）和 pipeline 编排。
+`forward-stub` 是一个面向**高吞吐、低延迟、可热更新**场景的 Go 转发引擎。它将 `receiver -> pipeline -> sender` 抽象为可编排任务（task），支持 UDP/TCP/Kafka/SFTP 多协议收发与协议转换。
 
-## 1. 环境准备
+---
 
-- Go：`1.25.x`（与 `go.mod` 一致）
-- Docker：`20.10+`
-- Kubernetes：`1.24+`（可选）
+## 1. 项目定位
 
-## 2. 本地运行
+适用场景：
 
-```bash
-go run . -system-config ./configs/system.example.json -business-config ./configs/business.example.json
+- 多协议接入与统一转发（例如 UDP 入、Kafka 出）。
+- 数据治理前置层（match/replace/drop、文件语义转换）。
+- 业务配置频繁变更且要求不停机更新。
+- 高并发报文链路（网络 IO + 轻量处理 + 多下游 fan-out）。
+
+核心目标：
+
+1. **吞吐优先**：数据面尽量减少锁竞争与对象分配。
+2. **可靠运行**：支持优雅停止、配置校验、运行时统计。
+3. **可扩展**：通过 receiver/sender/stage/task 组合扩展能力。
+
+---
+
+## 2. 为什么吞吐高
+
+高吞吐并非来自单点“魔法”，而是多个工程策略叠加：
+
+- **gnet 事件驱动网络模型**：UDP/TCP 场景减少 goroutine 切换与系统调用压力。
+- **payload 内存复用**：降低 GC 压力，避免高 PPS 下大量短生命周期对象。
+- **任务执行模型可选**：`fastpath / pool / channel` 可按场景权衡延迟、吞吐与隔离。
+- **dispatch 快照路由**：按 receiver 到 task 的订阅映射做快速分发。
+- **可控队列**：有界队列与回压机制，避免无限堆积导致雪崩。
+
+> 实测（见本文性能章节）中，`BenchmarkDispatchMatrix` 在 4096B payload 的多协议组合下可达到约 1.7~2.1 GB/s 级别的基准转发吞吐（同进程、基准条件下）。
+
+---
+
+## 3. 优秀第三方库与特性
+
+项目依赖的关键库（见 `go.mod`）：
+
+- **github.com/panjf2000/gnet/v2**
+  - 事件驱动网络框架，适合高并发 UDP/TCP IO。
+  - 减少“一连接一 goroutine”模型下的调度成本。
+- **github.com/panjf2000/ants/v2**
+  - 高性能 goroutine 池，实现 task 的 `pool` 执行模型。
+  - 支持有界等待任务，避免无界增长。
+- **github.com/twmb/franz-go**
+  - Kafka 高性能客户端，支持 producer/consumer 高级参数调优。
+- **github.com/pkg/sftp + golang.org/x/crypto/ssh**
+  - SFTP 收发实现，支持基于 SSH 的文件分块收发。
+  - 当前已支持 `host_key_fingerprint` 主机指纹校验（防 MITM）。
+- **go.uber.org/zap + lumberjack**
+  - 高性能结构化日志 + 文件滚动。
+- **go.uber.org/multierr**
+  - 资源关闭等多错误聚合。
+
+---
+
+## 4. 架构概览
+
+```text
+Config(system/business)
+   -> Runtime.UpdateCache
+      -> Compile Pipelines
+      -> Build Senders
+      -> Build Tasks
+      -> Build Receivers
+
+Receiver(onPacket)
+   -> dispatch(receiver->tasks snapshot)
+      -> Task execution model
+         -> Pipeline stages
+            -> Sender fan-out
 ```
 
-> 推荐使用 `-system-config` + `-business-config` 两个文件；`-config` 仅用于兼容旧版单文件模式。
+### 核心模块
 
+- `src/config`: 配置结构、默认值、校验、拆分加载。
+- `src/runtime`: 运行时编译、热更新、实例生命周期管理。
+- `src/task`: 执行模型与 pipeline + sender 串联。
+- `src/receiver`: UDP/TCP/Kafka/SFTP 接收端。
+- `src/sender`: UDP/TCP/Kafka/SFTP 发送端。
+- `src/pipeline`: stage 实现（匹配/替换/丢弃/文件语义）。
+- `src/logx`: 结构化日志与吞吐聚合统计。
+- `cmd/bench`: 功能/吞吐压测工具。
 
-### 2.1 运行中配置热更新（ConfigMap/本地文件）
+---
 
-- 服务启动后默认开启配置文件监听（轮询间隔 2 秒），当挂载的 ConfigMap 文件内容变化时会自动重读配置并热更新任务。
-- 同时保留手动信号触发重载能力：
-  - `kill -HUP <pid>`
-  - `kill -USR1 <pid>`
-- Kubernetes 场景下推荐先更新 ConfigMap，待容器内挂载文件刷新后即可自动生效；如需立即触发也可继续发送上面的信号。
-- 热重载仅监听业务配置文件，并按 receiver/sender/pipeline/task 的新增、更新、删除做增量生效；系统配置（control/logging）变更需重启服务。
-- 启动后会立即输出 `traffic stats summary`，无流量时也会打印全量任务运行信息。
-- 聚合统计日志以**格式化 JSON**打印，`tasks` 项不再输出 `direction` 字段，重点展示 task 维度吞吐和 worker pool 运行态。
+## 5. 三种执行模型与 FastPath 详解
 
-## 配置完整示例与字段说明
+### 5.1 fastpath
+
+- 同步执行：`dispatch` 所在线程直接跑 `pipeline + sender`。
+- 优势：路径最短、调度开销最低、延迟可控。
+- 风险：下游慢时容易把压力直接传回上游。
+- 适用：处理逻辑轻、下游稳定、极致低延迟链路。
+
+### 5.2 pool
+
+- 通过 ants worker pool 异步执行。
+- 优势：并发能力强，对突发流量缓冲更好。
+- 风险：队列过大时可能增加尾延迟。
+- 适用：吞吐优先且单包处理有一定 CPU 成本。
+
+### 5.3 channel
+
+- 单 goroutine + 有界 channel，顺序处理。
+- 优势：顺序语义好、模型简单、可控。
+- 风险：单消费协程上限明显。
+- 适用：必须严格顺序或处理逻辑轻中等。
+
+---
+
+## 6. 配置说明（完整）
+
+### 6.1 配置文件模式
+
+推荐双文件：
+
+- `system-config`：控制面、日志等系统级（通常需重启）。
+- `business-config`：receiver/sender/pipeline/task（支持热重载）。
+
+兼容单文件 `-config`，但建议新部署使用双文件。
+
+### 6.2 顶层结构
+
+```json
+{
+  "version": 1001,
+  "control": {...},
+  "logging": {...},
+  "receivers": {...},
+  "senders": {...},
+  "pipelines": {...},
+  "tasks": {...}
+}
+```
+
+### 6.3 logging 关键项
+
+- `level`: debug/info/warn/error
+- `file`: 空为 stderr
+- `max_size_mb/max_backups/max_age_days/compress`: 滚动日志策略
+- `traffic_stats_interval`: 吞吐聚合输出周期
+- `traffic_stats_sample_every`: 采样倍率
+- `payload_log_tasks/payload_log_recv/payload_log_send/payload_log_max_bytes`: payload 观测开关
+
+### 6.4 receiver 类型与字段
+
+#### udp_gnet / tcp_gnet
+
+- `listen` 必填；tcp 支持 `frame`（none/u16be/u32be 等）。
+
+#### kafka
+
+- `listen`: brokers CSV
+- `topic`: 主题
+- `group_id`
+- `start_offset`: earliest/latest
+- `fetch_min_bytes/fetch_max_bytes/fetch_max_wait_ms`
+- 鉴权：`username/password/sasl_mechanism(PLAIN)`
+- TLS：`tls/tls_skip_verify`（生产不建议 skip verify）
+
+#### sftp
+
+- `listen`、`username`、`password`、`remote_dir`
+- `poll_interval_sec`、`chunk_size`
+- **`host_key_fingerprint`（必填）**：`SHA256:<base64_raw>`
+
+### 6.5 sender 类型与字段
+
+#### udp_unicast / udp_multicast
+
+- `remote` 必填
+- `local_ip/local_port` 可选（ACL、出口控制）
+- multicast: `iface/ttl/loop`
+
+#### tcp_gnet
+
+- `remote`
+- `frame`
+- `concurrency`
+
+#### kafka
+
+- `remote`、`topic`
+- `acks`、`linger_ms`、`batch_max_bytes`、`compression`
+- 鉴权 + TLS 参数与 receiver 类似
+
+#### sftp
+
+- `remote`、`username`、`password`、`remote_dir`
+- `temp_suffix`
+- **`host_key_fingerprint`（必填）**
+
+### 6.6 pipeline stage
+
+支持的 stage：
+
+- `match_offset_bytes`
+- `replace_offset_bytes`
+- `drop_if_flag`
+- `mark_as_file_chunk`
+- `clear_file_meta`
+
+flag 名称映射：`matched/rewritten/drop/none`。
+
+### 6.7 task 字段
+
+- `receivers`: 订阅哪些 receiver
+- `pipelines`: 按顺序执行
+- `senders`: fan-out 下游
+- `execution_model`: `fastpath | pool | channel`
+- `pool_size`、`queue_size`、`channel_queue_size`
+- `log_payload_recv`、`log_payload_send`
+
+---
+
+## 7. 详细配置示例
 
 ```json
 {
@@ -44,345 +233,146 @@ go run . -system-config ./configs/system.example.json -business-config ./configs
     "traffic_stats_interval": "1s",
     "traffic_stats_sample_every": 1,
     "payload_log_tasks": ["task_udp_to_tcp"],
-    "payload_log_recv": true,
-    "payload_log_send": true,
+    "payload_log_recv": false,
+    "payload_log_send": false,
     "payload_log_max_bytes": 256
   },
   "receivers": {
     "rx_udp": {"type": "udp_gnet", "listen": "0.0.0.0:19000", "multicore": true},
     "rx_tcp": {"type": "tcp_gnet", "listen": "0.0.0.0:19001", "frame": "u16be", "multicore": true},
-    "rx_kafka": {"type": "kafka", "listen": "127.0.0.1:9092", "topic": "in-topic", "group": "forward-stub-group", "start_offset": "latest"},
-    "rx_sftp": {"type": "sftp", "listen": "127.0.0.1:22", "username": "demo", "password": "demo", "remote_dir": "/input", "poll_interval_sec": 3, "chunk_size": 65536, "host_key_fingerprint": "SHA256:replace-with-server-fingerprint"}
+    "rx_kafka": {
+      "type": "kafka",
+      "listen": "127.0.0.1:9092",
+      "topic": "in-topic",
+      "group_id": "forward-stub-group",
+      "start_offset": "latest",
+      "tls": false
+    },
+    "rx_sftp": {
+      "type": "sftp",
+      "listen": "127.0.0.1:22",
+      "username": "demo",
+      "password": "demo",
+      "remote_dir": "/input",
+      "poll_interval_sec": 3,
+      "chunk_size": 65536,
+      "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"
+    }
   },
   "senders": {
     "tx_udp": {"type": "udp_unicast", "local_ip": "0.0.0.0", "local_port": 20000, "remote": "127.0.0.1:21000"},
     "tx_mcast": {"type": "udp_multicast", "local_ip": "0.0.0.0", "local_port": 20001, "remote": "239.0.0.10:21001", "iface": "eth0", "ttl": 16, "loop": false},
     "tx_tcp": {"type": "tcp_gnet", "remote": "127.0.0.1:21002", "frame": "u16be", "concurrency": 4},
     "tx_kafka": {"type": "kafka", "remote": "127.0.0.1:9092", "topic": "out-topic", "acks": -1, "linger_ms": 5, "batch_max_bytes": 1048576, "compression": "lz4"},
-    "tx_sftp": {"type": "sftp", "remote": "127.0.0.1:22", "username": "demo", "password": "demo", "remote_dir": "/output", "temp_suffix": ".tmp", "host_key_fingerprint": "SHA256:replace-with-server-fingerprint"}
+    "tx_sftp": {"type": "sftp", "remote": "127.0.0.1:22", "username": "demo", "password": "demo", "remote_dir": "/output", "temp_suffix": ".tmp", "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"}
   },
   "pipelines": {
-    "pipe_bytes": [{"type": "trim"}, {"type": "append", "value": "0a"}]
+    "pipe_bytes": [
+      {"type": "match_offset_bytes", "offset": 0, "hex": "aabb", "flag": "matched"},
+      {"type": "replace_offset_bytes", "offset": 2, "hex": "ccdd", "flag": "rewritten"},
+      {"type": "drop_if_flag", "flag": "drop"}
+    ],
+    "pipe_stream_to_file": [
+      {"type": "mark_as_file_chunk", "path": "/auto/out.bin", "bool": true}
+    ]
   },
   "tasks": {
     "task_udp_to_tcp": {
       "receivers": ["rx_udp"],
       "pipelines": ["pipe_bytes"],
       "senders": ["tx_tcp"],
-      "pool_size": 4096,
       "execution_model": "pool",
+      "pool_size": 2048,
       "queue_size": 4096,
       "channel_queue_size": 0,
-      "log_payload_recv": true,
-      "log_payload_send": true
+      "log_payload_recv": false,
+      "log_payload_send": false
     }
   }
 }
 ```
 
-字段要点：
-- `logging.traffic_stats_interval`：聚合日志周期。
-- `logging.payload_log_*`：payload 日志开关 + 白名单。
-- `receivers/senders.<name>.type`：决定协议和可用字段。
-- `tasks.<name>.execution_model`：`fastpath | pool | channel`。
-- `tasks.<name>.receivers/pipelines/senders`：引用关系，必须在对应 map 中存在。
+---
 
+## 8. 启动与运维
 
-## 3. Docker 部署（详细步骤）
-
-### 3.1 构建镜像
+### 本地启动
 
 ```bash
-docker build -t forward-stub:dev \
-  --build-arg VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev) \
-  --build-arg TARGETOS=linux \
-  --build-arg TARGETARCH=arm64 \
-  .
+go run . -system-config ./configs/system.example.json -business-config ./configs/business.example.json
 ```
 
-如需 amd64：把 `TARGETARCH=arm64` 改为 `TARGETARCH=amd64`。
-
-### 3.2 准备配置文件
-
-建议先复制示例配置：
+### 常用 make 命令
 
 ```bash
-cp ./configs/example.json ./configs/config.json
+make test
+make vet
+make perf
+make verify
 ```
 
-按需修改 `./configs/config.json`（例如监听端口、sender 目标地址、日志级别等）。
+### 热更新
 
-### 3.3 启动容器（在 `docker run` 指定挂载和参数）
+- 文件监听自动重载业务配置。
+- 支持 `HUP/USR1` 信号触发重载。
+- 系统配置（control/logging）变更通常需重启。
 
-> Dockerfile 中不再声明 `VOLUME` 和 `CMD`，由运行命令显式指定。
+---
 
-```bash
-docker run -d --name forward-stub \
-  -p 19000:19000/udp \
-  -v $(pwd)/configs/config.json:/app/config/config.json:ro \
-  -v $(pwd)/logs:/var/log/forward-stub \
-  forward-stub:dev \
-  -config /app/config/config.json
-```
+## 9. 功能验证与吞吐测试（最新复测）
 
-说明：
+本次已重新执行：
 
-- `-v ...:/app/config/config.json:ro`：挂载配置文件（只读）
-- `-v ...:/var/log/forward-stub`：挂载日志目录
-- 最后的 `-config ...`：作为容器启动参数传给 `ENTRYPOINT`
+1. `go test ./...`
+2. `go vet ./...`
+3. `make perf`
+4. `cmd/bench` 执行模型对比（fastpath/pool/channel）
 
-### 3.4 运维命令
+### 9.1 Dispatch 矩阵基准（节选）
 
-```bash
-# 查看日志
-docker logs -f forward-stub
+- 256B payload：约 0.41~0.48 µs/op（~537~624 MB/s）
+- 4096B payload：约 1.87~2.34 µs/op（~1.75~2.19 GB/s）
 
-# 查看容器内进程参数
-docker inspect forward-stub --format='{{json .Config.Cmd}}'
+### 9.2 执行模型复测（UDP, 512B, workers=2, pps-sweep=2000/4000/8000）
 
-# 停止并删除
-docker rm -f forward-stub
-```
+- **fastpath**：最高约 **15.68 Mbps**（loss=0）
+- **pool**：最高约 **7.55 Mbps**（loss=0）
+- **channel**：最高约 **8.39 Mbps**（loss=0）
 
-## 4. Kubernetes 部署（详细步骤）
+> 说明：该组参数属于低压档，用于快速回归；更高压力建议按 `docs/three_execution_models_zero_loss_throughput_2026-03-05.md` 的方法增加 sweep 范围并多轮取中位值。
 
-仓库提供了 `deploy/k8s/` 下的基础清单（Namespace、ConfigMap、Deployment、Service、Kustomization）。
+---
 
-### 4.1 方式 A：使用现有 YAML（推荐）
+## 10. 可扩展性为什么强
 
-1) 构建并推送镜像
+- **协议扩展**：新增 receiver/sender 仅需实现接口并接入 build 逻辑。
+- **处理扩展**：新增 stage 通过 compiler 注册即可加入 pipeline。
+- **拓扑扩展**：task 映射可 1:N/N:M，适合复杂转发编排。
+- **运行时扩展**：业务配置支持热重载与增量切换。
 
-```bash
-docker build -t <registry>/forward-stub:<tag> .
-docker push <registry>/forward-stub:<tag>
-```
+---
 
-2) 替换镜像地址（两种任选其一）
+## 11. 安全建议
 
-- 方式 1：改 `deploy/k8s/kustomization.yaml` 中 `images`。
-- 方式 2：直接命令行覆盖：
+- Kafka/SFTP 生产环境建议开启 TLS，不要使用 `tls_skip_verify`。
+- SFTP 必须配置真实 `host_key_fingerprint`（建议通过运维流程自动注入）。
+- 凭据不要硬编码在仓库，建议接入密钥管理系统。
 
-```bash
-kubectl kustomize deploy/k8s | \
-  sed 's#image: forward-stub:latest#image: <registry>/forward-stub:<tag>#g' | \
-  kubectl apply -f -
-```
+---
 
-3) 部署
-
-```bash
-kubectl apply -k deploy/k8s
-```
-
-4) 查看状态
-
-```bash
-kubectl -n forward-stub get pods
-kubectl -n forward-stub logs -f deploy/forward-stub
-```
-
-### 4.2 方式 B：使用 `kubectl run`（在命令中指定参数）
-
-如果你希望像 `docker run` 一样一次性启动，可用如下命令（示例将 ConfigMap 挂载到 `/app/config`，并传入 `-config` 参数）：
-
-```bash
-kubectl create namespace forward-stub
-kubectl -n forward-stub create configmap forward-stub-config \
-  --from-file=config.json=./configs/config.json
-
-kubectl -n forward-stub run forward-stub \
-  --image=<registry>/forward-stub:<tag> \
-  --restart=Never \
-  --overrides='{
-    "apiVersion": "v1",
-    "spec": {
-      "containers": [{
-        "name": "forward-stub",
-        "image": "<registry>/forward-stub:<tag>",
-        "args": ["-config", "/app/config/config.json"],
-        "volumeMounts": [{
-          "name": "config",
-          "mountPath": "/app/config",
-          "readOnly": true
-        }],
-        "ports": [{"containerPort": 19000, "protocol": "UDP"}]
-      }],
-      "volumes": [{
-        "name": "config",
-        "configMap": {"name": "forward-stub-config"}
-      }]
-    }
-  }'
-```
-
-查看日志：
-
-```bash
-kubectl -n forward-stub logs -f pod/forward-stub
-```
-
-## 5. 功能测试（配置热更新）
-
-执行命令：
-
-```bash
-go test ./... 
-go test ./... -run TestReadConfigFingerprintChangesWithContent
-```
-
-验证点：
-- 修改配置文件内容后，指纹发生变化，可触发监听重载。
-- 手动信号重载路径保持兼容（`SIGHUP`/`SIGUSR1` 逻辑未移除）。
-- 流量聚合日志为 JSON 格式化输出，且 `direction` 字段已移除。
-
-## 6. 目录说明（精简）
+## 12. 目录结构
 
 ```text
-.
-├── main.go
-├── configs/                # 示例配置
-├── src/                    # 核心实现（runtime/receiver/sender/pipeline 等）
-├── deploy/k8s/             # Kubernetes 清单
-├── scripts/                # 构建与部署辅助脚本
-└── docs/technical-architecture.md
+cmd/bench/            # 压测工具
+configs/              # 示例配置
+docs/                 # 架构与实验文档
+src/app/              # 应用启动与运行时组装
+src/config/           # 配置模型、默认值、校验
+src/runtime/          # 运行时编译、更新、分发
+src/task/             # 执行模型与任务生命周期
+src/receiver/         # 协议接收端
+src/sender/           # 协议发送端
+src/pipeline/         # stage 管道处理
+src/logx/             # 日志与流量统计
 ```
 
-## 7. 参考文档
-
-- 技术架构文档：`docs/technical-architecture.md`
-
-## 8. 吞吐量测试复验（多次实验取平均）
-
-为复验当前仓库中的吞吐相关 benchmark，本次在同一环境下执行了 5 轮重复实验（`-count=5`），并对每个子用例计算平均值。
-
-执行命令：
-
-```bash
-go test ./src/runtime -run '^$' \
-  -bench 'Benchmark(DispatchMatrix|PayloadLogSwitchThroughput)$' \
-  -benchmem -count=5 -benchtime=1s
-```
-
-测试环境（来自 `go test` 输出）：
-
-- `goos=linux`
-- `goarch=amd64`
-- `cpu=Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz`
-
-补充丢包率验证：
-
-- `BenchmarkPayloadLogSwitchThroughput` 在每个子用例内有 `cap.pkts == b.N` 断言，复验结果均通过，可视为丢包率 `0`。
-- `BenchmarkDispatchMatrix` 原始 benchmark 未统计丢包；本次额外运行了临时校验测试（同样的 4x4 协议矩阵、256B/4096B），逐项校验 `recv == sent`，结果均为丢包率 `0`。
-
-> 说明：下表均为 5 次实验的算术平均值；单次压测会受调度、CPU 频率波动等因素影响。
-
-### 7.1 Dispatch Matrix（4x4 协议组合）
-
-| 输入->输出 | 包长 | 平均 ns/op | 平均 MB/s | 平均丢包率 | B/op | allocs/op |
-|---|---:|---:|---:|---:|---:|---:|
-| `kafka_to_kafka` | 256B | 1274.6 | 202.94 | 0 | 592 | 6 |
-| `kafka_to_kafka` | 4096B | 5711.4 | 718.92 | 0 | 4432 | 6 |
-| `kafka_to_sftp` | 256B | 1232.2 | 209.10 | 0 | 592 | 6 |
-| `kafka_to_sftp` | 4096B | 5575.4 | 738.94 | 0 | 4432 | 6 |
-| `kafka_to_tcp` | 256B | 1297.8 | 197.92 | 0 | 592 | 6 |
-| `kafka_to_tcp` | 4096B | 5797.8 | 709.79 | 0 | 4432 | 6 |
-| `kafka_to_udp` | 256B | 1311.0 | 196.34 | 0 | 592 | 6 |
-| `kafka_to_udp` | 4096B | 5815.0 | 705.83 | 0 | 4432 | 6 |
-| `sftp_to_kafka` | 256B | 1233.8 | 207.87 | 0 | 592 | 6 |
-| `sftp_to_kafka` | 4096B | 5486.6 | 749.69 | 0 | 4432 | 6 |
-| `sftp_to_sftp` | 256B | 1294.2 | 198.99 | 0 | 592 | 6 |
-| `sftp_to_sftp` | 4096B | 5852.4 | 703.55 | 0 | 4432 | 6 |
-| `sftp_to_tcp` | 256B | 1225.4 | 209.53 | 0 | 592 | 6 |
-| `sftp_to_tcp` | 4096B | 5485.8 | 747.48 | 0 | 4432 | 6 |
-| `sftp_to_udp` | 256B | 1206.6 | 212.89 | 0 | 592 | 6 |
-| `sftp_to_udp` | 4096B | 6023.2 | 681.09 | 0 | 4432 | 6 |
-| `tcp_to_kafka` | 256B | 1322.0 | 194.50 | 0 | 592 | 6 |
-| `tcp_to_kafka` | 4096B | 5796.8 | 708.84 | 0 | 4432 | 6 |
-| `tcp_to_sftp` | 256B | 1331.0 | 192.67 | 0 | 592 | 6 |
-| `tcp_to_sftp` | 4096B | 5848.2 | 710.09 | 0 | 4432 | 6 |
-| `tcp_to_tcp` | 256B | 1302.6 | 196.89 | 0 | 592 | 6 |
-| `tcp_to_tcp` | 4096B | 5484.2 | 748.54 | 0 | 4432 | 6 |
-| `tcp_to_udp` | 256B | 1311.8 | 195.48 | 0 | 592 | 6 |
-| `tcp_to_udp` | 4096B | 5496.8 | 746.83 | 0 | 4432 | 6 |
-| `udp_to_kafka` | 256B | 1410.2 | 181.63 | 0 | 592 | 6 |
-| `udp_to_kafka` | 4096B | 5778.4 | 711.12 | 0 | 4432 | 6 |
-| `udp_to_sftp` | 256B | 1347.8 | 190.38 | 0 | 592 | 6 |
-| `udp_to_sftp` | 4096B | 5332.2 | 770.15 | 0 | 4432 | 6 |
-| `udp_to_tcp` | 256B | 1376.4 | 186.35 | 0 | 592 | 6 |
-| `udp_to_tcp` | 4096B | 5748.8 | 715.44 | 0 | 4432 | 6 |
-| `udp_to_udp` | 256B | 1371.2 | 187.26 | 0 | 589 | 5.8 |
-| `udp_to_udp` | 4096B | 5717.2 | 718.17 | 0 | 4432 | 6 |
-
-### 7.2 Payload Log 开关吞吐
-
-| 协议 | payloadLog | 包长 | 平均 ns/op | 平均 MB/s | 平均丢包率 | B/op | allocs/op |
-|---|---|---:|---:|---:|---:|---:|---:|
-| `kafka` | `false` | 256B | 1074.3 | 266.81 | 0 | 592 | 6 |
-| `kafka` | `false` | 4096B | 3101.6 | 1328.09 | 0 | 4432 | 6 |
-| `kafka` | `true` | 256B | 674.1 | 380.11 | 0 | 592 | 6 |
-| `kafka` | `true` | 4096B | 3042.4 | 1351.97 | 0 | 4432 | 6 |
-| `tcp` | `false` | 256B | 1206.2 | 213.46 | 0 | 592 | 6 |
-| `tcp` | `false` | 4096B | 5673.0 | 725.06 | 0 | 4432 | 6 |
-| `tcp` | `true` | 256B | 1155.8 | 221.55 | 0 | 592 | 6 |
-| `tcp` | `true` | 4096B | 6220.2 | 661.58 | 0 | 4432 | 6 |
-| `udp` | `false` | 256B | 1236.6 | 208.01 | 0 | 592 | 6 |
-| `udp` | `false` | 4096B | 6243.0 | 659.24 | 0 | 4432 | 6 |
-| `udp` | `true` | 256B | 1257.0 | 203.82 | 0 | 592 | 6 |
-| `udp` | `true` | 4096B | 6326.2 | 647.77 | 0 | 4432 | 6 |
-
-### 7.3 丢包率为 0 的最大吞吐（`cmd/bench` 实测）
-
-为补充“工程链路（生成流量 -> runtime -> sink）”口径下的 0 丢包上限，本次使用 `cmd/bench` 对 UDP/TCP 做 pps 扫描，选取 `loss_rate == 0` 的最大吞吐结果。
-
-执行命令：
-
-```bash
-# UDP
-go run ./cmd/bench -mode udp -duration 3s -warmup 1s -payload-size 512 \
-  -workers 2 -pps-sweep 20000,40000,60000,80000,100000 \
-  -log-level info -traffic-stats-interval 1h
-
-# TCP
-go run ./cmd/bench -mode tcp -duration 3s -warmup 1s -payload-size 512 \
-  -workers 2 -pps-sweep 5000,10000,15000,20000,30000 \
-  -log-level info -traffic-stats-interval 1h
-```
-
-| 协议 | payload | workers | 扫描范围（pps/worker） | 丢包率=0 的最大吞吐 (Mbps) | 对应 pps |
-|---|---:|---:|---|---:|---:|
-| UDP | 512B | 2 | 20000,40000,60000,80000,100000 | 264.70 | 64625.21 |
-| TCP | 512B | 2 | 5000,10000,15000,20000,30000 | 78.38 | 19135.83 |
-
-### 7.4 三种执行模型多轮平均（0 丢包口径）
-
-为减少单次波动影响，本次对 `fastpath` / `pool` / `channel` 三种任务执行模型分别执行 3 轮 UDP 扫描测试（同一参数口径），每轮取 `loss_rate == 0` 的最大吞吐，再对 3 轮结果取平均。
-
-执行命令（每个模型重复 3 轮）：
-
-```bash
-# fastpath
-go run ./cmd/bench -mode udp -duration 3s -warmup 1s -payload-size 512 \
-  -workers 2 -pps-sweep 20000,40000,60000,80000,100000,120000 \
-  -task-execution-model fastpath -log-level info -traffic-stats-interval 1h
-
-# pool
-go run ./cmd/bench -mode udp -duration 3s -warmup 1s -payload-size 512 \
-  -workers 2 -pps-sweep 20000,40000,60000,80000,100000,120000 \
-  -task-execution-model pool -task-pool-size 2048 -log-level info -traffic-stats-interval 1h
-
-# channel
-go run ./cmd/bench -mode udp -duration 3s -warmup 1s -payload-size 512 \
-  -workers 2 -pps-sweep 20000,40000,60000,80000,100000,120000 \
-  -task-execution-model channel -task-channel-queue-size 4096 \
-  -log-level info -traffic-stats-interval 1h
-```
-
-各轮 0 丢包最大吞吐（Mbps）：
-
-| 执行模型 | 第 1 轮 | 第 2 轮 | 第 3 轮 | 3 轮平均 Mbps | 3 轮平均 pps |
-|---|---:|---:|---:|---:|---:|
-| fastpath | 156.44 | 316.66 | 296.93 | 256.68 | 62665.99 |
-| pool | 174.40 | 80.83 | 116.57 | 123.93 | 30257.15 |
-| channel | 215.95 | 221.96 | 196.79 | 211.57 | 51651.91 |
-
-结论（本机 3 轮均值）：`fastpath > channel > pool`。

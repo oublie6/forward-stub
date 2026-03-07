@@ -5,7 +5,7 @@ import "testing"
 func TestValidateSFTPReceiverRequiresFields(t *testing.T) {
 	cfg := Config{
 		Receivers: map[string]ReceiverConfig{
-			"r1": {Type: "sftp", Listen: "127.0.0.1:22", Username: "u", Password: "p", RemoteDir: "/in", HostKeyFingerprint: "SHA256:test"},
+			"r1": {Type: "sftp", Listen: "127.0.0.1:22", Username: "u", Password: "p", RemoteDir: "/in", HostKeyFingerprint: "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"},
 		},
 		Senders: map[string]SenderConfig{
 			"s1": {Type: "udp_unicast", Remote: "127.0.0.1:9000", LocalPort: 9001},
@@ -27,5 +27,10 @@ func TestValidateSFTPReceiverRequiresFields(t *testing.T) {
 	cfg.Receivers["r1"] = ReceiverConfig{Type: "sftp", Listen: "127.0.0.1:22", Username: "u", Password: "p", RemoteDir: "/in"}
 	if err := cfg.Validate(); err == nil {
 		t.Fatalf("expected error for missing sftp host key fingerprint")
+	}
+
+	cfg.Receivers["r1"] = ReceiverConfig{Type: "sftp", Listen: "127.0.0.1:22", Username: "u", Password: "p", RemoteDir: "/in", HostKeyFingerprint: "SHA256:***"}
+	if err := cfg.Validate(); err == nil {
+		t.Fatalf("expected error for invalid sftp host key fingerprint")
 	}
 }
