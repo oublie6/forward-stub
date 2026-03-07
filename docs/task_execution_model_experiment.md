@@ -103,3 +103,16 @@ go run ./cmd/bench -mode udp -duration 12s -warmup 2s -payload-size 512 \
 - 延迟敏感：优先 fastpath。
 - 波峰吞吐和隔离：优先 pool。
 - 严格顺序：优先 channel。
+
+---
+
+## 附：按协议转发类型的 0 丢包极限吞吐（补充）
+
+| 类型 | 结果 |
+|---|---:|
+| UDP 转发（端到端） | **44.30 Mbps** |
+| TCP 转发（端到端） | **289.59 Mbps** |
+| Kafka 转发（矩阵基准） | **1438.71 MB/s** |
+| SFTP 转发（矩阵基准） | **1528.65 MB/s** |
+
+口径见 `docs/three_execution_models_zero_loss_throughput_2026-03-05.md` 末尾附录。

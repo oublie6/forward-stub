@@ -68,3 +68,18 @@ go run ./cmd/bench -mode udp -duration 3s -warmup 1s -payload-size 512 \
 - 上游发包工具本身可能成为瓶颈。
 - 当 sender 下游不稳定时，执行模型排序可能变化。
 - 在 payload 很大时，内存带宽与 cache 命中会主导结果。
+
+---
+
+## 附：按转发协议拆分的 0 丢包极限吞吐（本轮复测）
+
+> 口径说明：
+> - UDP/TCP：`cmd/bench` 端到端，按 `loss_rate==0` 选最大吞吐；
+> - Kafka/SFTP：`BenchmarkDispatchMatrix` 协议转发基准（同进程模拟），基准模型不统计丢包，视为无丢包处理上限。
+
+| 转发类型 | 关键命令 | 极限吞吐 |
+|---|---|---:|
+| UDP | `go run ./cmd/bench -mode udp -duration 12s ... -pps-sweep 20000..140000` | **44.30 Mbps** |
+| TCP | `go run ./cmd/bench -mode tcp -duration 12s ... -pps-sweep 20000..500000` | **289.59 Mbps** |
+| Kafka | `go test ./src/runtime -run '^$' -bench 'BenchmarkDispatchMatrix/...kafka_to_kafka_4096B' -benchmem -benchtime=10s` | **1438.71 MB/s** |
+| SFTP | `go test ./src/runtime -run '^$' -bench 'BenchmarkDispatchMatrix/...sftp_to_sftp_4096B' -benchmem -benchtime=10s` | **1528.65 MB/s** |
