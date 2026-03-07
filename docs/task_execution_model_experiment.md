@@ -15,78 +15,104 @@
 2. 端到端压测（`cmd/bench`）
    - 聚焦真实收发链路。
 
-## 3. 微基准命令
+## 3. 延迟微基准命令（本次）
 
 ```bash
-go test ./src/task -run '^$' -bench BenchmarkTaskExecutionModels -benchmem -count=3
+go test ./src/task -run '^$' -bench BenchmarkTaskExecutionModels -benchmem -benchtime=10s -count=1
 ```
 
-结论（历史结论仍成立）：
+本次延迟结果：
 
-- 通常 `fastpath` 最低开销。
-- `channel` 在纯模型开销上常优于 `pool_size=1`。
-- 端到端结果会受到 IO 与 sender 行为影响，不可只看微基准。
+- `fastpath_sync`: **391.7 ns/op**
+- `task_pool_size_1`: **1095 ns/op**
+- `single_goroutine_channel`: **546.8 ns/op**
 
-## 4. 端到端复测命令（本次）
+## 4. 端到端复测命令（本次 0 丢包上限复测）
 
 ```bash
 # fastpath
-go run ./cmd/bench -mode udp -duration 3s -warmup 1s -payload-size 512 \
-  -workers 2 -pps-sweep 2000,4000,8000 \
+go run ./cmd/bench -mode udp -duration 12s -warmup 2s -payload-size 512 \
+  -workers 2 -pps-sweep 20000,40000,60000,80000,100000,120000 \
   -task-execution-model fastpath -log-level info -traffic-stats-interval 1h
 
 # pool
-go run ./cmd/bench -mode udp -duration 3s -warmup 1s -payload-size 512 \
-  -workers 2 -pps-sweep 2000,4000,8000 \
+go run ./cmd/bench -mode udp -duration 12s -warmup 2s -payload-size 512 \
+  -workers 2 -pps-sweep 20000,40000,60000,80000,100000,120000 \
   -task-execution-model pool -task-pool-size 2048 -log-level info -traffic-stats-interval 1h
 
 # channel
-go run ./cmd/bench -mode udp -duration 3s -warmup 1s -payload-size 512 \
-  -workers 2 -pps-sweep 2000,4000,8000 \
+go run ./cmd/bench -mode udp -duration 12s -warmup 2s -payload-size 512 \
+  -workers 2 -pps-sweep 20000,40000,60000,80000,100000,120000 \
   -task-execution-model channel -log-level info -traffic-stats-interval 1h
 ```
 
-## 5. 本次复测结果（loss_rate=0）
+## 5. 本次复测结果（loss_rate=0，duration=12s）
 
 ### fastpath
 
-| pps | pps(实测) | mbps |
-|---:|---:|---:|
-| 2000 | 1675.89 | 6.86 |
-| 4000 | 1495.80 | 6.13 |
-| 8000 | 3828.12 | 15.68 |
+| pps/worker | pps(实测) | mbps | loss_rate |
+|---:|---:|---:|---:|
+| 20000 | 7571.91 | 31.01 | 0 |
+| 40000 | 17608.90 | 72.13 | 0 |
+| 60000 | 24608.06 | 100.79 | 0 |
+| 80000 | 29632.34 | 121.37 | 0 |
 
-**最高：15.68 Mbps**
+**0 丢包最大吞吐：121.37 Mbps（pps=29632.34）**
 
 ### pool
 
-| pps | pps(实测) | mbps |
-|---:|---:|---:|
-| 2000 | 1500.49 | 6.15 |
-| 4000 | 1518.29 | 6.22 |
-| 8000 | 1844.10 | 7.55 |
+| pps/worker | pps(实测) | mbps | loss_rate |
+|---:|---:|---:|---:|
+| 20000 | 8711.68 | 35.68 | 0 |
+| 40000 | 17112.38 | 70.09 | 0 |
+| 60000 | 32879.48 | 134.67 | 0 |
 
-**最高：7.55 Mbps**
+**0 丢包最大吞吐：134.67 Mbps（pps=32879.48）**
 
 ### channel
 
-| pps | pps(实测) | mbps |
-|---:|---:|---:|
-| 2000 | 1459.94 | 5.98 |
-| 4000 | 1552.42 | 6.36 |
-| 8000 | 2048.93 | 8.39 |
+| pps/worker | pps(实测) | mbps | loss_rate |
+|---:|---:|---:|---:|
+| 20000 | 7886.55 | 32.30 | 0 |
+| 40000 | 16942.04 | 69.39 | 0 |
+| 60000 | 26246.09 | 107.50 | 0 |
+| 80000 | 38080.27 | 155.98 | 0 |
+| 100000 | 38974.43 | 159.64 | 0 |
 
-**最高：8.39 Mbps**
+**0 丢包最大吞吐：159.64 Mbps（pps=38974.43）**
 
-## 6. 解释
+## 6. pool 模式 0 丢包极限吞吐补测（duration=12~15s）
 
-- 本次 sweep 范围偏低，更像“回归型测试”，用于检测模型行为变化与功能稳定性。
-- 若用于容量规划，建议将 sweep 提升到 2~10 万 pps/worker，并固定 CPU 亲和与频率。
+额外 sweep：`82000,86000,90000,94000`
+
+| pps/worker | pps(实测) | mbps | loss_rate |
+|---:|---:|---:|---:|
+| 82000 | 54365.03 | 222.68 | 0 |
+| 86000 | 55486.52 | 227.27 | 0 |
+
+**pool 0 丢包极限吞吐（本轮）：227.27 Mbps（pps=55486.52）**
+
+## 7. 解释
+
+- 本次已经使用 2~12 万 pps/worker 做上限复测，但依旧建议多轮取中位值。
+- 若用于容量规划，建议固定 CPU 亲和与频率。
 - 同一模型不同轮次波动正常，应取中位值并保留原始日志。
 
-## 7. 推荐实践
+## 8. 推荐实践
 
 - 延迟敏感：优先 fastpath。
 - 波峰吞吐和隔离：优先 pool。
 - 严格顺序：优先 channel。
 
+---
+
+## 附：按协议转发类型的 0 丢包极限吞吐（补充）
+
+| 类型 | 结果 |
+|---|---:|
+| UDP 转发（端到端） | **44.30 Mbps** |
+| TCP 转发（端到端） | **289.59 Mbps** |
+| Kafka 转发（矩阵基准） | **1438.71 MB/s** |
+| SFTP 转发（矩阵基准） | **1528.65 MB/s** |
+
+口径见 `docs/three_execution_models_zero_loss_throughput_2026-03-05.md` 末尾附录。

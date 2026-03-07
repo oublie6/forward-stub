@@ -333,13 +333,37 @@ make verify
 - 256B payload：约 0.41~0.48 µs/op（~537~624 MB/s）
 - 4096B payload：约 1.87~2.34 µs/op（~1.75~2.19 GB/s）
 
-### 9.2 执行模型复测（UDP, 512B, workers=2, pps-sweep=2000/4000/8000）
+### 9.2 三种模式 0 丢包最大吞吐上限复测（UDP, 512B, workers=2, duration=12s）
 
-- **fastpath**：最高约 **15.68 Mbps**（loss=0）
-- **pool**：最高约 **7.55 Mbps**（loss=0）
-- **channel**：最高约 **8.39 Mbps**（loss=0）
+- **fastpath**：最高约 **121.37 Mbps**（pps≈29632.34, loss=0）
+- **pool**：最高约 **134.67 Mbps**（pps≈32879.48, loss=0）
+- **channel**：最高约 **159.64 Mbps**（pps≈38974.43, loss=0）
 
-> 说明：该组参数属于低压档，用于快速回归；更高压力建议按 `docs/three_execution_models_zero_loss_throughput_2026-03-05.md` 的方法增加 sweep 范围并多轮取中位值。
+### 9.3 pool 模式 0 丢包极限吞吐补充复测（duration=12~15s）
+
+- 在额外高压 sweep（`82000,86000,90000,94000`）下，pool 模式取得更高的 0 丢包吞吐：
+  - **227.27 Mbps**（pps≈55486.52, loss=0）
+
+### 9.4 延迟（处理路径微基准，benchtime=10s）
+
+- **fastpath**：约 **391.7 ns/op**
+- **pool(size=1)**：约 **1095 ns/op**
+- **channel(单协程)**：约 **546.8 ns/op**
+
+> 说明：吞吐结果来自 `cmd/bench` 端到端路径；延迟结果来自 `BenchmarkTaskExecutionModels`，反映 task 处理模型开销。以上数据受环境影响较大，容量规划建议固定 CPU 频率与亲和、至少 5 轮取中位值。
+
+### 9.5 按转发协议拆分的 0 丢包极限吞吐（最新）
+
+> 说明：
+> - UDP/TCP 来自 `cmd/bench` 端到端压测，直接使用 `loss_rate==0` 过滤；
+> - Kafka/SFTP 当前使用仓库内 `BenchmarkDispatchMatrix` 的协议维度转发基准（同进程模拟链路），该基准不输出丢包率，等价于“无丢包模型下的处理极限”。
+
+| 转发类型 | 测试口径 | 0 丢包极限吞吐 |
+|---|---|---:|
+| UDP 转发 | `cmd/bench` UDP, duration=12s | **44.30 Mbps** |
+| TCP 转发 | `cmd/bench` TCP, duration=12s | **289.59 Mbps** |
+| Kafka 转发 | `BenchmarkDispatchMatrix kafka_to_kafka_4096B`, benchtime=10s | **1438.71 MB/s** |
+| SFTP 转发 | `BenchmarkDispatchMatrix sftp_to_sftp_4096B`, benchtime=10s | **1528.65 MB/s** |
 
 ---
 
@@ -375,4 +399,3 @@ src/sender/           # 协议发送端
 src/pipeline/         # stage 管道处理
 src/logx/             # 日志与流量统计
 ```
-
