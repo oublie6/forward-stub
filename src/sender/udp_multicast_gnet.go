@@ -4,6 +4,7 @@ package sender
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"sync"
 	"sync/atomic"
