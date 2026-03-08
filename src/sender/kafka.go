@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"sync"
 	"time"
@@ -19,12 +20,13 @@ import (
 )
 
 type KafkaSender struct {
-	name    string
-	brokers []string
-	topic   string
+	name        string
+	brokers     []string
+	topic       string
+	concurrency int
 
-	mu     sync.Mutex
-	client *kgo.Client
+	locks   []sync.Mutex
+	clients []*kgo.Client
 }
 
 // NewKafkaSender 负责该函数对应的核心逻辑，详见实现细节。
@@ -59,11 +61,24 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 	} else if mech != nil {
 		opts = append(opts, kgo.SASL(mech))
 	}
-	cli, err := kgo.NewClient(opts...)
-	if err != nil {
-		return nil, err
+	concurrency := kafkaIntDefault(sc.Concurrency, 1)
+	s := &KafkaSender{
+		name:        name,
+		brokers:     brs,
+		topic:       sc.Topic,
+		concurrency: concurrency,
+		locks:       make([]sync.Mutex, concurrency),
+		clients:     make([]*kgo.Client, concurrency),
 	}
-	return &KafkaSender{name: name, brokers: brs, topic: sc.Topic, client: cli}, nil
+	for i := 0; i < concurrency; i++ {
+		cli, err := kgo.NewClient(opts...)
+		if err != nil {
+			_ = s.Close(context.Background())
+			return nil, err
+		}
+		s.clients[i] = cli
+	}
+	return s, nil
 }
 
 // Name 负责该函数对应的核心逻辑，详见实现细节。
@@ -74,9 +89,10 @@ func (s *KafkaSender) Key() string { return "kafka|" + strings.Join(s.brokers, "
 
 // Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
-	s.mu.Lock()
-	cli := s.client
-	s.mu.Unlock()
+	idx := s.pickShard(p.Payload)
+	s.locks[idx].Lock()
+	cli := s.clients[idx]
+	s.locks[idx].Unlock()
 	if cli == nil {
 		return errors.New("kafka sender closed")
 	}
@@ -91,14 +107,25 @@ func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
 
 // Close 负责该函数对应的核心逻辑，详见实现细节。
 func (s *KafkaSender) Close(ctx context.Context) error {
-	s.mu.Lock()
-	cli := s.client
-	s.client = nil
-	s.mu.Unlock()
-	if cli != nil {
-		cli.Close()
+	for i := 0; i < s.concurrency; i++ {
+		s.locks[i].Lock()
+		cli := s.clients[i]
+		s.clients[i] = nil
+		s.locks[i].Unlock()
+		if cli != nil {
+			cli.Close()
+		}
 	}
 	return nil
+}
+
+func (s *KafkaSender) pickShard(payload []byte) int {
+	if s.concurrency <= 1 {
+		return 0
+	}
+	h := fnv.New32a()
+	_, _ = h.Write(payload)
+	return int(h.Sum32() % uint32(s.concurrency))
 }
 
 func splitCSV(v string) []string {
