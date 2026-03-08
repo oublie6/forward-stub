@@ -28,6 +28,7 @@ func TestRunForwardBenchmarkChannelZeroLoss(t *testing.T) {
 		0,
 		4,
 		29000,
+		false,
 	)
 	if err != nil {
 		t.Fatalf("run benchmark: %v", err)

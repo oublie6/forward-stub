@@ -33,7 +33,11 @@ func NewUDPUnicastSender(name, localIP string, localPort int, remote string) (*U
 	if localIP == "" {
 		localIP = "0.0.0.0"
 	}
-	laddr := &net.UDPAddr{IP: net.ParseIP(localIP), Port: localPort}
+	lip := net.ParseIP(localIP)
+	if lip == nil {
+		return nil, fmt.Errorf("invalid local ip: %s", localIP)
+	}
+	laddr := &net.UDPAddr{IP: lip, Port: localPort}
 
 	s := &UDPUnicastSender{
 		name:   name,
