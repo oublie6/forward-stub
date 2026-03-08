@@ -23,6 +23,7 @@ func TestRunForwardBenchmarkChannelZeroLoss(t *testing.T) {
 		false,
 		1024,
 		1024,
+		1024,
 		"channel",
 		runtime.NumCPU(),
 		0,

@@ -1,167 +1,123 @@
-# Forward Stub 全量性能优化与代码审查报告（多轮迭代，2026-03-08）
+# Forward Stub 全服务多轮性能优化与代码审查报告（2026-03-08）
 
-## 1. 目标与范围
+## 一、执行目标（本轮）
 
-本次对当前服务进行多轮“审查→改造→复审→测试→压测”，覆盖：
+本轮按要求执行了多轮循环：
 
-- Go 代码文件（`cmd/`、`src/`、根目录 Go 文件）
-- 脚本文件（`scripts/*.sh`）
-- 不包含第三方 `vendor/` 代码
-
-并完成以下硬性目标：
-
-1. 找出性能优化点与 bug 风险并改造。
-2. 多轮执行直到未发现新的低风险高收益改造点。
-3. 完成功能测试。
-4. 完成两类极限吞吐测试：
-   - 严格 0 丢包 + 严格保序
-   - 严格 0 丢包 + 不考虑保序（可用任意 pool size）
-5. 压测期间关闭 payload 日志。
+1. 全量审查代码与脚本，识别性能优化点与 bug 风险。
+2. 落地改造后回归测试（每次代码变更均执行 test + vet）。
+3. 重复审查，直到未发现新的低风险高收益改造点。
+4. 完成四种协议转发功能测试。
+5. 完成两类压测（每个性能测试档位 `duration >= 30s`，并关闭 payload log）：
+   - 严格 0 丢包 + 严格保序极限吞吐（三种处理模式）
+   - 严格 0 丢包 + 不考虑保序，任意 pool size + 任意 queue size 极限吞吐
 
 ---
 
-## 2. 多轮执行过程
+## 二、多轮审查与改造
 
-### 第 1 轮：全量审查（静态+运行路径）
+### 第 1 轮审查发现
 
-审查关注点：
-
-- 热路径额外分配
-- 生命周期/并发安全
-- 配置校验边界
-- 压测工具可信度（是否能验证严格保序）
-- 脚本语法可执行性
-
-发现问题：
-
-1. `cmd/bench` 不具备严格保序验证能力（只统计收发计数）。
-2. `cmd/bench` TCP sink 每包都新建 buffer，影响压测开销与稳定性。
-3. `cmd/bench` 启动阶段重复 `logx.Init`，存在冗余初始化。
-4. `src/sender/udp_unicast_gnet.go` 对 `local_ip` 缺少严格校验，非法 IP 可能造成误绑定行为。
+1. `cmd/bench` 缺少 `task_queue_size` 参数透传，无法满足“任意 queue size”压测。
+2. 严格保序校验约束不完整：未限制 `receiver-event-loops` 与 `multicore`，可能在 ingress 并行导致重排噪声。
+3. sink 顺序校验在非严格模式下仍走校验分支（可进一步收敛开销与语义）。
+4. bench 结果需要明确输出顺序误差信息用于判定严格保序。
 
 ### 第 1 轮改造
 
-- 新增 bench 严格保序验证能力（基于 payload 前 8 字节序列号）：
-  - 新增 `--validate-order` 开关。
-  - 严格校验模式下强制参数约束（如 `workers=1`、UDP 单 reader、TCP sender 并发=1）。
-  - 输出新增 `order_errors` 与 `strict_order_ok` 指标。
-- 优化 TCP sink：复用 `readU16Framed` 缓冲区，避免每包分配。
-- 移除 bench 冗余 `logx.Init` 初始化。
-- bench 生成配置显式关闭 payload 日志（`PayloadLogRecv/Send=false`）。
-- 修复 UDP 单播 sender 本地 IP 校验：非法 `local_ip` 直接报错。
-
-### 第 2 轮：回归审查
-
-- 复查热路径与并发边界。
-- 增补单元测试：
-  - 序列校验逻辑测试。
-  - 非法 local IP 校验测试。
-- 复跑全量测试、vet、性能基准与压测。
-
-结论：未发现新的“可直接落地且收益明显”的低风险改造点。
-
----
-
-## 3. 代码改造清单
-
 1. `cmd/bench/main.go`
-   - 新增严格保序验证参数与校验。
-   - 新增顺序错误统计字段并写入结果。
-   - 生成端注入 sequence；sink 端校验 sequence。
-   - TCP sink 读缓冲复用。
-   - bench runtime 配置显式关闭 payload log。
-   - 清理冗余日志初始化。
+   - 新增 `--task-queue-size` flag，并接入 config file 字段 `task_queue_size`。
+   - `benchConfig` 将 `QueueSize` 写入 `TaskConfig`。
+   - 严格保序模式补充参数约束：
+     - `receiver-event-loops=1`
+     - `multicore=false`
+     - `task-execution-model=pool` 时要求 `task-pool-size=1`
+   - sink 顺序校验仅在 `validate-order` 打开时执行。
+2. 保持压测配置中 `PayloadLogRecv=false`、`PayloadLogSend=false`，确保压测期间 payload log 关闭。
 
-2. `src/sender/udp_unicast_gnet.go`
-   - `local_ip` 校验：`net.ParseIP == nil` 时返回错误，避免隐式退化。
+### 第 2 轮复审结论
 
-3. 新增测试
-   - `cmd/bench/sequence_test.go`
-   - `src/sender/udp_unicast_gnet_ip_test.go`
+- 复查热路径、生命周期和压测工具行为后，未发现新的同级别（低风险、可直接提交）优化点或明显 bug 风险。
 
 ---
 
-## 4. 功能与质量验证结果
+## 三、四种协议功能测试
 
-### 4.1 单元/集成测试
+通过 runtime 矩阵测试覆盖 UDP/TCP/Kafka/SFTP 四种协议组合转发路径（包含 4x4 组合矩阵），并执行全量回归。
+
 - `GOFLAGS='-mod=vendor' go test ./...`：通过
-
-### 4.2 静态检查
+- `GOFLAGS='-mod=vendor' go test ./src/runtime -run 'TestForwardMatrix|TestDispatchClonesForEveryTaskAndReleasesOriginal|TestBuildTaskPayloadLogOptions'`：通过
 - `GOFLAGS='-mod=vendor' go vet ./...`：通过
-
-### 4.3 脚本语法检查
 - `for f in scripts/*.sh; do bash -n "$f"; done`：通过
 
-### 4.4 基准测试
-- `GOFLAGS='-mod=vendor' make perf`：通过（含 runtime benchmark 与 bench 回归）
+---
+
+## 四、严格 0 丢包 + 严格保序极限吞吐（30s 档，三种处理模式）
+
+> 测试协议：TCP（使用 u16 帧，便于严格顺序校验）
+>
+> 统一参数：`workers=1`, `payload=512B`, `duration=30s`, `warmup=5s`, `validate-order=true`, `receiver-event-loops=1`, `multicore=false`, `tcp-sender-concurrency=1`
+
+### 1) fastpath
+- 4k pps：`loss=0`, `order_errors=0`, `strict_order_ok=true`
+- 8k pps：`loss=0`, `order_errors=0`, `strict_order_ok=true`
+- 10k pps：`loss=0`, 但 `order_errors>0`, `strict_order_ok=false`
+
+**严格保序极限（fastpath）**：约 **8,000 pps / 32.77 Mbps**
+
+### 2) channel
+- 4k pps：`loss=0`, `order_errors=0`, `strict_order_ok=true`
+- 8k pps：`loss=0`, 但 `order_errors>0`, `strict_order_ok=false`
+- 10k pps：`loss=0`, 但 `order_errors>0`, `strict_order_ok=false`
+
+**严格保序极限（channel）**：约 **4,000 pps / 16.38 Mbps**
+
+### 3) pool（`task-pool-size=1`, `task-queue-size=16384`）
+- 2k / 4k / 6k / 8k / 10k pps：均 `loss=0`, `order_errors=0`, `strict_order_ok=true`
+- 12k pps：`loss=0`, 但 `order_errors>0`, `strict_order_ok=false`
+
+**严格保序极限（pool）**：约 **10,001 pps / 40.96 Mbps**
 
 ---
 
-## 5. 极限吞吐测试结果
+## 五、严格 0 丢包 + 不考虑保序（任意 pool size + 任意 queue size，30s 档）
 
-> 说明：所有压测在 bench 生成的 runtime 配置中均显式关闭 payload log。
+### A. UDP（pool）
+参数：`workers=4`, `duration=30s`, `warmup=5s`, `payload=512B`
 
-### A. 严格 0 丢包 + 严格保序极限吞吐
+测试组：
+1. `pool=1024, queue=4096`
+2. `pool=4096, queue=16384`
+3. `pool=8192, queue=65536`
 
-#### A1) UDP（channel 模型，严格保序）
-参数：
-- `workers=1`
-- `task-execution-model=channel`
-- `udp-sink-readers=1`
-- `validate-order=true`
-- `payload=512B`
+每组扫频：`pps-per-worker=4000,6000`（总约 16k / 24k）
 
-关键结果：
-- 20k pps 仍满足：`loss_rate=0`、`order_errors=0`、`strict_order_ok=true`
-- 当前扫描上限内严格极限：约 **19,998 pps / 81.91 Mbps**
+结论：
+- 总约 16k pps 可达到 0 丢包（最佳观测约 **16,004 pps / 65.55 Mbps**）。
+- 总约 24k pps 出现丢包（约 0.3%~0.43%）。
 
-#### A2) TCP（channel 模型，严格保序）
-参数：
-- `workers=1`
-- `task-execution-model=channel`
-- `tcp-sender-concurrency=1`
-- `validate-order=true`
-- `payload=512B`
+### B. TCP（pool）
+参数：`workers=4`, `duration=30s`, `warmup=5s`, `payload=512B`, `tcp-sender-concurrency=8`
 
-关键结果：
-- 10k pps：`loss_rate=0`、`order_errors=0`
-- 11k pps 出现大量 `order_errors`
-- 当前严格极限：约 **9,999 pps / 40.96 Mbps**（10k 档）
+测试组：
+1. `pool=1024, queue=4096`
+2. `pool=4096, queue=16384`
+3. `pool=8192, queue=65536`
 
-### B. 严格 0 丢包 + 不考虑保序（任意 pool size）极限吞吐
+每组扫频：`pps-per-worker=30000,60000`（总约 120k / 240k）
 
-#### B1) UDP（pool，扫描 pool_size=1024/4096/8192）
-参数：
-- `workers=2`
-- `task-execution-model=pool`
-- `task-pool-size ∈ {1024,4096,8192}`
-- `payload=512B`
-
-结果摘要：
-- 约 16k pps（总）可稳定 0 丢包。
-- 更高档位（24k+）出现不同程度丢包。
-- 本轮 0 丢包极限约 **16k pps / 65.5 Mbps**。
-
-#### B2) TCP（pool，扫描 pool_size=1024/4096/8192）
-参数：
-- `workers=2`
-- `task-execution-model=pool`
-- `task-pool-size ∈ {1024,4096,8192}`
-- `payload=512B`
-
-结果摘要：
-- 在更高扫频中持续 0 丢包（含 50k pps/worker、70k pps/worker、100k pps/worker 档）。
-- 本轮扫描上限内达到：约 **200,832 pps / 822.61 Mbps** 且 0 丢包。
+结论：
+- 全部组合在两档速率均保持 `loss=0`。
+- 本轮最佳 0 丢包吞吐观测值：约 **240,762 pps / 986.16 Mbps**（`pool=1024,queue=4096` 组 60k 档）。
 
 ---
 
-## 6. 最终结论
+## 六、最终结论
 
-1. 已完成多轮审查与改造，当前未发现新的低风险高收益优化点与明显 bug 风险。
-2. bench 现在支持“严格保序”验证，不再只看收发计数。
-3. 在本机环境中：
-   - 严格保序下：UDP 严格极限显著高于 TCP（本次扫描结果）。
-   - 不考虑保序且允许任意 pool size：TCP 吞吐可大幅提升且保持 0 丢包。
-4. 若继续优化，建议下一阶段聚焦：
-   - TCP 严格保序高负载下的乱序根因定位（receiver/task/sender 各段事件时序）
-   - UDP 高 PPS 丢包点的 socket / 内核缓冲 / event-loop 参数联调
+1. 已完成多轮“审查→改造→复审”，并补齐了严格保序压测约束与任意 queue size 能力。
+2. 四协议功能测试通过（UDP/TCP/Kafka/SFTP 矩阵）。
+3. 严格保序场景下三种处理模式极限不同：`pool(size=1) > fastpath > channel`（本机本次测得）。
+4. 不考虑保序时，TCP 在多 pool/queue 组合下可显著提升至高吞吐且 0 丢包。
+5. 当前未发现新的低风险高收益改造点；后续若继续优化，建议聚焦：
+   - 严格保序下高 PPS 重排根因（网络栈/事件循环/任务调度链路）
+   - UDP 高 PPS 的内核 socket buffer 与 NIC 队列参数联调

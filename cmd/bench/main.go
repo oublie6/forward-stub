@@ -62,6 +62,7 @@ type benchFileConfig struct {
 	UDPSinkReadBuf       *int   `json:"udp_sink_read_buf,omitempty"`
 	TaskFastPath         *bool  `json:"task_fast_path,omitempty"`
 	TaskPoolSize         *int   `json:"task_pool_size,omitempty"`
+	TaskQueueSize        *int   `json:"task_queue_size,omitempty"`
 	TaskChannelQueueSize *int   `json:"task_channel_queue_size,omitempty"`
 	TaskExecutionModel   string `json:"task_execution_model,omitempty"`
 	ReceiverEventLoops   *int   `json:"receiver_event_loops,omitempty"`
@@ -89,6 +90,7 @@ func main() {
 	udpSinkReadBuf := flag.Int("udp-sink-read-buf", 16<<20, "UDP sink socket read buffer bytes")
 	taskFastPath := flag.Bool("task-fast-path", false, "whether benchmark task uses fast_path")
 	taskPoolSize := flag.Int("task-pool-size", 2048, "benchmark task worker pool size when execution_model=pool")
+	taskQueueSize := flag.Int("task-queue-size", 4096, "benchmark task queue size when execution_model=pool")
 	taskChannelQueueSize := flag.Int("task-channel-queue-size", 0, "benchmark task channel queue size when execution_model=channel (<=0 means fallback to queue_size)")
 	taskExecutionModel := flag.String("task-execution-model", "", "task execution model: fastpath|pool|channel (empty means derive from task-fast-path)")
 	receiverEventLoops := flag.Int("receiver-event-loops", runtime.NumCPU(), "receiver gnet num_event_loop")
@@ -102,7 +104,7 @@ func main() {
 	flag.Parse()
 
 	if *benchConfigPath != "" {
-		if err := applyBenchConfigFile(*benchConfigPath, mode, duration, warmup, payloadSize, workers, ppsPerWorker, ppsSweep, multicore, udpSinkReaders, udpSinkReadBuf, taskFastPath, taskPoolSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort, logLevel, logFile, trafficStatsInterval, validateOrder); err != nil {
+		if err := applyBenchConfigFile(*benchConfigPath, mode, duration, warmup, payloadSize, workers, ppsPerWorker, ppsSweep, multicore, udpSinkReaders, udpSinkReadBuf, taskFastPath, taskPoolSize, taskQueueSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort, logLevel, logFile, trafficStatsInterval, validateOrder); err != nil {
 			logx.L().Errorw("load bench config failed", "error", err)
 			os.Exit(2)
 		}
@@ -135,6 +137,18 @@ func main() {
 			logx.L().Errorw("validate-order requires tcp-sender-concurrency=1 to keep strict single stream order", "tcp_sender_concurrency", *tcpSenderConcurrency)
 			os.Exit(2)
 		}
+		if *receiverEventLoops != 1 {
+			logx.L().Errorw("validate-order requires receiver-event-loops=1 to avoid parallel ingress reorder", "receiver_event_loops", *receiverEventLoops)
+			os.Exit(2)
+		}
+		if *multicore {
+			logx.L().Errorw("validate-order requires multicore=false to avoid parallel ingress reorder", "multicore", *multicore)
+			os.Exit(2)
+		}
+		if *taskExecutionModel == "pool" && *taskPoolSize != 1 {
+			logx.L().Errorw("validate-order requires task-pool-size=1 when execution model is pool", "task_pool_size", *taskPoolSize)
+			os.Exit(2)
+		}
 	}
 
 	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile, TrafficStatsSampleEvery: 1}); err != nil {
@@ -157,7 +171,7 @@ func main() {
 
 	benchRun := func(proto string) {
 		for _, rate := range rates {
-			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf, *taskFastPath, *taskPoolSize, *taskChannelQueueSize, *taskExecutionModel, *receiverEventLoops, *receiverReadBufferCap, *tcpSenderConcurrency, *basePort, *validateOrder)
+			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf, *taskFastPath, *taskPoolSize, *taskQueueSize, *taskChannelQueueSize, *taskExecutionModel, *receiverEventLoops, *receiverReadBufferCap, *tcpSenderConcurrency, *basePort, *validateOrder)
 			if err != nil {
 				logx.L().Errorw("benchmark failed", "proto", proto, "error", err)
 				os.Exit(1)
@@ -178,7 +192,7 @@ func main() {
 	}
 }
 
-func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Duration, payloadSize, workers, ppsPerWorker *int, ppsSweep *string, multicore *bool, udpSinkReaders, udpSinkReadBuf *int, taskFastPath *bool, taskPoolSize, taskChannelQueueSize *int, taskExecutionModel *string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort *int, logLevel, logFile *string, trafficStatsInterval *time.Duration, validateOrder *bool) error {
+func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Duration, payloadSize, workers, ppsPerWorker *int, ppsSweep *string, multicore *bool, udpSinkReaders, udpSinkReadBuf *int, taskFastPath *bool, taskPoolSize, taskQueueSize, taskChannelQueueSize *int, taskExecutionModel *string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort *int, logLevel, logFile *string, trafficStatsInterval *time.Duration, validateOrder *bool) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -230,6 +244,9 @@ func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Dura
 	}
 	if cfg.TaskPoolSize != nil {
 		*taskPoolSize = *cfg.TaskPoolSize
+	}
+	if cfg.TaskQueueSize != nil {
+		*taskQueueSize = *cfg.TaskQueueSize
 	}
 	if cfg.TaskChannelQueueSize != nil {
 		*taskChannelQueueSize = *cfg.TaskChannelQueueSize
@@ -291,7 +308,7 @@ func parseSweep(in string) ([]int, error) {
 }
 
 // runForwardBenchmark 负责该函数对应的核心逻辑，详见实现细节。
-func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int, taskFastPath bool, taskPoolSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort int, validateOrder bool) (*result, error) {
+func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int, taskFastPath bool, taskPoolSize, taskQueueSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort int, validateOrder bool) (*result, error) {
 	m := &metrics{seqCheck: validateOrder}
 	if basePort == 0 {
 		basePort = map[string]int{"udp": 19100, "tcp": 19200}[proto]
@@ -318,7 +335,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	defer func() { _ = stopSink() }()
 
 	rt := app.NewRuntime()
-	cfg := benchConfig(proto, basePort, sinkAddr, multicore, taskFastPath, taskPoolSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency)
+	cfg := benchConfig(proto, basePort, sinkAddr, multicore, taskFastPath, taskPoolSize, taskQueueSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency)
 	if err := rt.UpdateCache(ctx, cfg); err != nil {
 		return nil, fmt.Errorf("update cache: %w", err)
 	}
@@ -410,7 +427,7 @@ func waitForSinkDrain(m *metrics, maxWait, stableFor time.Duration) {
 }
 
 // benchConfig 负责该函数对应的核心逻辑，详见实现细节。
-func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency int) config.Config {
+func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize, taskQueueSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency int) config.Config {
 	rc := config.ReceiverConfig{Multicore: multicore, NumEventLoop: receiverEventLoops, ReadBufferCap: receiverReadBufferCap}
 	sc := config.SenderConfig{Concurrency: 1}
 	switch proto {
@@ -449,6 +466,7 @@ func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFas
 		Tasks: map[string]config.TaskConfig{
 			"t": {
 				PoolSize:         taskPoolSize,
+				QueueSize:        taskQueueSize,
 				FastPath:         taskFastPath,
 				ExecutionModel:   taskExecutionModel,
 				ChannelQueueSize: taskChannelQueueSize,
@@ -490,7 +508,7 @@ func startUDPSink(port int, m *metrics, readers, readBuf int) (string, func() er
 					}
 					return
 				}
-				if !validateSequence(buf[:n], m) {
+				if m.seqCheck && !validateSequence(buf[:n], m) {
 					atomic.AddUint64(&m.orderErrors, 1)
 				}
 				atomic.AddUint64(&m.recvPackets, 1)
@@ -554,7 +572,7 @@ func readU16Framed(conn net.Conn, m *metrics) {
 		if _, err := io.ReadFull(conn, buf); err != nil {
 			return
 		}
-		if !validateSequence(buf, m) {
+		if m.seqCheck && !validateSequence(buf, m) {
 			atomic.AddUint64(&m.orderErrors, 1)
 		}
 		atomic.AddUint64(&m.recvPackets, 1)
