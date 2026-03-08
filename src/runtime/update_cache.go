@@ -602,19 +602,15 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 	}
 
 	// 多任务场景下，为避免共享 packet 带来的释放时序竞争，
-	// 将原始包直接交给首个任务，其余任务使用副本，减少一次 Clone。
-	clones := make([]*packet.Packet, 0, len(tasks)-1)
-	for range tasks[1:] {
-		clones = append(clones, pkt.Clone())
+	// 先为其余任务逐个 Clone，再把原始包交给首个任务，避免额外中间切片。
+	for _, ts := range tasks[1:] {
+		cp := pkt.Clone()
+		ts.T.LogPayloadReceive(receiverName, cp)
+		ts.T.Handle(ctx, cp)
 	}
 	first := tasks[0]
 	first.T.LogPayloadReceive(receiverName, pkt)
 	first.T.Handle(ctx, pkt)
-	for i, ts := range tasks[1:] {
-		cp := clones[i]
-		ts.T.LogPayloadReceive(receiverName, cp)
-		ts.T.Handle(ctx, cp)
-	}
 }
 
 // buildReceiver 负责该函数对应的核心逻辑，详见实现细节。
