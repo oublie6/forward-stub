@@ -308,7 +308,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	defer func() { _ = stopSink() }()
 
 	rt := app.NewRuntime()
-	cfg := benchConfig(proto, basePort, sinkAddr, multicore, taskFastPath, taskPoolSize, taskQueueSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency)
+	cfg := benchConfig(proto, basePort, sinkAddr, multicore, taskFastPath, taskPoolSize, taskQueueSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, workers)
 	if err := rt.UpdateCache(ctx, cfg); err != nil {
 		return nil, fmt.Errorf("update cache: %w", err)
 	}
@@ -404,7 +404,7 @@ func waitForSinkDrain(m *metrics, maxWait, stableFor time.Duration) {
 }
 
 // benchConfig 负责该函数对应的核心逻辑，详见实现细节。
-func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize, taskQueueSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency int) config.Config {
+func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize, taskQueueSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, workers int) config.Config {
 	rc := config.ReceiverConfig{Multicore: multicore, NumEventLoop: receiverEventLoops, ReadBufferCap: receiverReadBufferCap}
 	sc := config.SenderConfig{Concurrency: 1}
 	switch proto {
@@ -415,6 +415,9 @@ func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFas
 		sc.LocalIP = "127.0.0.1"
 		sc.LocalPort = basePort + 2
 		sc.Remote = sinkAddr
+		if workers > 1 {
+			sc.Concurrency = workers
+		}
 	case "tcp":
 		rc.Type = "tcp_gnet"
 		rc.Listen = fmt.Sprintf("tcp://127.0.0.1:%d", basePort)

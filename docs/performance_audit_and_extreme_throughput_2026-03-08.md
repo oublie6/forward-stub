@@ -1,133 +1,128 @@
-# Forward Stub 全服务多轮性能优化与代码审查报告（2026-03-08）
+# Forward Stub 全服务性能优化与代码审查（迭代更新，2026-03-08）
 
-## 1) 多轮执行概览
+## 1. 本轮新增优化（针对 UDP 吞吐）
 
-本轮继续执行多轮循环：
+### 1.1 UDP Sender 分片并发（已落地）
 
-1. 全量审查（代码 + 脚本）识别性能点与 bug 风险。
-2. 落地改造并回归（每次代码变更后执行 `go test` + `go vet`）。
-3. 再审查，直到未发现新的低风险高收益改造点。
-4. 完成四协议功能测试。
-5. 完成 30 秒档性能测试：
-   - 严格 0 丢包 + 严格保序极限吞吐（3 种处理模式，开启 receiver multicore，可设任意 eventloop）
-   - 严格 0 丢包 + 不考虑保序（任意 pool size + 任意 queue size）
+文件：`src/sender/udp_unicast_gnet.go`、`src/runtime/update_cache.go`
 
----
+- `udp_unicast` sender 新增并发分片能力（使用 sender `concurrency` 参数）。
+- 初始化阶段按并发度建立多个 UDP socket（同一 sender 内多个 shard）。
+- 发送阶段按 payload 哈希选择 shard，分散单 socket 热点，提升并行发送能力。
+- runtime `buildSender` 已把 sender `concurrency` 透传给 UDP unicast sender。
 
-## 2) 本轮新增改造
-
-### 2.1 bench 参数与运行模型能力补齐
+### 1.2 Bench 默认使用更合理的 UDP sender 并发（已落地）
 
 文件：`cmd/bench/main.go`
 
-- 新增 `--task-queue-size`，并新增 `bench config` 字段 `task_queue_size`，透传到 `TaskConfig.QueueSize`，满足“任意 queue size”压测。
-- 保持 bench 生成配置中 `PayloadLogRecv=false`、`PayloadLogSend=false`，确保性能测试期间关闭 payload log。
+- `benchConfig` 生成 UDP sender 配置时，会在 `workers > 1` 场景下将 `sender.concurrency` 设为 `workers`，使压测模型与并行发包更匹配。
 
-### 2.2 严格保序统计逻辑修复（bug 风险修复）
+### 1.3 正确性与稳定性修复（延续）
 
-文件：`cmd/bench/main.go`
-
-- 修复了“warmup 后直接清零顺序状态”引发的顺序统计失真风险。
-- 新实现改为：
-  - warmup 结束后记录基线（sent/recv/bytes/order_errors）；
-  - 测量结束使用增量（当前总量 - 基线）计算结果；
-  - 避免测量窗口切换时与发送并发重置造成的伪乱序。
-
-### 2.3 严格保序模式约束放宽
-
-文件：`cmd/bench/main.go`
-
-- 去掉对 `multicore=false`、`receiver-event-loops=1` 的硬限制，允许在严格保序测试中开启 multicore，并使用任意 eventloop 数进行验证。
+- 保持 warmup 基线差值统计（避免并发清零导致测量失真）。
+- payload log 继续强制关闭（`PayloadLogRecv/Send=false`）。
+- 严格保序测试保留可配置 multicore / eventloop 能力。
 
 ---
 
-## 3) 多轮复审结论
+## 2. 多轮代码审查结论
 
-- 第 1 轮后已落地上述改造。
-- 第 2 轮复审未发现新的低风险高收益改造点或明显 bug 风险。
+本轮继续对 `src/`、`cmd/`、`scripts/` 做静态与运行路径复审，重点检查：
+
+- UDP 热路径锁竞争与原子访问
+- sender 建连/关闭并发安全
+- task 队列配置与丢包边界
+- bench 测量可信度
+
+结论：
+
+1. **“把互斥锁改成读写锁”不是当前 UDP 吞吐主瓶颈**。
+   - UDP sender 热路径 `Send()` 使用原子读取连接指针；锁主要在建连/关闭慢路径。
+2. UDP 主要瓶颈仍在“每包处理成本 + 队列阈值 + UDP 无重传特性 + sink 能力”。
+3. 本轮未发现新的高收益低风险改造点（在当前架构约束内）。
 
 ---
 
-## 4) 四种转发协议功能测试
+## 3. 功能与质量验证
 
-通过 runtime 矩阵测试覆盖 UDP/TCP/Kafka/SFTP 四协议转发路径（4x4 组合），并完成全量回归：
-
-- `GOFLAGS='-mod=vendor' go test ./...` 通过
-- `GOFLAGS='-mod=vendor' go test ./src/runtime -run 'TestForwardMatrix|TestDispatchClonesForEveryTaskAndReleasesOriginal|TestBuildTaskPayloadLogOptions'` 通过
-- `GOFLAGS='-mod=vendor' go vet ./...` 通过
-- `for f in scripts/*.sh; do bash -n "$f"; done` 通过
+- `GOFLAGS='-mod=vendor' go test ./...`：通过
+- `GOFLAGS='-mod=vendor' go vet ./...`：通过
+- 四协议矩阵相关用例（runtime forward matrix）已包含在回归中通过。
 
 ---
 
-## 5) 严格 0 丢包 + 严格保序极限吞吐（30s，三种处理模式）
+## 4. 严格 0 丢包 + 严格保序极限吞吐（30s，三种处理模式）
 
-> 协议：TCP
+> 协议：TCP（严格序号校验）
 >
-> 统一：`duration=30s`, `warmup=5s`, `payload=512`, `validate-order=true`, `workers=1`, `multicore=true`
->
-> 且每组使用了不同 eventloop（体现“可任意 eventloop”）：
-> - fastpath：`receiver-event-loops=4`
-> - channel：`receiver-event-loops=8`
-> - pool：`receiver-event-loops=6`
+> 统一参数：`duration=30s`、`warmup=5s`、`payload=512B`、`validate-order=true`、`multicore=true`、可配置 eventloop。
 
-### 5.1 fastpath
+### 4.1 fastpath（eventloop=4）
 - 4k pps：0 丢包 + 严格保序
 - 8k pps：0 丢包 + 严格保序
-- 10k pps：0 丢包但出现乱序
+- 10k pps：0 丢包但乱序
 
-**极限（strict + zero-loss）**：约 **8,000 pps / 32.77 Mbps**
+**极限：约 8k pps / 32.77 Mbps**
 
-### 5.2 channel
-- 2k pps：0 丢包 + 严格保序
-- 4k pps：0 丢包 + 严格保序
-- 6k pps：0 丢包 + 严格保序
+### 4.2 channel（eventloop=8）
+- 3k pps：0 丢包 + 严格保序
+- 5k pps：0 丢包 + 严格保序
+- 7k pps：0 丢包 + 严格保序
 
-**本轮扫描上限内极限**：约 **6,000 pps / 24.58 Mbps**
+**本轮扫描上限内极限：约 7k pps / 28.69 Mbps**
 
-### 5.3 pool（`pool-size=1`, `queue-size=16384`）
+### 4.3 pool（pool=1, queue=16384, eventloop=6）
 - 4k pps：0 丢包 + 严格保序
 - 8k pps：0 丢包 + 严格保序
-- 10k / 12k pps：0 丢包但出现乱序
+- 10k pps：0 丢包但乱序
 
-**极限（strict + zero-loss）**：约 **8,000 pps / 32.77 Mbps**
+**极限：约 8k pps / 32.77 Mbps**
 
 ---
 
-## 6) 严格 0 丢包 + 不考虑保序（任意 pool/queue，30s）
+## 5. 严格 0 丢包 + 不考虑保序（任意 pool size + 任意 queue size，30s）
 
-### 6.1 UDP（pool, workers=4, multicore=true, event-loops=4）
+### 5.1 UDP（workers=4, multicore=true, eventloop=8）
+
 测试组合：
 - `(pool,queue)=(1024,4096)`
 - `(pool,queue)=(4096,16384)`
 - `(pool,queue)=(8192,65536)`
 
-每组扫频：`pps-per-worker=4000,6000`
+每组扫频：`pps-per-worker=4000,6000,8000`
 
-结果：
-- 16k pps 级别可达 0 丢包（最佳约 **16,001 pps / 65.54 Mbps**）
-- 24k pps 级别出现小比例丢包（约 0.10% ~ 0.27%）
+结果摘要：
+- 16k pps 档稳定 0 丢包。
+- 24k/32k pps 档出现小比例丢包（约 0.08%~0.48%）。
+- 在本轮参数下，UDP 仍呈现“阈值后快速掉包”特征。
 
-### 6.2 TCP（pool, workers=4, multicore=true, event-loops=8, sender-concurrency=8）
+### 5.2 TCP（workers=4, multicore=true, eventloop=8, sender-concurrency=8）
+
 测试组合：
 - `(pool,queue)=(1024,4096)`
 - `(pool,queue)=(4096,16384)`
 - `(pool,queue)=(8192,65536)`
 
-每组扫频：`pps-per-worker=30000,60000,90000`
+每组扫频：`pps-per-worker=30000,60000`
 
-结果：
-- 所有组合在各档位均为 0 丢包。
-- 本轮最高 0 丢包观测吞吐：约 **289,417 pps / 1185.45 Mbps**（`pool=1024,queue=4096`, 90k 档）。
+结果摘要：
+- 各组合两档均 0 丢包。
+- 最高观测约 **240.7k pps / 986 Mbps**（0 丢包）。
 
 ---
 
-## 7) 最终结论
+## 6. 对“UDP 吞吐低”的最终判断与后续动作
 
-1. 已完成本轮多次审查与改造，且回归通过。
-2. 严格保序测试已支持开启 `receiver.multicore` 且使用任意 `eventloop` 数。
-3. 在本环境下：
-   - 严格保序极限（TCP）约在 6k~8k pps 区间（不同执行模型不同）。
-   - 不考虑保序时，TCP 在多 pool/queue 组合下可达到显著更高吞吐且保持 0 丢包。
-4. 当前未发现新的低风险高收益优化点；后续建议继续聚焦：
-   - 严格保序高 PPS 的乱序根因定位（receiver/task/sender 分段时间线）
-   - UDP 高 PPS 场景内核参数与网卡队列调优
+### 6.1 结论
+- 不是 RWMutex 改造问题；主瓶颈不在“读锁争用”。
+- 更关键的是 UDP 数据面（每包成本、内核队列、sink 能力、无重传）
+
+### 6.2 已完成动作
+- UDP sender 分片并发（按 payload hash shard）
+- bench UDP sender 并发与 workers 对齐
+
+### 6.3 仍建议的下一阶段（系统/架构层）
+1. 外置 sink（独立机器）减少本机回环干扰。
+2. Linux 内核网络参数调优：`rmem_max/wmem_max/netdev_max_backlog`、NIC ring。
+3. 发送批量化（sendmmsg/WriteBatch）路线评估与落地。
+4. 接收链路“每包 copy”进一步优化（零拷贝/批处理策略）。

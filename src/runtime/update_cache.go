@@ -649,8 +649,7 @@ func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (send
 		if sc.LocalPort <= 0 {
 			return nil, fmt.Errorf("sender %s udp_unicast requires local_port", name)
 		}
-		_ = conc
-		return sender.NewUDPUnicastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote)
+		return sender.NewUDPUnicastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, conc)
 	case "udp_multicast":
 		if sc.LocalPort <= 0 {
 			return nil, fmt.Errorf("sender %s udp_multicast requires local_port", name)
