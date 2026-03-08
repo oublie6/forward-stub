@@ -266,9 +266,7 @@ func (s *SFTPSender) pickShard(transferID string) int {
 	if s.concurrency <= 1 {
 		return 0
 	}
-	h := fnv.New32a()
-	_, _ = h.Write([]byte(transferID))
-	return int(h.Sum32() % uint32(s.concurrency))
+	return int(fnv32aString(transferID) % uint32(s.concurrency))
 }
 
 func (s *SFTPSender) hostKeyCallback() ssh.HostKeyCallback {

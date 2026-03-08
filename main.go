@@ -73,7 +73,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	lastFingerprint, err := readConfigFingerprint(bizPath)
+	initialFingerprint, err := readConfigFingerprint(bizPath)
 	if err != nil {
 		lg.Errorw("init business config fingerprint failed", "config", bizPath, "error", err)
 		os.Exit(1)
@@ -81,7 +81,7 @@ func main() {
 
 	configChangeCh := make(chan struct{}, 1)
 	watchDone := make(chan struct{})
-	go watchConfigFile(bizPath, lastFingerprint, configChangeCh, watchDone)
+	go watchConfigFile(bizPath, initialFingerprint, configChangeCh, watchDone)
 	defer close(watchDone)
 
 	_ = bizCfg
@@ -96,7 +96,6 @@ func main() {
 			if isReloadSignal(s) {
 				lg.Infow("received reload signal", "signal", s.String())
 				if next, ok := reloadAndApplyBusinessConfig(context.Background(), rt, sysPath, bizPath, "signal", s.String()); ok {
-					lastFingerprint, _ = readConfigFingerprint(bizPath)
 					lg.Infow("reload business config success", "signal", s.String(), "version", next.Version)
 				}
 				continue
@@ -115,12 +114,6 @@ func main() {
 			if !ok {
 				continue
 			}
-			fp, err := readConfigFingerprint(bizPath)
-			if err != nil {
-				lg.Errorw("refresh business config fingerprint failed", "config", bizPath, "error", err)
-				continue
-			}
-			lastFingerprint = fp
 			lg.Infow("reload business config success", "source", "file-watch", "version", next.Version)
 		}
 	}

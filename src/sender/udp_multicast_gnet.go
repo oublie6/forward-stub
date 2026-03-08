@@ -170,7 +170,5 @@ func (s *UDPMulticastSender) pickShard(payload []byte) int {
 	if s.concurrency <= 1 {
 		return 0
 	}
-	h := fnv.New32a()
-	_, _ = h.Write(payload)
-	return int(h.Sum32() % uint32(s.concurrency))
+	return int(fnv32aBytes(payload) % uint32(s.concurrency))
 }
