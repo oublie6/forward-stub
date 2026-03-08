@@ -31,6 +31,7 @@ type metrics struct {
 	expectedSeq uint64
 	seqInit     uint32
 	seqCheck    bool
+	seqAlloc    uint64
 }
 
 type result struct {
@@ -100,7 +101,7 @@ func main() {
 	logLevel := flag.String("log-level", "warn", "benchmark runtime log level: debug|info|warn|error")
 	logFile := flag.String("log-file", "", "optional benchmark runtime log file")
 	trafficStatsInterval := flag.Duration("traffic-stats-interval", time.Second, "aggregated traffic stats log interval (e.g. 5s, 10s)")
-	validateOrder := flag.Bool("validate-order", false, "enable strict in-order verification by sequence number (requires payload-size>=8 and workers=1)")
+	validateOrder := flag.Bool("validate-order", false, "enable strict in-order verification by sequence number (requires payload-size>=8)")
 	flag.Parse()
 
 	if *benchConfigPath != "" {
@@ -118,37 +119,9 @@ func main() {
 		logx.L().Errorw("invalid workers", "workers", *workers)
 		os.Exit(2)
 	}
-	if *validateOrder {
-		if *payloadSize < 8 {
-			logx.L().Errorw("validate-order requires payload-size >= 8", "payload_size", *payloadSize)
-			os.Exit(2)
-		}
-		if *workers != 1 {
-			logx.L().Errorw("validate-order requires workers=1 for strict single-stream ordering", "workers", *workers)
-			os.Exit(2)
-		}
-		if *mode == "udp" || *mode == "both" {
-			if *udpSinkReaders != 1 {
-				logx.L().Errorw("validate-order requires udp-sink-readers=1 to avoid concurrent reorder at sink", "udp_sink_readers", *udpSinkReaders)
-				os.Exit(2)
-			}
-		}
-		if (*mode == "tcp" || *mode == "both") && *tcpSenderConcurrency != 1 {
-			logx.L().Errorw("validate-order requires tcp-sender-concurrency=1 to keep strict single stream order", "tcp_sender_concurrency", *tcpSenderConcurrency)
-			os.Exit(2)
-		}
-		if *receiverEventLoops != 1 {
-			logx.L().Errorw("validate-order requires receiver-event-loops=1 to avoid parallel ingress reorder", "receiver_event_loops", *receiverEventLoops)
-			os.Exit(2)
-		}
-		if *multicore {
-			logx.L().Errorw("validate-order requires multicore=false to avoid parallel ingress reorder", "multicore", *multicore)
-			os.Exit(2)
-		}
-		if *taskExecutionModel == "pool" && *taskPoolSize != 1 {
-			logx.L().Errorw("validate-order requires task-pool-size=1 when execution model is pool", "task_pool_size", *taskPoolSize)
-			os.Exit(2)
-		}
+	if *validateOrder && *payloadSize < 8 {
+		logx.L().Errorw("validate-order requires payload-size >= 8", "payload_size", *payloadSize)
+		os.Exit(2)
 	}
 
 	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile, TrafficStatsSampleEvery: 1}); err != nil {
@@ -358,13 +331,11 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	}
 
 	time.Sleep(warmup)
-	atomic.StoreUint64(&m.sentPackets, 0)
-	atomic.StoreUint64(&m.sentBytes, 0)
-	atomic.StoreUint64(&m.recvPackets, 0)
-	atomic.StoreUint64(&m.recvBytes, 0)
-	atomic.StoreUint64(&m.orderErrors, 0)
-	atomic.StoreUint64(&m.expectedSeq, 0)
-	atomic.StoreUint32(&m.seqInit, 0)
+	baseSentPackets := atomic.LoadUint64(&m.sentPackets)
+	baseSentBytes := atomic.LoadUint64(&m.sentBytes)
+	baseRecvPackets := atomic.LoadUint64(&m.recvPackets)
+	baseRecvBytes := atomic.LoadUint64(&m.recvBytes)
+	baseOrderErrors := atomic.LoadUint64(&m.orderErrors)
 
 	start := time.Now()
 	time.Sleep(duration)
@@ -373,11 +344,17 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	wg.Wait()
 	waitForSinkDrain(m, 2*time.Second, 150*time.Millisecond)
 
-	sentPackets := atomic.LoadUint64(&m.sentPackets)
-	sentBytes := atomic.LoadUint64(&m.sentBytes)
-	recvPackets := atomic.LoadUint64(&m.recvPackets)
-	recvBytes := atomic.LoadUint64(&m.recvBytes)
-	orderErrors := atomic.LoadUint64(&m.orderErrors)
+	totalSentPackets := atomic.LoadUint64(&m.sentPackets)
+	totalSentBytes := atomic.LoadUint64(&m.sentBytes)
+	totalRecvPackets := atomic.LoadUint64(&m.recvPackets)
+	totalRecvBytes := atomic.LoadUint64(&m.recvBytes)
+	totalOrderErrors := atomic.LoadUint64(&m.orderErrors)
+
+	sentPackets := totalSentPackets - baseSentPackets
+	sentBytes := totalSentBytes - baseSentBytes
+	recvPackets := totalRecvPackets - baseRecvPackets
+	recvBytes := totalRecvBytes - baseRecvBytes
+	orderErrors := totalOrderErrors - baseOrderErrors
 
 	loss := 0.0
 	if sentPackets > 0 {
@@ -591,8 +568,6 @@ func udpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 	for i := range payload {
 		payload[i] = byte(i)
 	}
-	var seq uint64
-
 	limiter := newPPSLimiter(ppsPerWorker)
 	for {
 		limiter.Wait()
@@ -602,8 +577,8 @@ func udpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 		default:
 		}
 		if withSeq {
+			seq := atomic.AddUint64(&m.seqAlloc, 1) - 1
 			binary.BigEndian.PutUint64(payload[:8], seq)
-			seq++
 		}
 		n, err := conn.Write(payload)
 		if err != nil {
@@ -641,8 +616,6 @@ func tcpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 	for i := range frame[2:] {
 		frame[2+i] = byte(i)
 	}
-	var seq uint64
-
 	limiter := newPPSLimiter(ppsPerWorker)
 	for {
 		limiter.Wait()
@@ -652,8 +625,8 @@ func tcpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 		default:
 		}
 		if withSeq {
+			seq := atomic.AddUint64(&m.seqAlloc, 1) - 1
 			binary.BigEndian.PutUint64(frame[2:10], seq)
-			seq++
 		}
 		n, err := conn.Write(frame)
 		if err != nil {
