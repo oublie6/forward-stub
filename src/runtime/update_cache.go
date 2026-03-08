@@ -602,19 +602,15 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 	}
 
 	// 多任务场景下，为避免共享 packet 带来的释放时序竞争，
-	// 将原始包直接交给首个任务，其余任务使用副本，减少一次 Clone。
-	clones := make([]*packet.Packet, 0, len(tasks)-1)
-	for range tasks[1:] {
-		clones = append(clones, pkt.Clone())
+	// 先为其余任务逐个 Clone，再把原始包交给首个任务，避免额外中间切片。
+	for _, ts := range tasks[1:] {
+		cp := pkt.Clone()
+		ts.T.LogPayloadReceive(receiverName, cp)
+		ts.T.Handle(ctx, cp)
 	}
 	first := tasks[0]
 	first.T.LogPayloadReceive(receiverName, pkt)
 	first.T.Handle(ctx, pkt)
-	for i, ts := range tasks[1:] {
-		cp := clones[i]
-		ts.T.LogPayloadReceive(receiverName, cp)
-		ts.T.Handle(ctx, cp)
-	}
 }
 
 // buildReceiver 负责该函数对应的核心逻辑，详见实现细节。
@@ -653,8 +649,7 @@ func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (send
 		if sc.LocalPort <= 0 {
 			return nil, fmt.Errorf("sender %s udp_unicast requires local_port", name)
 		}
-		_ = conc
-		return sender.NewUDPUnicastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote)
+		return sender.NewUDPUnicastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, conc)
 	case "udp_multicast":
 		if sc.LocalPort <= 0 {
 			return nil, fmt.Errorf("sender %s udp_multicast requires local_port", name)

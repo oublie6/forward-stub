@@ -4,6 +4,7 @@ package sender
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -20,12 +21,13 @@ type UDPUnicastSender struct {
 	remote *net.UDPAddr
 	local  *net.UDPAddr
 
-	mu   sync.Mutex
-	conn atomic.Pointer[net.UDPConn]
+	concurrency int
+	locks       []sync.Mutex
+	conns       []atomic.Pointer[net.UDPConn]
 }
 
 // NewUDPUnicastSender 负责该函数对应的核心逻辑，详见实现细节。
-func NewUDPUnicastSender(name, localIP string, localPort int, remote string) (*UDPUnicastSender, error) {
+func NewUDPUnicastSender(name, localIP string, localPort int, remote string, concurrency int) (*UDPUnicastSender, error) {
 	raddr, err := net.ResolveUDPAddr("udp", remote)
 	if err != nil {
 		return nil, err
@@ -33,15 +35,27 @@ func NewUDPUnicastSender(name, localIP string, localPort int, remote string) (*U
 	if localIP == "" {
 		localIP = "0.0.0.0"
 	}
-	laddr := &net.UDPAddr{IP: net.ParseIP(localIP), Port: localPort}
+	lip := net.ParseIP(localIP)
+	if lip == nil {
+		return nil, fmt.Errorf("invalid local ip: %s", localIP)
+	}
+	laddr := &net.UDPAddr{IP: lip, Port: localPort}
+	if concurrency <= 0 {
+		concurrency = 1
+	}
 
 	s := &UDPUnicastSender{
-		name:   name,
-		remote: raddr,
-		local:  laddr,
+		name:        name,
+		remote:      raddr,
+		local:       laddr,
+		concurrency: concurrency,
+		locks:       make([]sync.Mutex, concurrency),
+		conns:       make([]atomic.Pointer[net.UDPConn], concurrency),
 	}
-	if err := s.ensureConn(); err != nil {
-		return nil, err
+	for i := 0; i < concurrency; i++ {
+		if err := s.ensureConn(i); err != nil {
+			return nil, err
+		}
 	}
 	return s, nil
 }
@@ -56,10 +70,11 @@ func (s *UDPUnicastSender) Key() string {
 
 // Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPUnicastSender) Send(ctx context.Context, p *packet.Packet) error {
-	c := s.conn.Load()
+	idx := s.pickShard(p.Payload)
+	c := s.conns[idx].Load()
 	if c == nil {
 		var err error
-		c, err = s.getConn()
+		c, err = s.getConn(idx)
 		if err != nil {
 			return err
 		}
@@ -70,38 +85,40 @@ func (s *UDPUnicastSender) Send(ctx context.Context, p *packet.Packet) error {
 
 // Close 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPUnicastSender) Close(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if c := s.conn.Load(); c != nil {
-		_ = c.Close()
-		s.conn.Store(nil)
+	for i := 0; i < s.concurrency; i++ {
+		s.locks[i].Lock()
+		if c := s.conns[i].Load(); c != nil {
+			_ = c.Close()
+			s.conns[i].Store(nil)
+		}
+		s.locks[i].Unlock()
 	}
 	return nil
 }
 
 // getConn 负责该函数对应的核心逻辑，详见实现细节。
-func (s *UDPUnicastSender) getConn() (*net.UDPConn, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if c := s.conn.Load(); c != nil {
+func (s *UDPUnicastSender) getConn(idx int) (*net.UDPConn, error) {
+	s.locks[idx].Lock()
+	defer s.locks[idx].Unlock()
+	if c := s.conns[idx].Load(); c != nil {
 		return c, nil
 	}
-	if err := s.ensureConnLocked(); err != nil {
+	if err := s.ensureConnLocked(idx); err != nil {
 		return nil, err
 	}
-	return s.conn.Load(), nil
+	return s.conns[idx].Load(), nil
 }
 
 // ensureConn 负责该函数对应的核心逻辑，详见实现细节。
-func (s *UDPUnicastSender) ensureConn() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.ensureConnLocked()
+func (s *UDPUnicastSender) ensureConn(idx int) error {
+	s.locks[idx].Lock()
+	defer s.locks[idx].Unlock()
+	return s.ensureConnLocked(idx)
 }
 
 // ensureConnLocked 负责该函数对应的核心逻辑，详见实现细节。
-func (s *UDPUnicastSender) ensureConnLocked() error {
-	if s.conn.Load() != nil {
+func (s *UDPUnicastSender) ensureConnLocked(idx int) error {
+	if s.conns[idx].Load() != nil {
 		return nil
 	}
 	c, err := dialUDPWithReuse(context.Background(), s.local, s.remote)
@@ -109,6 +126,15 @@ func (s *UDPUnicastSender) ensureConnLocked() error {
 		return err
 	}
 	_ = c.SetWriteBuffer(4 << 20)
-	s.conn.Store(c)
+	s.conns[idx].Store(c)
 	return nil
+}
+
+func (s *UDPUnicastSender) pickShard(payload []byte) int {
+	if s.concurrency <= 1 {
+		return 0
+	}
+	h := fnv.New32a()
+	_, _ = h.Write(payload)
+	return int(h.Sum32() % uint32(s.concurrency))
 }

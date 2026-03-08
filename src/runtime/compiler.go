@@ -13,7 +13,10 @@ import (
 func CompilePipelines(cfg map[string][]config.StageConfig) (map[string]*CompiledPipeline, error) {
 	out := make(map[string]*CompiledPipeline, len(cfg))
 	for name, stagesCfg := range cfg {
-		pl := &pipeline.Pipeline{Name: name}
+		pl := &pipeline.Pipeline{
+			Name:   name,
+			Stages: make([]pipeline.StageFunc, 0, len(stagesCfg)),
+		}
 		for _, sc := range stagesCfg {
 			st, err := compileStage(sc)
 			if err != nil {
