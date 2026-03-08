@@ -27,6 +27,10 @@ type metrics struct {
 	sentBytes   uint64
 	recvPackets uint64
 	recvBytes   uint64
+	orderErrors uint64
+	expectedSeq uint64
+	seqInit     uint32
+	seqCheck    bool
 }
 
 type result struct {
@@ -39,6 +43,8 @@ type result struct {
 	recvPackets    uint64
 	recvBytes      uint64
 	packetLossRate float64
+	orderErrors    uint64
+	strictOrderOK  bool
 	pps            float64
 	mbps           float64
 }
@@ -65,6 +71,7 @@ type benchFileConfig struct {
 	LogLevel             string `json:"log_level,omitempty"`
 	LogFile              string `json:"log_file,omitempty"`
 	TrafficStatsInterval string `json:"traffic_stats_interval,omitempty"`
+	ValidateOrder        *bool  `json:"validate_order,omitempty"`
 }
 
 // main 负责该函数对应的核心逻辑，详见实现细节。
@@ -91,14 +98,11 @@ func main() {
 	logLevel := flag.String("log-level", "warn", "benchmark runtime log level: debug|info|warn|error")
 	logFile := flag.String("log-file", "", "optional benchmark runtime log file")
 	trafficStatsInterval := flag.Duration("traffic-stats-interval", time.Second, "aggregated traffic stats log interval (e.g. 5s, 10s)")
+	validateOrder := flag.Bool("validate-order", false, "enable strict in-order verification by sequence number (requires payload-size>=8 and workers=1)")
 	flag.Parse()
 
-	if err := logx.Init(logx.Options{Level: "error", TrafficStatsSampleEvery: 1}); err != nil {
-		os.Exit(1)
-	}
-
 	if *benchConfigPath != "" {
-		if err := applyBenchConfigFile(*benchConfigPath, mode, duration, warmup, payloadSize, workers, ppsPerWorker, ppsSweep, multicore, udpSinkReaders, udpSinkReadBuf, taskFastPath, taskPoolSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort, logLevel, logFile, trafficStatsInterval); err != nil {
+		if err := applyBenchConfigFile(*benchConfigPath, mode, duration, warmup, payloadSize, workers, ppsPerWorker, ppsSweep, multicore, udpSinkReaders, udpSinkReadBuf, taskFastPath, taskPoolSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort, logLevel, logFile, trafficStatsInterval, validateOrder); err != nil {
 			logx.L().Errorw("load bench config failed", "error", err)
 			os.Exit(2)
 		}
@@ -111,6 +115,26 @@ func main() {
 	if *workers <= 0 {
 		logx.L().Errorw("invalid workers", "workers", *workers)
 		os.Exit(2)
+	}
+	if *validateOrder {
+		if *payloadSize < 8 {
+			logx.L().Errorw("validate-order requires payload-size >= 8", "payload_size", *payloadSize)
+			os.Exit(2)
+		}
+		if *workers != 1 {
+			logx.L().Errorw("validate-order requires workers=1 for strict single-stream ordering", "workers", *workers)
+			os.Exit(2)
+		}
+		if *mode == "udp" || *mode == "both" {
+			if *udpSinkReaders != 1 {
+				logx.L().Errorw("validate-order requires udp-sink-readers=1 to avoid concurrent reorder at sink", "udp_sink_readers", *udpSinkReaders)
+				os.Exit(2)
+			}
+		}
+		if (*mode == "tcp" || *mode == "both") && *tcpSenderConcurrency != 1 {
+			logx.L().Errorw("validate-order requires tcp-sender-concurrency=1 to keep strict single stream order", "tcp_sender_concurrency", *tcpSenderConcurrency)
+			os.Exit(2)
+		}
 	}
 
 	if err := logx.Init(logx.Options{Level: *logLevel, File: *logFile, TrafficStatsSampleEvery: 1}); err != nil {
@@ -133,7 +157,7 @@ func main() {
 
 	benchRun := func(proto string) {
 		for _, rate := range rates {
-			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf, *taskFastPath, *taskPoolSize, *taskChannelQueueSize, *taskExecutionModel, *receiverEventLoops, *receiverReadBufferCap, *tcpSenderConcurrency, *basePort)
+			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf, *taskFastPath, *taskPoolSize, *taskChannelQueueSize, *taskExecutionModel, *receiverEventLoops, *receiverReadBufferCap, *tcpSenderConcurrency, *basePort, *validateOrder)
 			if err != nil {
 				logx.L().Errorw("benchmark failed", "proto", proto, "error", err)
 				os.Exit(1)
@@ -154,7 +178,7 @@ func main() {
 	}
 }
 
-func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Duration, payloadSize, workers, ppsPerWorker *int, ppsSweep *string, multicore *bool, udpSinkReaders, udpSinkReadBuf *int, taskFastPath *bool, taskPoolSize, taskChannelQueueSize *int, taskExecutionModel *string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort *int, logLevel, logFile *string, trafficStatsInterval *time.Duration) error {
+func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Duration, payloadSize, workers, ppsPerWorker *int, ppsSweep *string, multicore *bool, udpSinkReaders, udpSinkReadBuf *int, taskFastPath *bool, taskPoolSize, taskChannelQueueSize *int, taskExecutionModel *string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort *int, logLevel, logFile *string, trafficStatsInterval *time.Duration, validateOrder *bool) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -239,6 +263,9 @@ func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Dura
 		}
 		*trafficStatsInterval = d
 	}
+	if cfg.ValidateOrder != nil {
+		*validateOrder = *cfg.ValidateOrder
+	}
 	return nil
 }
 
@@ -264,8 +291,8 @@ func parseSweep(in string) ([]int, error) {
 }
 
 // runForwardBenchmark 负责该函数对应的核心逻辑，详见实现细节。
-func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int, taskFastPath bool, taskPoolSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort int) (*result, error) {
-	m := &metrics{}
+func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int, taskFastPath bool, taskPoolSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort int, validateOrder bool) (*result, error) {
+	m := &metrics{seqCheck: validateOrder}
 	if basePort == 0 {
 		basePort = map[string]int{"udp": 19100, "tcp": 19200}[proto]
 	}
@@ -306,9 +333,9 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 			defer wg.Done()
 			switch proto {
 			case "udp":
-				udpGenerate(basePort, payloadSize, ppsPerWorker, m, stopGen)
+				udpGenerate(basePort, payloadSize, ppsPerWorker, m, stopGen, validateOrder)
 			case "tcp":
-				tcpGenerate(basePort, payloadSize, ppsPerWorker, m, stopGen)
+				tcpGenerate(basePort, payloadSize, ppsPerWorker, m, stopGen, validateOrder)
 			}
 		}(i)
 	}
@@ -318,6 +345,9 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	atomic.StoreUint64(&m.sentBytes, 0)
 	atomic.StoreUint64(&m.recvPackets, 0)
 	atomic.StoreUint64(&m.recvBytes, 0)
+	atomic.StoreUint64(&m.orderErrors, 0)
+	atomic.StoreUint64(&m.expectedSeq, 0)
+	atomic.StoreUint32(&m.seqInit, 0)
 
 	start := time.Now()
 	time.Sleep(duration)
@@ -330,6 +360,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	sentBytes := atomic.LoadUint64(&m.sentBytes)
 	recvPackets := atomic.LoadUint64(&m.recvPackets)
 	recvBytes := atomic.LoadUint64(&m.recvBytes)
+	orderErrors := atomic.LoadUint64(&m.orderErrors)
 
 	loss := 0.0
 	if sentPackets > 0 {
@@ -350,6 +381,8 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 		recvPackets:    recvPackets,
 		recvBytes:      recvBytes,
 		packetLossRate: loss,
+		orderErrors:    orderErrors,
+		strictOrderOK:  !validateOrder || orderErrors == 0,
 		pps:            float64(recvPackets) / elapsed.Seconds(),
 		mbps:           float64(recvBytes*8) / elapsed.Seconds() / 1_000_000,
 	}, nil
@@ -399,7 +432,11 @@ func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFas
 	}
 	return config.Config{
 		Version: 1,
-		Logging: config.LoggingConfig{Level: "warn"},
+		Logging: config.LoggingConfig{
+			Level:          "warn",
+			PayloadLogRecv: false,
+			PayloadLogSend: false,
+		},
 		Receivers: map[string]config.ReceiverConfig{
 			"in": rc,
 		},
@@ -453,6 +490,9 @@ func startUDPSink(port int, m *metrics, readers, readBuf int) (string, func() er
 					}
 					return
 				}
+				if !validateSequence(buf[:n], m) {
+					atomic.AddUint64(&m.orderErrors, 1)
+				}
 				atomic.AddUint64(&m.recvPackets, 1)
 				atomic.AddUint64(&m.recvBytes, uint64(n))
 			}
@@ -500,14 +540,22 @@ func startTCPSink(port int, m *metrics) (string, func() error, error) {
 func readU16Framed(conn net.Conn, m *metrics) {
 	defer conn.Close()
 	hdr := make([]byte, 2)
+	buf := make([]byte, 0, 4096)
 	for {
 		if _, err := io.ReadFull(conn, hdr); err != nil {
 			return
 		}
 		n := int(binary.BigEndian.Uint16(hdr))
-		buf := make([]byte, n)
+		if cap(buf) < n {
+			buf = make([]byte, n)
+		} else {
+			buf = buf[:n]
+		}
 		if _, err := io.ReadFull(conn, buf); err != nil {
 			return
+		}
+		if !validateSequence(buf, m) {
+			atomic.AddUint64(&m.orderErrors, 1)
 		}
 		atomic.AddUint64(&m.recvPackets, 1)
 		atomic.AddUint64(&m.recvBytes, uint64(n))
@@ -515,7 +563,7 @@ func readU16Framed(conn net.Conn, m *metrics) {
 }
 
 // udpGenerate 负责该函数对应的核心逻辑，详见实现细节。
-func udpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan struct{}) {
+func udpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan struct{}, withSeq bool) {
 	conn, err := net.Dial("udp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		return
@@ -525,6 +573,7 @@ func udpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 	for i := range payload {
 		payload[i] = byte(i)
 	}
+	var seq uint64
 
 	limiter := newPPSLimiter(ppsPerWorker)
 	for {
@@ -533,6 +582,10 @@ func udpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 		case <-stop:
 			return
 		default:
+		}
+		if withSeq {
+			binary.BigEndian.PutUint64(payload[:8], seq)
+			seq++
 		}
 		n, err := conn.Write(payload)
 		if err != nil {
@@ -545,7 +598,7 @@ func udpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 }
 
 // tcpGenerate 负责该函数对应的核心逻辑，详见实现细节。
-func tcpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan struct{}) {
+func tcpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan struct{}, withSeq bool) {
 	dial := func() net.Conn {
 		for {
 			conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
@@ -570,6 +623,7 @@ func tcpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 	for i := range frame[2:] {
 		frame[2+i] = byte(i)
 	}
+	var seq uint64
 
 	limiter := newPPSLimiter(ppsPerWorker)
 	for {
@@ -578,6 +632,10 @@ func tcpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 		case <-stop:
 			return
 		default:
+		}
+		if withSeq {
+			binary.BigEndian.PutUint64(frame[2:10], seq)
+			seq++
 		}
 		n, err := conn.Write(frame)
 		if err != nil {
@@ -641,9 +699,37 @@ func printResult(r *result) {
 		"recv_packets", r.recvPackets,
 		"recv_bytes", r.recvBytes,
 		"loss_rate", r.packetLossRate,
+		"order_errors", r.orderErrors,
+		"strict_order_ok", r.strictOrderOK,
 		"pps", r.pps,
 		"mbps", r.mbps,
 	)
+}
+
+func validateSequence(payload []byte, m *metrics) bool {
+	if m == nil || !m.seqCheck {
+		return true
+	}
+	if len(payload) < 8 {
+		return false
+	}
+	seq := binary.BigEndian.Uint64(payload[:8])
+	for {
+		if atomic.LoadUint32(&m.seqInit) == 0 {
+			if atomic.CompareAndSwapUint32(&m.seqInit, 0, 1) {
+				atomic.StoreUint64(&m.expectedSeq, seq+1)
+				return true
+			}
+			continue
+		}
+		expected := atomic.LoadUint64(&m.expectedSeq)
+		if seq != expected {
+			return false
+		}
+		if atomic.CompareAndSwapUint64(&m.expectedSeq, expected, expected+1) {
+			return true
+		}
+	}
 }
 
 // max 负责该函数对应的核心逻辑，详见实现细节。
