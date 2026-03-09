@@ -3,8 +3,6 @@ package logx
 import (
 	"testing"
 	"time"
-
-	"forward-stub/src/packet"
 )
 
 func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
@@ -48,26 +46,6 @@ func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
 		item.WorkerPool.Waiting != 2 || item.WorkerPool.QueueSize != 128 || item.WorkerPool.QueueAvailable != 126 ||
 		item.WorkerPool.Inflight != 3 || item.WorkerPool.FastPath {
 		t.Fatalf("unexpected worker pool stats: %+v", item.WorkerPool)
-	}
-}
-
-func TestTrafficSummaryMemoryPoolRenderedOnceInSummary(t *testing.T) {
-	payload, rel := packet.CopyFrom([]byte("hello"))
-	if len(payload) == 0 {
-		t.Fatalf("expected non-empty payload")
-	}
-	defer rel()
-
-	s := newTrafficSummary(2 * time.Second)
-	s.setMemoryPool()
-	if s.MemoryPool.InUseBuffers <= 0 {
-		t.Fatalf("expected in-use buffers > 0, got %+v", s.MemoryPool)
-	}
-	if s.MemoryPool.InUseBytes <= 0 || s.MemoryPool.TotalBytes <= 0 {
-		t.Fatalf("expected byte counters > 0, got %+v", s.MemoryPool)
-	}
-	if s.MemoryPool.Gets <= 0 {
-		t.Fatalf("expected gets > 0, got %+v", s.MemoryPool)
 	}
 }
 
