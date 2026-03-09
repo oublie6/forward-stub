@@ -66,16 +66,17 @@ type SFTPSender struct {
 	// hostKeyFingerprint 是预期服务端主机公钥指纹（SSH SHA256）。
 	// 用法：用于 SSH 握手阶段校验服务端身份，抵御中间人攻击。
 	hostKeyFingerprint string
+	concurrency        int
 
-	// mu 串行化 Send 与连接状态变更，避免并发写冲突。
-	mu sync.Mutex
-	// sshClient/sftpCli 是复用的底层连接。
+	// locks 串行化每个分片内 Send 与连接状态变更，避免并发写冲突。
+	locks []sync.Mutex
+	// sshClients/sftpClis 是按分片复用的底层连接。
 	// 用法：ensureConn 保证可用，Close 统一释放。
-	sshClient *ssh.Client
-	sftpCli   *sftp.Client
-	// states 保存 transfer_id 到组装状态的映射。
+	sshClients []*ssh.Client
+	sftpClis   []*sftp.Client
+	// states 保存每个分片 transfer_id 到组装状态的映射。
 	// 用法：跨多次 Send 追踪同一文件的写入进度。
-	states map[string]*sftpTransferState
+	states []map[string]*sftpTransferState
 }
 
 // NewSFTPSender 构造并校验 SFTPSender。
@@ -105,10 +106,18 @@ func NewSFTPSender(name string, sc config.SenderConfig) (*SFTPSender, error) {
 		remoteDir:          strings.TrimSpace(sc.RemoteDir),
 		tempSuffix:         suffix,
 		hostKeyFingerprint: strings.TrimSpace(sc.HostKeyFingerprint),
-		states:             make(map[string]*sftpTransferState),
+		concurrency:        kafkaIntDefault(sc.Concurrency, 1),
 	}
-	if err := s.ensureConn(); err != nil {
-		return nil, err
+	s.locks = make([]sync.Mutex, s.concurrency)
+	s.sshClients = make([]*ssh.Client, s.concurrency)
+	s.sftpClis = make([]*sftp.Client, s.concurrency)
+	s.states = make([]map[string]*sftpTransferState, s.concurrency)
+	for i := 0; i < s.concurrency; i++ {
+		s.states[i] = make(map[string]*sftpTransferState)
+		if err := s.ensureConn(i); err != nil {
+			_ = s.Close(context.Background())
+			return nil, err
+		}
 	}
 	return s, nil
 }
@@ -126,15 +135,16 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.ensureConn(); err != nil {
-		return err
-	}
 
 	transferID := strings.TrimSpace(p.Meta.TransferID)
 	if transferID == "" {
 		transferID = fmt.Sprintf("stream-%d", time.Now().UnixNano())
+	}
+	idx := s.pickShard(transferID)
+	s.locks[idx].Lock()
+	defer s.locks[idx].Unlock()
+	if err := s.ensureConnLocked(idx); err != nil {
+		return err
 	}
 	fileName := strings.TrimSpace(p.Meta.FileName)
 	if fileName == "" {
@@ -150,7 +160,7 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 			return fmt.Errorf("sftp sender checksum mismatch: got=%s want=%s transfer=%s", got, want, transferID)
 		}
 	}
-	st, ok := s.states[transferID]
+	st, ok := s.states[idx][transferID]
 	if !ok {
 		finalPath := path.Join(s.remoteDir, fileName)
 		st = &sftpTransferState{
@@ -158,13 +168,13 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 			tempPath:  finalPath + s.tempSuffix,
 			totalSize: p.Meta.TotalSize,
 		}
-		s.states[transferID] = st
+		s.states[idx][transferID] = st
 	}
 	if p.Meta.TotalSize > 0 {
 		st.totalSize = p.Meta.TotalSize
 	}
 
-	f, err := s.sftpCli.OpenFile(st.tempPath, os.O_WRONLY|os.O_CREATE)
+	f, err := s.sftpClis[idx].OpenFile(st.tempPath, os.O_WRONLY|os.O_CREATE)
 	if err != nil {
 		return err
 	}
@@ -184,11 +194,11 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 	}
 
 	if st.eofSeen && (st.totalSize <= 0 || st.writtenMax >= st.totalSize) {
-		_ = s.sftpCli.Remove(st.finalPath)
-		if err := s.sftpCli.Rename(st.tempPath, st.finalPath); err != nil {
+		_ = s.sftpClis[idx].Remove(st.finalPath)
+		if err := s.sftpClis[idx].Rename(st.tempPath, st.finalPath); err != nil {
 			return err
 		}
-		delete(s.states, transferID)
+		delete(s.states[idx], transferID)
 	}
 	return nil
 }
@@ -196,23 +206,31 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 // Close 关闭底层 SFTP/SSH 连接并释放资源。
 // 用法：在 runtime 下线 sender 或进程退出时调用，避免连接泄漏。
 func (s *SFTPSender) Close(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.sftpCli != nil {
-		_ = s.sftpCli.Close()
-		s.sftpCli = nil
-	}
-	if s.sshClient != nil {
-		_ = s.sshClient.Close()
-		s.sshClient = nil
+	for i := 0; i < s.concurrency; i++ {
+		s.locks[i].Lock()
+		if s.sftpClis[i] != nil {
+			_ = s.sftpClis[i].Close()
+			s.sftpClis[i] = nil
+		}
+		if s.sshClients[i] != nil {
+			_ = s.sshClients[i].Close()
+			s.sshClients[i] = nil
+		}
+		s.locks[i].Unlock()
 	}
 	return nil
 }
 
 // ensureConn 确保底层连接可用，不可用时执行重连。
 // 用法：由 Send/构造阶段调用，调用方无需显式管理重连逻辑。
-func (s *SFTPSender) ensureConn() error {
-	if s.sftpCli != nil && s.sshClient != nil {
+func (s *SFTPSender) ensureConn(idx int) error {
+	s.locks[idx].Lock()
+	defer s.locks[idx].Unlock()
+	return s.ensureConnLocked(idx)
+}
+
+func (s *SFTPSender) ensureConnLocked(idx int) error {
+	if s.sftpClis[idx] != nil && s.sshClients[idx] != nil {
 		return nil
 	}
 	if _, _, err := net.SplitHostPort(s.addr); err != nil {
@@ -238,9 +256,16 @@ func (s *SFTPSender) ensureConn() error {
 		_ = cli.Close()
 		return err
 	}
-	s.sshClient = cli
-	s.sftpCli = scli
+	s.sshClients[idx] = cli
+	s.sftpClis[idx] = scli
 	return nil
+}
+
+func (s *SFTPSender) pickShard(transferID string) int {
+	if s.concurrency <= 1 {
+		return 0
+	}
+	return int(fnv32aString(transferID) % uint32(s.concurrency))
 }
 
 func (s *SFTPSender) hostKeyCallback() ssh.HostKeyCallback {

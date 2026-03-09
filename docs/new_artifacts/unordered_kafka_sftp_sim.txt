@@ -1,0 +1,8 @@
+goos: linux
+goarch: amd64
+pkg: forward-stub/src/runtime
+cpu: Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+BenchmarkDispatchMatrix/kafka_to_kafka_4096B-2   	 5627640	      2717 ns/op	1507.29 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/sftp_to_sftp_4096B-2     	 4973071	      2720 ns/op	1505.85 MB/s	    4408 B/op	       6 allocs/op
+PASS
+ok  	forward-stub/src/runtime	34.373s

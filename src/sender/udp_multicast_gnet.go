@@ -26,12 +26,13 @@ type UDPMulticastSender struct {
 	ttl       int
 	loop      bool
 
-	mu   sync.Mutex
-	conn atomic.Pointer[net.UDPConn]
+	concurrency int
+	locks       []sync.Mutex
+	conns       []atomic.Pointer[net.UDPConn]
 }
 
 // NewUDPMulticastSender 负责该函数对应的核心逻辑，详见实现细节。
-func NewUDPMulticastSender(name, localIP string, localPort int, group string, ifaceName string, ttl int, loop bool) (*UDPMulticastSender, error) {
+func NewUDPMulticastSender(name, localIP string, localPort int, group string, ifaceName string, ttl int, loop bool, concurrency int) (*UDPMulticastSender, error) {
 	gaddr, err := net.ResolveUDPAddr("udp", group)
 	if err != nil {
 		return nil, err
@@ -42,18 +43,26 @@ func NewUDPMulticastSender(name, localIP string, localPort int, group string, if
 	if ttl <= 0 {
 		ttl = 1
 	}
+	if concurrency <= 0 {
+		concurrency = 1
+	}
 	laddr := &net.UDPAddr{IP: net.ParseIP(localIP), Port: localPort}
 
 	s := &UDPMulticastSender{
-		name:      name,
-		group:     gaddr,
-		local:     laddr,
-		ifaceName: ifaceName,
-		ttl:       ttl,
-		loop:      loop,
+		name:        name,
+		group:       gaddr,
+		local:       laddr,
+		ifaceName:   ifaceName,
+		ttl:         ttl,
+		loop:        loop,
+		concurrency: concurrency,
+		locks:       make([]sync.Mutex, concurrency),
+		conns:       make([]atomic.Pointer[net.UDPConn], concurrency),
 	}
-	if err := s.ensureConn(); err != nil {
-		return nil, err
+	for i := 0; i < s.concurrency; i++ {
+		if err := s.ensureConn(i); err != nil {
+			return nil, err
+		}
 	}
 	return s, nil
 }
@@ -68,10 +77,11 @@ func (s *UDPMulticastSender) Key() string {
 
 // Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPMulticastSender) Send(ctx context.Context, p *packet.Packet) error {
-	c := s.conn.Load()
+	idx := s.pickShard(p.Payload)
+	c := s.conns[idx].Load()
 	if c == nil {
 		var err error
-		c, err = s.getConn()
+		c, err = s.getConn(idx)
 		if err != nil {
 			return err
 		}
@@ -82,38 +92,40 @@ func (s *UDPMulticastSender) Send(ctx context.Context, p *packet.Packet) error {
 
 // Close 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPMulticastSender) Close(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if c := s.conn.Load(); c != nil {
-		_ = c.Close()
-		s.conn.Store(nil)
+	for i := 0; i < s.concurrency; i++ {
+		s.locks[i].Lock()
+		if c := s.conns[i].Load(); c != nil {
+			_ = c.Close()
+			s.conns[i].Store(nil)
+		}
+		s.locks[i].Unlock()
 	}
 	return nil
 }
 
 // getConn 负责该函数对应的核心逻辑，详见实现细节。
-func (s *UDPMulticastSender) getConn() (*net.UDPConn, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if c := s.conn.Load(); c != nil {
+func (s *UDPMulticastSender) getConn(idx int) (*net.UDPConn, error) {
+	s.locks[idx].Lock()
+	defer s.locks[idx].Unlock()
+	if c := s.conns[idx].Load(); c != nil {
 		return c, nil
 	}
-	if err := s.ensureConnLocked(); err != nil {
+	if err := s.ensureConnLocked(idx); err != nil {
 		return nil, err
 	}
-	return s.conn.Load(), nil
+	return s.conns[idx].Load(), nil
 }
 
 // ensureConn 负责该函数对应的核心逻辑，详见实现细节。
-func (s *UDPMulticastSender) ensureConn() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.ensureConnLocked()
+func (s *UDPMulticastSender) ensureConn(idx int) error {
+	s.locks[idx].Lock()
+	defer s.locks[idx].Unlock()
+	return s.ensureConnLocked(idx)
 }
 
 // ensureConnLocked 负责该函数对应的核心逻辑，详见实现细节。
-func (s *UDPMulticastSender) ensureConnLocked() error {
-	if s.conn.Load() != nil {
+func (s *UDPMulticastSender) ensureConnLocked(idx int) error {
+	if s.conns[idx].Load() != nil {
 		return nil
 	}
 	c, err := dialUDPWithReuse(context.Background(), s.local, s.group)
@@ -149,6 +161,13 @@ func (s *UDPMulticastSender) ensureConnLocked() error {
 		}
 	}
 
-	s.conn.Store(c)
+	s.conns[idx].Store(c)
 	return nil
+}
+
+func (s *UDPMulticastSender) pickShard(payload []byte) int {
+	if s.concurrency <= 1 {
+		return 0
+	}
+	return int(fnv32aBytes(payload) % uint32(s.concurrency))
 }

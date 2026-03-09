@@ -615,9 +615,14 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 
 // buildReceiver 负责该函数对应的核心逻辑，详见实现细节。
 func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (receiver.Receiver, error) {
+	multicore := rc.Multicore
+	numEventLoop := rc.NumEventLoop
+	if numEventLoop <= 0 {
+		numEventLoop = config.DefaultReceiverNumEventLoop
+	}
 	switch rc.Type {
 	case "udp_gnet":
-		return receiver.NewGnetUDP(name, rc.Listen, rc.Multicore, rc.NumEventLoop, rc.ReadBufferCap, gnetLogLevel), nil
+		return receiver.NewGnetUDP(name, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, gnetLogLevel), nil
 	case "tcp_gnet":
 		var fr receiver.Framer
 		switch rc.Frame {
@@ -628,7 +633,7 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 		default:
 			return nil, fmt.Errorf("receiver %s unknown frame %s", name, rc.Frame)
 		}
-		return receiver.NewGnetTCP(name, rc.Listen, rc.Multicore, rc.NumEventLoop, rc.ReadBufferCap, fr, gnetLogLevel), nil
+		return receiver.NewGnetTCP(name, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, fr, gnetLogLevel), nil
 	case "kafka":
 		return receiver.NewKafkaReceiver(name, rc)
 	case "sftp":
@@ -642,7 +647,7 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (sender.Sender, error) {
 	conc := sc.Concurrency
 	if conc <= 0 {
-		conc = 1
+		conc = config.DefaultSenderConcurrency
 	}
 	switch sc.Type {
 	case "udp_unicast":
@@ -654,8 +659,7 @@ func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (send
 		if sc.LocalPort <= 0 {
 			return nil, fmt.Errorf("sender %s udp_multicast requires local_port", name)
 		}
-		_ = conc
-		return sender.NewUDPMulticastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.Iface, sc.TTL, sc.Loop)
+		return sender.NewUDPMulticastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.Iface, sc.TTL, sc.Loop, conc)
 	case "tcp_gnet":
 		with := false
 		switch sc.Frame {
