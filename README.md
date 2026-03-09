@@ -222,7 +222,8 @@ flag 名称映射：`matched/rewritten/drop/none`。
 ```json
 {
   "version": 1001,
-  "control": {"api": "", "timeout_sec": 5},
+  "control": {"api": "", "timeout_sec": 5,
+    "config_watch_interval": "2s"},
   "logging": {
     "level": "info",
     "file": "",

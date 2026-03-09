@@ -24,6 +24,10 @@ type ReceiverState struct {
 	// Running 表示实例是否已启动。
 	// 用法：防止重复启动，并在更新过程中决定停启顺序。
 	Running bool
+	// RestartAttempted 表示是否已执行过一次“未运行补启动”尝试。
+	RestartAttempted bool
+	// LastStartError 记录最近一次 receiver 启动失败原因。
+	LastStartError string
 }
 
 // SenderState 描述一个 sender 在运行时缓存中的状态。
@@ -66,4 +70,12 @@ type CompiledPipeline struct {
 	// P 是编译完成的 pipeline 执行对象。
 	// 用法：在任务处理路径中串联执行各 stage。
 	P *pipeline.Pipeline
+}
+
+// StageCacheEntry 描述可复用 stage 的缓存条目。
+type StageCacheEntry struct {
+	Sig      string
+	Fn       pipeline.StageFunc
+	TaskRefs int
+	Tasks    map[string]struct{}
 }

@@ -81,7 +81,7 @@ func main() {
 
 	configChangeCh := make(chan struct{}, 1)
 	watchDone := make(chan struct{})
-	go watchConfigFile(bizPath, initialFingerprint, configChangeCh, watchDone)
+	go watchConfigFile(bizPath, initialFingerprint, cfg.Control.ConfigWatchInterval, configChangeCh, watchDone)
 	defer close(watchDone)
 
 	_ = bizCfg
@@ -119,10 +119,15 @@ func main() {
 	}
 }
 
-func watchConfigFile(path, initialFingerprint string, notifyCh chan<- struct{}, done <-chan struct{}) {
+func watchConfigFile(path, initialFingerprint, watchInterval string, notifyCh chan<- struct{}, done <-chan struct{}) {
 	lg := logx.L()
 	currentFingerprint := initialFingerprint
-	ticker := time.NewTicker(configWatchInterval)
+	interval, err := time.ParseDuration(watchInterval)
+	if err != nil || interval <= 0 {
+		lg.Warnw("invalid config_watch_interval, fallback to default", "value", watchInterval, "default", config.DefaultConfigWatchInterval, "error", err)
+		interval, _ = time.ParseDuration(config.DefaultConfigWatchInterval)
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
