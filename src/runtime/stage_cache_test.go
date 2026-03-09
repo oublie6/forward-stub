@@ -10,8 +10,8 @@ import (
 func TestCompilePipelinesWithStageCacheReuseBySignature(t *testing.T) {
 	st := NewStore()
 	cfg := map[string][]config.StageConfig{
-		"p1": {{Type: "drop_if_flag", Flag: "drop"}},
-		"p2": {{Type: "drop_if_flag", Flag: "drop"}},
+		"p1": {{Type: "clear_file_meta"}},
+		"p2": {{Type: "clear_file_meta"}},
 	}
 
 	compiled, sigsByPipeline, err := st.compilePipelinesWithStageCache(cfg)
@@ -33,7 +33,7 @@ func TestStageCacheTaskRefsTrackAddAndRemove(t *testing.T) {
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
 	st.subs["r1"] = map[string]struct{}{}
 
-	sig := `{"type":"drop_if_flag","flag":"drop"}`
+	sig := `{"type":"clear_file_meta"}`
 	st.stageCache[sig] = &StageCacheEntry{Sig: sig, Tasks: make(map[string]struct{})}
 	st.pipelineStageSigs["p1"] = []string{sig}
 

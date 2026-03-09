@@ -8,8 +8,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"forward-stub/src/packet"
 )
 
 var trafficStatsIntervalNanos atomic.Int64
@@ -296,17 +294,15 @@ func (h *trafficStatsHub) flush(elapsed, interval time.Duration) {
 	for receiver, runtime := range listReceiverRuntimeStats() {
 		summary.addReceiverRuntime(receiver, runtime)
 	}
-	summary.setMemoryPool()
 	if summary.hasData() {
 		summary.log()
 	}
 }
 
 type trafficSummary struct {
-	Uptime     string                `json:"uptime"`
-	Tasks      []taskAggregateStats  `json:"tasks"`
-	Receivers  []receiverRuntimeItem `json:"receivers,omitempty"`
-	MemoryPool memoryPoolStats       `json:"memory_pool"`
+	Uptime    string                `json:"uptime"`
+	Tasks     []taskAggregateStats  `json:"tasks"`
+	Receivers []receiverRuntimeItem `json:"receivers,omitempty"`
 }
 
 type receiverRuntimeItem struct {
@@ -325,17 +321,6 @@ type taskAggregateStats struct {
 	PPS             float64          `json:"pps,omitempty"`
 	BPS             float64          `json:"bps,omitempty"`
 	WorkerPool      *workerPoolStats `json:"worker_pool,omitempty"`
-}
-
-type memoryPoolStats struct {
-	InUseBuffers  int64 `json:"inuse_buffers"`
-	InUseBytes    int64 `json:"inuse_bytes"`
-	CachedBuffers int64 `json:"cached_buffers"`
-	CachedBytes   int64 `json:"cached_bytes"`
-	TotalBuffers  int64 `json:"total_buffers"`
-	TotalBytes    int64 `json:"total_bytes"`
-	Gets          int64 `json:"gets"`
-	Puts          int64 `json:"puts"`
 }
 
 type workerPoolStats struct {
@@ -399,20 +384,6 @@ func diffCounter(cur, prev uint64) uint64 {
 		return cur - prev
 	}
 	return cur
-}
-
-func (s *trafficSummary) setMemoryPool() {
-	pool := packet.SnapshotPayloadPoolStats()
-	s.MemoryPool = memoryPoolStats{
-		InUseBuffers:  pool.InUseBuffers,
-		InUseBytes:    pool.InUseBytes,
-		CachedBuffers: pool.CachedBuffers,
-		CachedBytes:   pool.CachedBytes,
-		TotalBuffers:  pool.TotalBuffers,
-		TotalBytes:    pool.TotalBytes,
-		Gets:          pool.Gets,
-		Puts:          pool.Puts,
-	}
 }
 
 func (s *trafficSummary) hasData() bool {

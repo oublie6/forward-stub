@@ -87,15 +87,13 @@ func compileStage(sc config.StageConfig) (pipeline.StageFunc, error) {
 		if err != nil {
 			return nil, err
 		}
-		return pipeline.MatchOffsetBytes(sc.Offset, b, flagFromName(sc.Flag)), nil
+		return pipeline.MatchOffsetBytes(sc.Offset, b), nil
 	case "replace_offset_bytes":
 		b, err := hex.DecodeString(sc.Hex)
 		if err != nil {
 			return nil, err
 		}
-		return pipeline.ReplaceOffsetBytes(sc.Offset, b, flagFromName(sc.Flag)), nil
-	case "drop_if_flag":
-		return pipeline.DropIfFlag(flagFromName(sc.Flag)), nil
+		return pipeline.ReplaceOffsetBytes(sc.Offset, b), nil
 	case "mark_as_file_chunk":
 		eof := true
 		if sc.Bool != nil {
@@ -106,21 +104,5 @@ func compileStage(sc config.StageConfig) (pipeline.StageFunc, error) {
 		return pipeline.ClearFileMeta(), nil
 	default:
 		return nil, fmt.Errorf("unknown stage type: %s", sc.Type)
-	}
-}
-
-// flagFromName 负责该函数对应的核心逻辑，详见实现细节。
-func flagFromName(s string) uint32 {
-	switch s {
-	case "", "none":
-		return 0
-	case "matched":
-		return pipeline.FlagMatched
-	case "rewritten":
-		return pipeline.FlagRewritten
-	case "drop":
-		return pipeline.FlagDrop
-	default:
-		return 0
 	}
 }
