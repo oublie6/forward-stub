@@ -71,3 +71,32 @@ func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
 		t.Fatalf("expected dispatch snapshot has 0 task after remove, got %d", got)
 	}
 }
+
+func TestTryRestartStoppedReceiversOnceMarksAttemptAndDoesNotRetry(t *testing.T) {
+	st := NewStore()
+	st.receivers["r1"] = &ReceiverState{
+		Name:    "r1",
+		Cfg:     config.ReceiverConfig{Type: "unknown", Listen: "127.0.0.1:1234"},
+		Running: false,
+	}
+
+	next := map[string]config.ReceiverConfig{
+		"r1": {Type: "unknown", Listen: "127.0.0.1:1234"},
+	}
+
+	st.tryRestartStoppedReceiversOnce(context.Background(), next, "error")
+	rs := st.receivers["r1"]
+	if !rs.RestartAttempted {
+		t.Fatalf("expected restart attempt to be marked")
+	}
+	if rs.LastStartError == "" {
+		t.Fatalf("expected restart build error to be recorded")
+	}
+
+	firstErr := rs.LastStartError
+	st.tryRestartStoppedReceiversOnce(context.Background(), next, "error")
+	rs = st.receivers["r1"]
+	if rs.LastStartError != firstErr {
+		t.Fatalf("expected no second retry mutation, got=%q want=%q", rs.LastStartError, firstErr)
+	}
+}
