@@ -12,6 +12,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"forward-stub/src/config"
@@ -74,9 +75,14 @@ type SFTPSender struct {
 	// 用法：ensureConn 保证可用，Close 统一释放。
 	sshClients []*ssh.Client
 	sftpClis   []*sftp.Client
+	connReady  []atomic.Bool
 	// states 保存每个分片 transfer_id 到组装状态的映射。
 	// 用法：跨多次 Send 追踪同一文件的写入进度。
 	states []map[string]*sftpTransferState
+
+	assignMu      sync.Mutex
+	transferShard map[string]int
+	nextIdx       atomic.Uint64
 }
 
 // NewSFTPSender 构造并校验 SFTPSender。
@@ -111,7 +117,9 @@ func NewSFTPSender(name string, sc config.SenderConfig) (*SFTPSender, error) {
 	s.locks = make([]sync.Mutex, s.concurrency)
 	s.sshClients = make([]*ssh.Client, s.concurrency)
 	s.sftpClis = make([]*sftp.Client, s.concurrency)
+	s.connReady = make([]atomic.Bool, s.concurrency)
 	s.states = make([]map[string]*sftpTransferState, s.concurrency)
+	s.transferShard = make(map[string]int)
 	for i := 0; i < s.concurrency; i++ {
 		s.states[i] = make(map[string]*sftpTransferState)
 		if err := s.ensureConn(i); err != nil {
@@ -141,10 +149,20 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 		transferID = fmt.Sprintf("stream-%d", time.Now().UnixNano())
 	}
 	idx := s.pickShard(transferID)
+	if !s.connReady[idx].Load() {
+		s.locks[idx].Lock()
+		err := s.ensureConnLocked(idx)
+		s.locks[idx].Unlock()
+		if err != nil {
+			return err
+		}
+	}
 	s.locks[idx].Lock()
 	defer s.locks[idx].Unlock()
-	if err := s.ensureConnLocked(idx); err != nil {
-		return err
+	if s.sftpClis[idx] == nil || s.sshClients[idx] == nil {
+		if err := s.ensureConnLocked(idx); err != nil {
+			return err
+		}
 	}
 	fileName := strings.TrimSpace(p.Meta.FileName)
 	if fileName == "" {
@@ -176,13 +194,16 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 
 	f, err := s.sftpClis[idx].OpenFile(st.tempPath, os.O_WRONLY|os.O_CREATE)
 	if err != nil {
+		s.invalidateConnLocked(idx)
 		return err
 	}
 	if _, err = f.WriteAt(p.Payload, p.Meta.Offset); err != nil {
 		_ = f.Close()
+		s.invalidateConnLocked(idx)
 		return err
 	}
 	if err = f.Close(); err != nil {
+		s.invalidateConnLocked(idx)
 		return err
 	}
 	end := p.Meta.Offset + int64(len(p.Payload))
@@ -196,9 +217,13 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 	if st.eofSeen && (st.totalSize <= 0 || st.writtenMax >= st.totalSize) {
 		_ = s.sftpClis[idx].Remove(st.finalPath)
 		if err := s.sftpClis[idx].Rename(st.tempPath, st.finalPath); err != nil {
+			s.invalidateConnLocked(idx)
 			return err
 		}
 		delete(s.states[idx], transferID)
+		s.assignMu.Lock()
+		delete(s.transferShard, transferID)
+		s.assignMu.Unlock()
 	}
 	return nil
 }
@@ -208,14 +233,7 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 func (s *SFTPSender) Close(ctx context.Context) error {
 	for i := 0; i < s.concurrency; i++ {
 		s.locks[i].Lock()
-		if s.sftpClis[i] != nil {
-			_ = s.sftpClis[i].Close()
-			s.sftpClis[i] = nil
-		}
-		if s.sshClients[i] != nil {
-			_ = s.sshClients[i].Close()
-			s.sshClients[i] = nil
-		}
+		s.invalidateConnLocked(i)
 		s.locks[i].Unlock()
 	}
 	return nil
@@ -258,14 +276,34 @@ func (s *SFTPSender) ensureConnLocked(idx int) error {
 	}
 	s.sshClients[idx] = cli
 	s.sftpClis[idx] = scli
+	s.connReady[idx].Store(true)
 	return nil
+}
+
+func (s *SFTPSender) invalidateConnLocked(idx int) {
+	if s.sftpClis[idx] != nil {
+		_ = s.sftpClis[idx].Close()
+		s.sftpClis[idx] = nil
+	}
+	if s.sshClients[idx] != nil {
+		_ = s.sshClients[idx].Close()
+		s.sshClients[idx] = nil
+	}
+	s.connReady[idx].Store(false)
 }
 
 func (s *SFTPSender) pickShard(transferID string) int {
 	if s.concurrency <= 1 {
 		return 0
 	}
-	return int(fnv32aString(transferID) % uint32(s.concurrency))
+	s.assignMu.Lock()
+	defer s.assignMu.Unlock()
+	if idx, ok := s.transferShard[transferID]; ok {
+		return idx
+	}
+	idx := int(s.nextIdx.Add(1)-1) % s.concurrency
+	s.transferShard[transferID] = idx
+	return idx
 }
 
 func (s *SFTPSender) hostKeyCallback() ssh.HostKeyCallback {
