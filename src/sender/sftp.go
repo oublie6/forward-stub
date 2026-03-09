@@ -7,7 +7,6 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
-	"hash/fnv"
 	"net"
 	"os"
 	"path"
