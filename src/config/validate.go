@@ -23,6 +23,10 @@ func (c *Config) Validate() error {
 		return errors.New("pipelines missing")
 	}
 
+	if c.Logging.PayloadPoolMaxCachedBytes < 0 {
+		return errors.New("logging payload_pool_max_cached_bytes must be >= 0")
+	}
+
 	for tn, t := range c.Tasks {
 		if tn == "" {
 			return errors.New("task name empty")

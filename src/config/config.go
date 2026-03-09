@@ -4,21 +4,22 @@ package config
 import "runtime"
 
 const (
-	DefaultControlTimeoutSec       = 5
-	DefaultConfigWatchInterval     = "2s"
-	DefaultLogLevel                = "info"
-	DefaultTrafficStatsInterval    = "1s"
-	DefaultTrafficStatsSampleEvery = 1
-	DefaultLogRotateMaxSizeMB      = 100
-	DefaultLogRotateMaxBackups     = 5
-	DefaultLogRotateMaxAgeDays     = 30
-	DefaultLogRotateCompress       = true
-	DefaultPayloadLogMaxBytes      = 256
-	DefaultReceiverMulticore       = true
-	DefaultReceiverNumEventLoop    = 8
-	DefaultSenderConcurrency       = 8
-	DefaultTaskPoolSize            = 4096
-	DefaultTaskQueueSize           = 8192
+	DefaultControlTimeoutSec         = 5
+	DefaultConfigWatchInterval       = "2s"
+	DefaultLogLevel                  = "info"
+	DefaultTrafficStatsInterval      = "1s"
+	DefaultTrafficStatsSampleEvery   = 1
+	DefaultLogRotateMaxSizeMB        = 100
+	DefaultLogRotateMaxBackups       = 5
+	DefaultLogRotateMaxAgeDays       = 30
+	DefaultLogRotateCompress         = true
+	DefaultPayloadLogMaxBytes        = 256
+	DefaultReceiverMulticore         = true
+	DefaultReceiverNumEventLoop      = 8
+	DefaultSenderConcurrency         = 8
+	DefaultTaskPoolSize              = 4096
+	DefaultTaskQueueSize             = 8192
+	DefaultPayloadPoolMaxCachedBytes = int64(0)
 )
 
 // Config 是系统运行时的全量配置快照。
@@ -131,6 +132,9 @@ type LoggingConfig struct {
 	// PayloadLogMaxBytes 控制日志中 payload 摘要的最大字节数。
 	// 用法：建议设置为 64~1024 之间，避免大包导致日志膨胀；<=0 时使用默认值。
 	PayloadLogMaxBytes int `json:"payload_log_max_bytes,omitempty"`
+	// PayloadPoolMaxCachedBytes 控制 payload 内存池可缓存的总字节上限。
+	// 用法：<=0 表示不限制（默认）；>0 可限制缓存内存占用峰值。
+	PayloadPoolMaxCachedBytes int64 `json:"payload_pool_max_cached_bytes,omitempty"`
 }
 
 // ReceiverConfig 描述单个接收端实例。
@@ -372,6 +376,9 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.Logging.PayloadLogMaxBytes <= 0 {
 		c.Logging.PayloadLogMaxBytes = DefaultPayloadLogMaxBytes
+	}
+	if c.Logging.PayloadPoolMaxCachedBytes < 0 {
+		c.Logging.PayloadPoolMaxCachedBytes = DefaultPayloadPoolMaxCachedBytes
 	}
 	for name, tc := range c.Tasks {
 		if tc.PoolSize <= 0 {
