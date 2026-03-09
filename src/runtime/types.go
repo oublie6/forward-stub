@@ -7,7 +7,6 @@ import (
 	"forward-stub/src/receiver"
 	"forward-stub/src/sender"
 	"forward-stub/src/task"
-	"time"
 )
 
 // ReceiverState 描述一个 receiver 在运行时缓存中的状态。
@@ -79,5 +78,4 @@ type StageCacheEntry struct {
 	Fn       pipeline.StageFunc
 	TaskRefs int
 	Tasks    map[string]struct{}
-	ZeroAt   time.Time
 }

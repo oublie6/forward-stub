@@ -7,7 +7,6 @@ import (
 	"forward-stub/src/logx"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
@@ -34,8 +33,6 @@ type Store struct {
 	pipelineStageSigs map[string][]string
 	// stageCache 保存可复用 stage 实例及其被 task 使用计数。
 	stageCache map[string]*StageCacheEntry
-	// lastStageGC 用于周期性回收未使用 stage 缓存。
-	lastStageGC time.Time
 
 	subs map[string]map[string]struct{}
 
@@ -53,7 +50,6 @@ func NewStore() *Store {
 		pipelineCfg:       make(map[string][]config.StageConfig),
 		pipelineStageSigs: make(map[string][]string),
 		stageCache:        make(map[string]*StageCacheEntry),
-		lastStageGC:       time.Now(),
 		subs:              make(map[string]map[string]struct{}),
 	}
 	s.dispatchSubs.Store(map[string][]*TaskState{})

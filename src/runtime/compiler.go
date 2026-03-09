@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"forward-stub/src/config"
 	"forward-stub/src/pipeline"
@@ -30,9 +29,6 @@ func CompilePipelines(cfg map[string][]config.StageConfig) (map[string]*Compiled
 	}
 	return out, nil
 }
-
-const stageCacheGCInterval = 30 * time.Second
-
 func stageSignature(sc config.StageConfig) (string, error) {
 	b, err := json.Marshal(sc)
 	if err != nil {
@@ -69,7 +65,7 @@ func (st *Store) compilePipelinesWithStageCache(cfg map[string][]config.StageCon
 			st.mu.Lock()
 			entry := st.stageCache[sig]
 			if entry == nil {
-				entry = &StageCacheEntry{Sig: sig, Fn: fn, Tasks: make(map[string]struct{}), ZeroAt: time.Now()}
+				entry = &StageCacheEntry{Sig: sig, Fn: fn, Tasks: make(map[string]struct{})}
 				st.stageCache[sig] = entry
 			}
 			st.mu.Unlock()

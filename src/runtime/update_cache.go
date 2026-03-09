@@ -120,7 +120,7 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	st.subs = make(map[string]map[string]struct{})
 	st.version = cfg.Version
 	st.mu.Unlock()
-	st.gcUnusedStageCache(time.Now(), false)
+	st.gcUnusedStageCache()
 	st.setDispatchSubs(map[string][]*TaskState{})
 
 	// 1) 构建 senders：任务阶段需要引用 sender 实例。
@@ -256,7 +256,7 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 		st.pipelineCfg = cfg.Pipelines
 		st.pipelineStageSigs = sigsByPipeline
 		st.mu.Unlock()
-		st.gcUnusedStageCache(time.Now(), false)
+		st.gcUnusedStageCache()
 	}
 
 	if receiverChanged {
@@ -300,7 +300,7 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	st.refreshDispatchSubs()
 	st.rebuildStageTaskRefs()
 	st.gcUnusedSenders()
-	st.gcUnusedStageCache(time.Now(), false)
+	st.gcUnusedStageCache()
 	if logx.Enabled(zapcore.InfoLevel) {
 		logx.L().Infow(
 			"runtime business delta applied",
@@ -652,41 +652,31 @@ func (st *Store) releaseTaskStageRefsLocked(taskName string, pipelines []string)
 			entry.TaskRefs--
 			if entry.TaskRefs <= 0 {
 				entry.TaskRefs = 0
-				entry.ZeroAt = time.Now()
 			}
 		}
 	}
 }
 
-func (st *Store) gcUnusedStageCache(now time.Time, force bool) {
+func (st *Store) gcUnusedStageCache() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	if !force && now.Sub(st.lastStageGC) < stageCacheGCInterval {
-		return
-	}
 	for sig, entry := range st.stageCache {
 		if entry == nil || entry.TaskRefs > 0 {
 			continue
 		}
-		if !entry.ZeroAt.IsZero() && now.Sub(entry.ZeroAt) < stageCacheGCInterval {
-			continue
-		}
 		delete(st.stageCache, sig)
 	}
-	st.lastStageGC = now
 }
 
 func (st *Store) rebuildStageTaskRefs() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	now := time.Now()
 	for _, entry := range st.stageCache {
 		if entry == nil {
 			continue
 		}
 		entry.TaskRefs = 0
 		entry.Tasks = make(map[string]struct{})
-		entry.ZeroAt = now
 	}
 	for taskName, ts := range st.tasks {
 		for _, pn := range ts.Cfg.Pipelines {
@@ -701,7 +691,6 @@ func (st *Store) rebuildStageTaskRefs() {
 				}
 				entry.Tasks[taskName] = struct{}{}
 				entry.TaskRefs++
-				entry.ZeroAt = time.Time{}
 			}
 		}
 	}
