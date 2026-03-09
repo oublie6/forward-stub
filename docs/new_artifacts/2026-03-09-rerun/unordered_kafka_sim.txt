@@ -1,0 +1,7 @@
+goos: linux
+goarch: amd64
+pkg: forward-stub/src/runtime
+cpu: Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+BenchmarkDispatchMatrix/kafka_to_kafka_4096B-2   	 3416520	      4137 ns/op	 990.19 MB/s	    4408 B/op	       6 allocs/op
+PASS
+ok  	forward-stub/src/runtime	18.451s

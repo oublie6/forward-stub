@@ -6,9 +6,8 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"forward-stub/src/config"
@@ -25,8 +24,8 @@ type KafkaSender struct {
 	topic       string
 	concurrency int
 
-	locks   []sync.Mutex
-	clients []*kgo.Client
+	clients []atomic.Pointer[kgo.Client]
+	nextIdx atomic.Uint64
 }
 
 // NewKafkaSender 负责该函数对应的核心逻辑，详见实现细节。
@@ -67,8 +66,7 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 		brokers:     brs,
 		topic:       sc.Topic,
 		concurrency: concurrency,
-		locks:       make([]sync.Mutex, concurrency),
-		clients:     make([]*kgo.Client, concurrency),
+		clients:     make([]atomic.Pointer[kgo.Client], concurrency),
 	}
 	for i := 0; i < concurrency; i++ {
 		cli, err := kgo.NewClient(opts...)
@@ -76,7 +74,7 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 			_ = s.Close(context.Background())
 			return nil, err
 		}
-		s.clients[i] = cli
+		s.clients[i].Store(cli)
 	}
 	return s, nil
 }
@@ -89,10 +87,8 @@ func (s *KafkaSender) Key() string { return "kafka|" + strings.Join(s.brokers, "
 
 // Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
-	idx := s.pickShard(p.Payload)
-	s.locks[idx].Lock()
-	cli := s.clients[idx]
-	s.locks[idx].Unlock()
+	idx := s.pickShard()
+	cli := s.clients[idx].Load()
 	if cli == nil {
 		return errors.New("kafka sender closed")
 	}
@@ -108,10 +104,7 @@ func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
 // Close 负责该函数对应的核心逻辑，详见实现细节。
 func (s *KafkaSender) Close(ctx context.Context) error {
 	for i := 0; i < s.concurrency; i++ {
-		s.locks[i].Lock()
-		cli := s.clients[i]
-		s.clients[i] = nil
-		s.locks[i].Unlock()
+		cli := s.clients[i].Swap(nil)
 		if cli != nil {
 			cli.Close()
 		}
@@ -119,11 +112,11 @@ func (s *KafkaSender) Close(ctx context.Context) error {
 	return nil
 }
 
-func (s *KafkaSender) pickShard(payload []byte) int {
+func (s *KafkaSender) pickShard() int {
 	if s.concurrency <= 1 {
 		return 0
 	}
-	return int(fnv32aBytes(payload) % uint32(s.concurrency))
+	return int(s.nextIdx.Add(1)-1) % s.concurrency
 }
 
 func splitCSV(v string) []string {

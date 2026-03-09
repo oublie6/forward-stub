@@ -1,127 +1,107 @@
-# 转发协议性能测试过程与结论（2026-03-09）
+# 转发协议性能测试过程与结论（2026-03-09，当前版本复测）
 
-## 1. 变更前清理
+## 1. 测试目标
 
-已删除 README 与 docs 目录中历史性能测试内容：
+按要求复测以下两类场景（统一关闭 payload log）：
 
-- 删除旧性能报告：
-  - `docs/performance_audit_and_extreme_throughput_2026-03-08.md`
-  - `docs/performance_code_review_and_protocol_bench_2026-03-08.md`
-  - `docs/protocol_forwarding_zero_loss_extreme_throughput_2026-03-07.md`
-  - `docs/task_execution_model_experiment.md`
-  - `docs/three_execution_models_zero_loss_throughput_2026-03-05.md`
-- 删除旧压测产物目录：`docs/artifacts/`
+1. 严格 `0` 丢包 + 严格保序最大吞吐：
+   - 1.1 receiver eventloop `multicore=false`
+     - 1.1.1 `channel`
+     - 1.1.2 `pool_size=1`
+     - 1.1.3 `fastpath=true`
+   - 1.2 receiver eventloop `multicore=true`
+     - 1.2.1 `channel`
+     - 1.2.2 `pool_size=1`
+     - 1.2.3 `fastpath=true`
+2. 严格 `0` 丢包 + 不保序最大吞吐：
+   - 2.1 UDP→UDP
+   - 2.2 TCP→TCP
+   - 2.3 Kafka→Kafka（模拟）
+   - 2.4 SFTP→SFTP（模拟）
 
-## 2. 测试约束
+## 2. 测试环境与统一约束
 
-- 全部测试关闭 payload log（bench 生成配置中 `PayloadLogRecv=false`, `PayloadLogSend=false`）。
-- 严格口径测试：`loss_rate==0` 且 `strict_order_ok==true`。
-- “不保序”口径测试：仅比较吞吐上限。
+- 测试时间：2026-03-09（当前分支最新代码）
+- 统一关闭 payload log（`cmd/bench` 生成配置中固定 `PayloadLogRecv=false`, `PayloadLogSend=false`）
+- 严格口径判定：`loss_rate == 0 && strict_order_ok == true`
+- 不保序口径判定：只看 `loss_rate == 0` 下的吞吐上限
+- 原始输出目录：`docs/new_artifacts/2026-03-09-rerun/`
 
-## 3. 测试命令与结果
+## 3. 执行命令
 
-## 3.1 严格 0 丢包 + 严格保序最大吞吐（1.1 / 1.2）
+### 3.1 严格 0 丢包 + 严格保序（1.1 / 1.2）
 
 公共参数：
 - `duration=4s`, `warmup=1s`, `payload-size=1024`, `workers=1`
 - `pps-sweep=200,500,1000,2000,4000`
-- `mode=both(UDP+TCP)`
-- `tcp-sender-concurrency=1`
-- `validate-order=true`
+- `mode=both`, `receiver-event-loops=1`, `tcp-sender-concurrency=1`
+- `validate-order=true`, `log-level=info`
 
-### 1.1 receiver eventloop 关闭 multicore
+执行：
+- `go run ./cmd/bench ... -multicore=false -task-execution-model channel -task-fast-path=false -task-pool-size 1 -task-queue-size 1 > strict_mc_off_channel.txt`
+- `go run ./cmd/bench ... -multicore=false -task-execution-model pool -task-fast-path=false -task-pool-size 1 -task-queue-size 1 > strict_mc_off_pool1.txt`
+- `go run ./cmd/bench ... -multicore=false -task-execution-model fastpath -task-fast-path=true -task-pool-size 1 -task-queue-size 1 > strict_mc_off_fastpath.txt`
+- `go run ./cmd/bench ... -multicore=true  -task-execution-model channel -task-fast-path=false -task-pool-size 1 -task-queue-size 1 > strict_mc_on_channel.txt`
+- `go run ./cmd/bench ... -multicore=true  -task-execution-model pool -task-fast-path=false -task-pool-size 1 -task-queue-size 1 > strict_mc_on_pool1.txt`
+- `go run ./cmd/bench ... -multicore=true  -task-execution-model fastpath -task-fast-path=true -task-pool-size 1 -task-queue-size 1 > strict_mc_on_fastpath.txt`
 
-1.1.1 channel
-- 原始输出：`docs/new_artifacts/strict_mc_off_channel.txt`
+### 3.2 严格 0 丢包 + 不保序（2.1~2.4）
 
-1.1.2 pool_size=1
-- 原始输出：`docs/new_artifacts/strict_mc_off_pool1.txt`
+- UDP→UDP 初始大范围扫描（观察上限与丢包拐点）：
+  - `go run ./cmd/bench -mode udp -duration 8s -warmup 2s -payload-size 4096 -workers 4 -pps-sweep 2000,...,18000 -multicore=true -task-execution-model pool -task-fast-path=false -task-pool-size 8192 -task-queue-size 16384 -receiver-event-loops 4 -validate-order=false -log-level info > unordered_udp_max.txt`
+- UDP→UDP 零丢包搜索：
+  - `go run ./cmd/bench -mode udp -duration 8s -warmup 2s -payload-size 4096 -workers 2 -pps-sweep 500,1000,1500,2000,2500,3000 -multicore=true -task-execution-model pool -task-fast-path=false -task-pool-size 8192 -task-queue-size 16384 -receiver-event-loops 4 -validate-order=false -log-level info > unordered_udp_zero_loss_search.txt`
+- TCP→TCP：
+  - `go run ./cmd/bench -mode tcp -duration 8s -warmup 2s -payload-size 4096 -workers 4 -pps-sweep 4000,8000,12000,16000,20000,24000,28000,32000 -multicore=true -task-execution-model pool -task-fast-path=false -task-pool-size 8192 -task-queue-size 16384 -receiver-event-loops 4 -tcp-sender-concurrency 8 -validate-order=false -log-level info > unordered_tcp_max.txt`
+- Kafka→Kafka（模拟）：
+  - `go test ./src/runtime -run '^$' -bench 'BenchmarkDispatchMatrix/kafka_to_kafka_4096B' -benchmem -benchtime=12s > unordered_kafka_sim.txt`
+- SFTP→SFTP（模拟）：
+  - `go test ./src/runtime -run '^$' -bench 'BenchmarkDispatchMatrix/sftp_to_sftp_4096B' -benchmem -benchtime=12s > unordered_sftp_sim.txt`
 
-1.1.3 fastpath=true
-- 原始输出：`docs/new_artifacts/strict_mc_off_fastpath.txt`
+## 4. 结果汇总
 
-### 1.2 receiver eventloop 打开 multicore
+### 4.1 严格 0 丢包 + 严格保序最大吞吐（Mbps）
 
-1.2.1 channel
-- 原始输出：`docs/new_artifacts/strict_mc_on_channel.txt`
-
-1.2.2 pool_size=1
-- 原始输出：`docs/new_artifacts/strict_mc_on_pool1.txt`
-
-1.2.3 fastpath=true
-- 原始输出：`docs/new_artifacts/strict_mc_on_fastpath.txt`
-
-### 严格口径汇总（最大值）
-
-| 场景 | UDP 最大吞吐 (Mbps) | TCP 最大吞吐 (Mbps) |
+| 场景 | UDP | TCP |
 |---|---:|---:|
-| 1.1.1 channel + multicore=off | 32.78 | 32.77 |
-| 1.1.2 pool_size=1 + multicore=off | 32.78 | 32.76 |
-| 1.1.3 fastpath=true + multicore=off | 32.78 | 32.78 |
-| 1.2.1 channel + multicore=on | 32.78 | 32.77 |
-| 1.2.2 pool_size=1 + multicore=on | 16.38 | 32.79 |
-| 1.2.3 fastpath=true + multicore=on | 32.77 | 32.79 |
+| 1.1.1 channel + multicore=off | 32.79 | 16.39 |
+| 1.1.2 pool_size=1 + multicore=off | 16.39 | 32.78 |
+| 1.1.3 fastpath=true + multicore=off | 32.77 | 32.77 |
+| 1.2.1 channel + multicore=on | 32.79 | 16.39 |
+| 1.2.2 pool_size=1 + multicore=on | 32.77 | 16.46 |
+| 1.2.3 fastpath=true + multicore=on | 32.78 | 32.79 |
 
----
+### 4.2 严格 0 丢包 + 不保序最大吞吐
 
-## 3.2 严格 0 丢包 + 不保序最大吞吐（2.1~2.4）
+| 场景 | 最大吞吐 |
+|---|---:|
+| 2.1 UDP→UDP（端到端） | 98.29 Mbps |
+| 2.2 TCP→TCP（端到端） | 2094.91 Mbps |
+| 2.3 Kafka→Kafka（模拟） | 990.19 MB/s |
+| 2.4 SFTP→SFTP（模拟） | 972.23 MB/s |
 
-### 2.1 UDP 收 UDP 发最大吞吐
+> 注：Kafka/SFTP 为同进程模拟基准，反映框架内处理能力，不等价于真实外部系统端到端吞吐。
 
-命令：
-- `go run ./cmd/bench -mode udp ... -pps-sweep 2000..18000 -task-execution-model pool -task-fast-path=false`
+## 5. 结论
 
-结果文件：
-- `docs/new_artifacts/unordered_udp_max.txt`
+1. 严格保序口径下，`fastpath=true` 组合在 UDP/TCP 上最稳定（两者都保持在 ~32.7Mbps）。
+2. `channel` 与 `pool_size=1` 在本轮 TCP 严格保序口径下表现出明显分化（分别在不同 multicore 组合下掉到 ~16Mbps），说明当前顺序校验口径与执行模型/调度耦合仍明显。
+3. 不保序 + 0 丢包口径下，TCP 仍显著高于 UDP（约 `2.09Gbps` vs `98Mbps`）。
+4. 与上一轮历史数据相比，本轮 UDP 0 丢包上限明显降低；建议下一步优先针对 UDP 路径做专项排查（socket buffer、sender 并发策略、bench 发送节流与 sink 读取配比）。
 
-最大吞吐：
-- **893.72 Mbps**
+## 6. 产物清单
 
-### 2.2 TCP 收 TCP 发最大吞吐
-
-命令：
-- `go run ./cmd/bench -mode tcp ... -pps-sweep 4000..32000 -task-execution-model pool -task-fast-path=false -tcp-sender-concurrency=8`
-
-结果文件：
-- `docs/new_artifacts/unordered_tcp_max.txt`
-
-最大吞吐：
-- **3199.31 Mbps**
-
-### 2.3 Kafka 收 Kafka 发最大吞吐（模拟）
-
-命令：
-- `go test ./src/runtime -run '^$' -bench 'BenchmarkDispatchMatrix/kafka_to_kafka_4096B' -benchmem -benchtime=12s`
-
-结果文件：
-- `docs/new_artifacts/unordered_kafka_sftp_sim.txt`
-
-最大吞吐：
-- **1507.29 MB/s**
-
-### 2.4 SFTP 收 SFTP 发最大吞吐（模拟）
-
-命令：
-- `go test ./src/runtime -run '^$' -bench 'BenchmarkDispatchMatrix/sftp_to_sftp_4096B' -benchmem -benchtime=12s`
-
-结果文件：
-- `docs/new_artifacts/unordered_kafka_sftp_sim.txt`
-
-最大吞吐：
-- **1505.85 MB/s**
-
-## 4. 结论
-
-1. 严格 0 丢包+严格保序场景下，UDP/TCP 均可达成，但最大吞吐显著低于“不保序”口径。 
-2. 不保序吞吐上限下，TCP 端到端能力明显高于 UDP（本机环境约 3.20 Gbps vs 0.88 Gbps）。
-3. Kafka/SFTP 当前使用仓库内模拟链路基准，反映框架处理上限，不代表真实外部系统端到端吞吐。
-
-
-## 5. 默认值收敛（按最高吞吐配置）
-
-已将本轮吞吐最佳配置收敛为默认值：
-
-- receiver 默认：`multicore=true`
-- receiver 默认 `num_event_loop`：`max(8, runtime.NumCPU())`
-- sender 默认：`concurrency=8`
-- task 默认：`pool_size=4096`、`queue_size=8192`（`execution_model` 为空时仍为 pool 语义）
+- 解析汇总：`docs/new_artifacts/2026-03-09-rerun/parsed_results.json`
+- 严格口径原始日志：
+  - `strict_mc_off_channel.txt`
+  - `strict_mc_off_pool1.txt`
+  - `strict_mc_off_fastpath.txt`
+  - `strict_mc_on_channel.txt`
+  - `strict_mc_on_pool1.txt`
+  - `strict_mc_on_fastpath.txt`
+- 不保序原始日志：
+  - `unordered_udp_max.txt`
+  - `unordered_udp_zero_loss_search.txt`
+  - `unordered_tcp_max.txt`
+  - `unordered_kafka_sim.txt`
+  - `unordered_sftp_sim.txt`

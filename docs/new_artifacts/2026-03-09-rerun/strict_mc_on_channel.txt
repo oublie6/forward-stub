@@ -1,0 +1,2481 @@
+2026-03-09T04:55:08.176Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+2026-03-09T04:55:08.178Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":1,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T04:55:08.178761966Z	INFO	logging/logger.go:256	Launching gnet with 1 event-loops, listening on: udp://127.0.0.1:19100
+2026-03-09T04:55:08.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "0s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 0,
+      "total_bytes": 0,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 0,
+    "cached_bytes": 0,
+    "total_buffers": 0,
+    "total_bytes": 0,
+    "gets": 0,
+    "puts": 0
+  }
+}
+2026-03-09T04:55:08.189Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.012691459}
+2026-03-09T04:55:09.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "1.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 157,
+      "total_bytes": 160768,
+      "interval_packets": 157,
+      "interval_bytes": 160768,
+      "pps": 157,
+      "bps": 160768,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 2,
+    "cached_bytes": 2048,
+    "total_buffers": 2,
+    "total_bytes": 2048,
+    "gets": 157,
+    "puts": 157
+  }
+}
+2026-03-09T04:55:10.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "2s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 357,
+      "total_bytes": 365568,
+      "interval_packets": 200,
+      "interval_bytes": 204800,
+      "pps": 200,
+      "bps": 204800,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 2,
+    "cached_bytes": 2048,
+    "total_buffers": 2,
+    "total_bytes": 2048,
+    "gets": 357,
+    "puts": 357
+  }
+}
+2026-03-09T04:55:11.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "3.002s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 557,
+      "total_bytes": 570368,
+      "interval_packets": 200,
+      "interval_bytes": 204800,
+      "pps": 200,
+      "bps": 204800,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 557,
+    "puts": 557
+  }
+}
+2026-03-09T04:55:12.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "4.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 757,
+      "total_bytes": 775168,
+      "interval_packets": 200,
+      "interval_bytes": 204800,
+      "pps": 200,
+      "bps": 204800,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 757,
+    "puts": 757
+  }
+}
+2026-03-09T04:55:13.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "5.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 957,
+      "total_bytes": 979968,
+      "interval_packets": 200,
+      "interval_bytes": 204800,
+      "pps": 200,
+      "bps": 204800,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 957,
+    "puts": 957
+  }
+}
+2026-03-09T04:55:14.045Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "udp", "duration": "4.001s", "payload_size": 1024, "workers": 1, "sent_packets": 799, "sent_bytes": 818176, "recv_packets": 800, "recv_bytes": 819200, "loss_rate": 0, "order_errors": 0, "strict_order_ok": true, "pps": 199.9695271436824, "mbps": 1.6381503663610462}
+2026-03-09T04:55:14.045Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+2026-03-09T04:55:14.046Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":1,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T04:55:14.046255698Z	INFO	logging/logger.go:256	Launching gnet with 1 event-loops, listening on: udp://127.0.0.1:19100
+2026-03-09T04:55:14.056Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.010448129}
+2026-03-09T04:55:14.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "6.002s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 0,
+      "total_bytes": 0,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 999,
+    "puts": 999
+  }
+}
+2026-03-09T04:55:15.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "7s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 459,
+      "total_bytes": 470016,
+      "interval_packets": 459,
+      "interval_bytes": 470016,
+      "pps": 459,
+      "bps": 470016,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 1458,
+    "puts": 1458
+  }
+}
+2026-03-09T04:55:16.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "8s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 960,
+      "total_bytes": 983040,
+      "interval_packets": 501,
+      "interval_bytes": 513024,
+      "pps": 501,
+      "bps": 513024,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 1959,
+    "puts": 1959
+  }
+}
+2026-03-09T04:55:17.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "9.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 1460,
+      "total_bytes": 1495040,
+      "interval_packets": 500,
+      "interval_bytes": 512000,
+      "pps": 500,
+      "bps": 512000,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 2459,
+    "puts": 2459
+  }
+}
+2026-03-09T04:55:18.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "10.002s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 1960,
+      "total_bytes": 2007040,
+      "interval_packets": 500,
+      "interval_bytes": 512000,
+      "pps": 500,
+      "bps": 512000,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 2959,
+    "puts": 2959
+  }
+}
+2026-03-09T04:55:19.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "11s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 2459,
+      "total_bytes": 2518016,
+      "interval_packets": 499,
+      "interval_bytes": 510976,
+      "pps": 499,
+      "bps": 510976,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 1,
+        "queue_size": 1,
+        "inflight": 2,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 2,
+    "inuse_bytes": 2048,
+    "cached_buffers": 2,
+    "cached_bytes": 2048,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 3460,
+    "puts": 3458
+  }
+}
+2026-03-09T04:55:19.914Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "udp", "duration": "4.001s", "payload_size": 1024, "workers": 1, "sent_packets": 2001, "sent_bytes": 2049024, "recv_packets": 2001, "recv_bytes": 2049024, "loss_rate": 0, "order_errors": 0, "strict_order_ok": true, "pps": 500.1445252712823, "mbps": 4.097183951022345}
+2026-03-09T04:55:19.915Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+2026-03-09T04:55:19.915Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":1,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T04:55:19.915779386Z	INFO	logging/logger.go:256	Launching gnet with 1 event-loops, listening on: udp://127.0.0.1:19100
+2026-03-09T04:55:19.926Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.010879802}
+2026-03-09T04:55:20.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "12.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 49,
+      "total_bytes": 50176,
+      "interval_packets": 49,
+      "interval_bytes": 50176,
+      "pps": 49,
+      "bps": 50176,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 3,
+    "inuse_bytes": 3072,
+    "cached_buffers": 1,
+    "cached_bytes": 1024,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 3551,
+    "puts": 3548
+  }
+}
+2026-03-09T04:55:21.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "13.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 1051,
+      "total_bytes": 1076224,
+      "interval_packets": 1002,
+      "interval_bytes": 1026048,
+      "pps": 1002,
+      "bps": 1026048,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 4550,
+    "puts": 4550
+  }
+}
+2026-03-09T04:55:22.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "14.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 2049,
+      "total_bytes": 2098176,
+      "interval_packets": 998,
+      "interval_bytes": 1021952,
+      "pps": 998,
+      "bps": 1021952,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 5548,
+    "puts": 5548
+  }
+}
+2026-03-09T04:55:23.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "15s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 3049,
+      "total_bytes": 3122176,
+      "interval_packets": 1000,
+      "interval_bytes": 1024000,
+      "pps": 1000,
+      "bps": 1024000,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 6548,
+    "puts": 6548
+  }
+}
+2026-03-09T04:55:24.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "16.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 4049,
+      "total_bytes": 4146176,
+      "interval_packets": 1000,
+      "interval_bytes": 1024000,
+      "pps": 1000,
+      "bps": 1024000,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 7548,
+    "puts": 7548
+  }
+}
+2026-03-09T04:55:25.183Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "17.004s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 4999,
+      "total_bytes": 5118976,
+      "interval_packets": 950,
+      "interval_bytes": 972800,
+      "pps": 950,
+      "bps": 972800,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 8498,
+    "puts": 8498
+  }
+}
+2026-03-09T04:55:25.785Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "udp", "duration": "4s", "payload_size": 1024, "workers": 1, "sent_packets": 3999, "sent_bytes": 4094976, "recv_packets": 4001, "recv_bytes": 4097024, "loss_rate": 0, "order_errors": 0, "strict_order_ok": true, "pps": 1000.1318036733431, "mbps": 8.193079735692027}
+2026-03-09T04:55:25.785Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+2026-03-09T04:55:25.785Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":1,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T04:55:25.785952217Z	INFO	logging/logger.go:256	Launching gnet with 1 event-loops, listening on: udp://127.0.0.1:19100
+2026-03-09T04:55:25.796Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.010676633}
+2026-03-09T04:55:26.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "18.002s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 362,
+      "total_bytes": 370688,
+      "interval_packets": 362,
+      "interval_bytes": 370688,
+      "pps": 362,
+      "bps": 370688,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 8860,
+    "puts": 8860
+  }
+}
+2026-03-09T04:55:27.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "19.002s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 2362,
+      "total_bytes": 2418688,
+      "interval_packets": 2000,
+      "interval_bytes": 2048000,
+      "pps": 2000,
+      "bps": 2048000,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 10860,
+    "puts": 10860
+  }
+}
+2026-03-09T04:55:28.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "20.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 4351,
+      "total_bytes": 4455424,
+      "interval_packets": 1989,
+      "interval_bytes": 2036736,
+      "pps": 1989,
+      "bps": 2036736,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 12849,
+    "puts": 12849
+  }
+}
+2026-03-09T04:55:29.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "21.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 6359,
+      "total_bytes": 6511616,
+      "interval_packets": 2008,
+      "interval_bytes": 2056192,
+      "pps": 2008,
+      "bps": 2056192,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 4,
+    "cached_bytes": 4096,
+    "total_buffers": 4,
+    "total_bytes": 4096,
+    "gets": 14857,
+    "puts": 14857
+  }
+}
+2026-03-09T04:55:30.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "22.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 8361,
+      "total_bytes": 8561664,
+      "interval_packets": 2002,
+      "interval_bytes": 2050048,
+      "pps": 2002,
+      "bps": 2050048,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 5,
+    "cached_bytes": 5120,
+    "total_buffers": 5,
+    "total_bytes": 5120,
+    "gets": 16859,
+    "puts": 16859
+  }
+}
+2026-03-09T04:55:31.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "23.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 9998,
+      "total_bytes": 10237952,
+      "interval_packets": 1637,
+      "interval_bytes": 1676288,
+      "pps": 1637,
+      "bps": 1676288,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 5,
+    "cached_bytes": 5120,
+    "total_buffers": 5,
+    "total_bytes": 5120,
+    "gets": 18496,
+    "puts": 18496
+  }
+}
+2026-03-09T04:55:31.653Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "udp", "duration": "4s", "payload_size": 1024, "workers": 1, "sent_packets": 7997, "sent_bytes": 8188928, "recv_packets": 8003, "recv_bytes": 8195072, "loss_rate": 0, "order_errors": 0, "strict_order_ok": true, "pps": 2000.6676590213244, "mbps": 16.38946946270269}
+2026-03-09T04:55:31.654Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+2026-03-09T04:55:31.654Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":1,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T04:55:31.654846957Z	INFO	logging/logger.go:256	Launching gnet with 1 event-loops, listening on: udp://127.0.0.1:19100
+2026-03-09T04:55:31.664Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.010598716}
+2026-03-09T04:55:32.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "24.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 1251,
+      "total_bytes": 1281024,
+      "interval_packets": 1251,
+      "interval_bytes": 1281024,
+      "pps": 1251,
+      "bps": 1281024,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 6,
+    "cached_bytes": 6144,
+    "total_buffers": 6,
+    "total_bytes": 6144,
+    "gets": 19747,
+    "puts": 19747
+  }
+}
+2026-03-09T04:55:33.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "25.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 5245,
+      "total_bytes": 5370880,
+      "interval_packets": 3994,
+      "interval_bytes": 4089856,
+      "pps": 3994,
+      "bps": 4089856,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 7,
+    "cached_bytes": 7168,
+    "total_buffers": 7,
+    "total_bytes": 7168,
+    "gets": 23741,
+    "puts": 23741
+  }
+}
+2026-03-09T04:55:34.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "26.002s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 9252,
+      "total_bytes": 9474048,
+      "interval_packets": 4007,
+      "interval_bytes": 4103168,
+      "pps": 4007,
+      "bps": 4103168,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 8,
+    "cached_bytes": 8192,
+    "total_buffers": 8,
+    "total_bytes": 8192,
+    "gets": 27748,
+    "puts": 27748
+  }
+}
+2026-03-09T04:55:35.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "27.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 13249,
+      "total_bytes": 13566976,
+      "interval_packets": 3997,
+      "interval_bytes": 4092928,
+      "pps": 3997,
+      "bps": 4092928,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 8,
+    "cached_bytes": 8192,
+    "total_buffers": 8,
+    "total_bytes": 8192,
+    "gets": 31745,
+    "puts": 31745
+  }
+}
+2026-03-09T04:55:36.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "28.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 17245,
+      "total_bytes": 17658880,
+      "interval_packets": 3996,
+      "interval_bytes": 4091904,
+      "pps": 3996,
+      "bps": 4091904,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 9,
+    "cached_bytes": 9216,
+    "total_buffers": 9,
+    "total_bytes": 9216,
+    "gets": 35741,
+    "puts": 35741
+  }
+}
+2026-03-09T04:55:37.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "29.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 20006,
+      "total_bytes": 20486144,
+      "interval_packets": 2761,
+      "interval_bytes": 2827264,
+      "pps": 2761,
+      "bps": 2827264,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 10240,
+    "total_buffers": 10,
+    "total_bytes": 10240,
+    "gets": 38502,
+    "puts": 38502
+  }
+}
+2026-03-09T04:55:37.526Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "udp", "duration": "4.001s", "payload_size": 1024, "workers": 1, "sent_packets": 16005, "sent_bytes": 16389120, "recv_packets": 16016, "recv_bytes": 16400384, "loss_rate": 0, "order_errors": 0, "strict_order_ok": true, "pps": 4002.8957261596443, "mbps": 32.7917217886998}
+2026-03-09T04:55:37.526Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+[gnet] 2026-03-09T04:55:37.526876438Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+2026-03-09T04:55:37.531Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":1,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T04:55:37.531641164Z	INFO	logging/logger.go:256	Launching gnet with 1 event-loops, listening on: tcp://127.0.0.1:19200
+2026-03-09T04:55:37.542Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.015401864}
+2026-03-09T04:55:38.190Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "30.011s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 85,
+      "total_bytes": 87040,
+      "interval_packets": 85,
+      "interval_bytes": 87040,
+      "pps": 85,
+      "bps": 87040,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 10240,
+    "total_buffers": 10,
+    "total_bytes": 10240,
+    "gets": 38587,
+    "puts": 38587
+  }
+}
+2026-03-09T04:55:39.183Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "31.004s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 285,
+      "total_bytes": 291840,
+      "interval_packets": 200,
+      "interval_bytes": 204800,
+      "pps": 200,
+      "bps": 204800,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 10240,
+    "total_buffers": 10,
+    "total_bytes": 10240,
+    "gets": 38787,
+    "puts": 38787
+  }
+}
+2026-03-09T04:55:40.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "32.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 486,
+      "total_bytes": 497664,
+      "interval_packets": 201,
+      "interval_bytes": 205824,
+      "pps": 201,
+      "bps": 205824,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 10240,
+    "total_buffers": 10,
+    "total_bytes": 10240,
+    "gets": 38988,
+    "puts": 38988
+  }
+}
+2026-03-09T04:55:41.181Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "33.002s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 686,
+      "total_bytes": 702464,
+      "interval_packets": 200,
+      "interval_bytes": 204800,
+      "pps": 200,
+      "bps": 204800,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 10240,
+    "total_buffers": 10,
+    "total_bytes": 10240,
+    "gets": 39188,
+    "puts": 39188
+  }
+}
+2026-03-09T04:55:42.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "34.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 886,
+      "total_bytes": 907264,
+      "interval_packets": 200,
+      "interval_bytes": 204800,
+      "pps": 200,
+      "bps": 204800,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 1,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 1,
+    "inuse_bytes": 1024,
+    "cached_buffers": 9,
+    "cached_bytes": 9216,
+    "total_buffers": 10,
+    "total_bytes": 10240,
+    "gets": 39389,
+    "puts": 39388
+  }
+}
+2026-03-09T04:55:43.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "35.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 999,
+      "total_bytes": 1022976,
+      "interval_packets": 113,
+      "interval_bytes": 115712,
+      "pps": 113,
+      "bps": 115712,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 10240,
+    "total_buffers": 10,
+    "total_bytes": 10240,
+    "gets": 39501,
+    "puts": 39501
+  }
+}
+2026-03-09T04:55:43.397Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "tcp", "duration": "4s", "payload_size": 1024, "workers": 1, "sent_packets": 799, "sent_bytes": 818176, "recv_packets": 800, "recv_bytes": 819200, "loss_rate": 0, "order_errors": 0, "strict_order_ok": true, "pps": 199.99406277625835, "mbps": 1.6383513622631083}
+2026-03-09T04:55:43.398Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+[gnet] 2026-03-09T04:55:43.39839032Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+2026-03-09T04:55:43.399Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":1,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T04:55:43.400260276Z	INFO	logging/logger.go:256	Launching gnet with 1 event-loops, listening on: tcp://127.0.0.1:19200
+2026-03-09T04:55:43.410Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.012495102}
+2026-03-09T04:55:44.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "36.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 283,
+      "total_bytes": 289792,
+      "interval_packets": 283,
+      "interval_bytes": 289792,
+      "pps": 283,
+      "bps": 289792,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 10240,
+    "total_buffers": 10,
+    "total_bytes": 10240,
+    "gets": 39784,
+    "puts": 39784
+  }
+}
+2026-03-09T04:55:45.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "37.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 782,
+      "total_bytes": 800768,
+      "interval_packets": 499,
+      "interval_bytes": 510976,
+      "pps": 499,
+      "bps": 510976,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 10240,
+    "total_buffers": 10,
+    "total_bytes": 10240,
+    "gets": 40283,
+    "puts": 40283
+  }
+}
+2026-03-09T04:55:46.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "38.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 1283,
+      "total_bytes": 1313792,
+      "interval_packets": 501,
+      "interval_bytes": 513024,
+      "pps": 501,
+      "bps": 513024,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 10240,
+    "total_buffers": 10,
+    "total_bytes": 10240,
+    "gets": 40784,
+    "puts": 40784
+  }
+}
+2026-03-09T04:55:47.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "39.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 1783,
+      "total_bytes": 1825792,
+      "interval_packets": 500,
+      "interval_bytes": 512000,
+      "pps": 500,
+      "bps": 512000,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 10240,
+    "total_buffers": 10,
+    "total_bytes": 10240,
+    "gets": 41284,
+    "puts": 41284
+  }
+}
+2026-03-09T04:55:48.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "40.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 2283,
+      "total_bytes": 2337792,
+      "interval_packets": 500,
+      "interval_bytes": 512000,
+      "pps": 500,
+      "bps": 512000,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 10240,
+    "total_buffers": 10,
+    "total_bytes": 10240,
+    "gets": 41784,
+    "puts": 41784
+  }
+}
+2026-03-09T04:55:49.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "41.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 2501,
+      "total_bytes": 2561024,
+      "interval_packets": 218,
+      "interval_bytes": 223232,
+      "pps": 218,
+      "bps": 223232,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 10240,
+    "total_buffers": 10,
+    "total_bytes": 10240,
+    "gets": 42002,
+    "puts": 42002
+  }
+}
+2026-03-09T04:55:49.272Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "tcp", "duration": "4s", "payload_size": 1024, "workers": 1, "sent_packets": 2004, "sent_bytes": 2052096, "recv_packets": 2005, "recv_bytes": 2053120, "loss_rate": 0, "order_errors": 0, "strict_order_ok": true, "pps": 501.1936188503394, "mbps": 4.10577812562198}
+2026-03-09T04:55:49.272Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+[gnet] 2026-03-09T04:55:49.272421131Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+2026-03-09T04:55:49.291Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":1,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T04:55:49.292307936Z	INFO	logging/logger.go:256	Launching gnet with 1 event-loops, listening on: tcp://127.0.0.1:19200
+2026-03-09T04:55:49.302Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.030520759}
+2026-03-09T04:55:50.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "42.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 673,
+      "total_bytes": 689152,
+      "interval_packets": 673,
+      "interval_bytes": 689152,
+      "pps": 673,
+      "bps": 689152,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 654400,
+    "total_buffers": 10,
+    "total_bytes": 654400,
+    "gets": 42675,
+    "puts": 42675
+  }
+}
+2026-03-09T04:55:51.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "43s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 1674,
+      "total_bytes": 1714176,
+      "interval_packets": 1001,
+      "interval_bytes": 1025024,
+      "pps": 1001,
+      "bps": 1025024,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 1615360,
+    "total_buffers": 10,
+    "total_bytes": 1615360,
+    "gets": 43676,
+    "puts": 43676
+  }
+}
+2026-03-09T04:55:52.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "44.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 2673,
+      "total_bytes": 2737152,
+      "interval_packets": 999,
+      "interval_bytes": 1022976,
+      "pps": 999,
+      "bps": 1022976,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 2574400,
+    "total_buffers": 10,
+    "total_bytes": 2574400,
+    "gets": 44675,
+    "puts": 44675
+  }
+}
+2026-03-09T04:55:53.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "45.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 3673,
+      "total_bytes": 3761152,
+      "interval_packets": 1000,
+      "interval_bytes": 1024000,
+      "pps": 1000,
+      "bps": 1024000,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 3534400,
+    "total_buffers": 10,
+    "total_bytes": 3534400,
+    "gets": 45675,
+    "puts": 45675
+  }
+}
+2026-03-09T04:55:54.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "46s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 4674,
+      "total_bytes": 4786176,
+      "interval_packets": 1001,
+      "interval_bytes": 1025024,
+      "pps": 1001,
+      "bps": 1025024,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 4495360,
+    "total_buffers": 10,
+    "total_bytes": 4495360,
+    "gets": 46676,
+    "puts": 46676
+  }
+}
+2026-03-09T04:55:55.161Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "tcp", "duration": "4.001s", "payload_size": 1024, "workers": 1, "sent_packets": 4002, "sent_bytes": 4098048, "recv_packets": 4002, "recv_bytes": 4098048, "loss_rate": 0, "order_errors": 0, "strict_order_ok": true, "pps": 1000.3370253419156, "mbps": 8.194760911600973}
+2026-03-09T04:55:55.161Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+[gnet] 2026-03-09T04:55:55.16188928Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+2026-03-09T04:55:55.162Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":1,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T04:55:55.162753786Z	INFO	logging/logger.go:256	Launching gnet with 1 event-loops, listening on: tcp://127.0.0.1:19200
+2026-03-09T04:55:55.173Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.011382661}
+2026-03-09T04:55:55.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "47.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 0,
+      "total_bytes": 0,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 4808320,
+    "total_buffers": 10,
+    "total_bytes": 4808320,
+    "gets": 47002,
+    "puts": 47002
+  }
+}
+2026-03-09T04:55:56.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "48.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 1607,
+      "total_bytes": 1645568,
+      "interval_packets": 1607,
+      "interval_bytes": 1645568,
+      "pps": 1607,
+      "bps": 1645568,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 6351040,
+    "total_buffers": 10,
+    "total_bytes": 6351040,
+    "gets": 48609,
+    "puts": 48609
+  }
+}
+2026-03-09T04:55:57.184Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "49.006s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 3581,
+      "total_bytes": 3666944,
+      "interval_packets": 1974,
+      "interval_bytes": 2021376,
+      "pps": 1974,
+      "bps": 2021376,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 8246080,
+    "total_buffers": 10,
+    "total_bytes": 8246080,
+    "gets": 50583,
+    "puts": 50583
+  }
+}
+2026-03-09T04:55:58.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "50.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 5610,
+      "total_bytes": 5744640,
+      "interval_packets": 2029,
+      "interval_bytes": 2077696,
+      "pps": 2029,
+      "bps": 2077696,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 10193920,
+    "total_buffers": 10,
+    "total_bytes": 10193920,
+    "gets": 52612,
+    "puts": 52612
+  }
+}
+2026-03-09T04:55:59.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "51.002s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 7608,
+      "total_bytes": 7790592,
+      "interval_packets": 1998,
+      "interval_bytes": 2045952,
+      "pps": 1998,
+      "bps": 2045952,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 12112000,
+    "total_buffers": 10,
+    "total_bytes": 12112000,
+    "gets": 54610,
+    "puts": 54610
+  }
+}
+2026-03-09T04:56:00.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "52.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 9607,
+      "total_bytes": 9837568,
+      "interval_packets": 1999,
+      "interval_bytes": 2046976,
+      "pps": 1999,
+      "bps": 2046976,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 14031040,
+    "total_buffers": 10,
+    "total_bytes": 14031040,
+    "gets": 56609,
+    "puts": 56609
+  }
+}
+2026-03-09T04:56:01.031Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "tcp", "duration": "4s", "payload_size": 1024, "workers": 1, "sent_packets": 8004, "sent_bytes": 8196096, "recv_packets": 8004, "recv_bytes": 8196096, "loss_rate": 0, "order_errors": 0, "strict_order_ok": true, "pps": 2000.9477417480657, "mbps": 16.391763900400154}
+2026-03-09T04:56:01.031Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+[gnet] 2026-03-09T04:56:01.03180596Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+2026-03-09T04:56:01.033Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":1,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T04:56:01.033566359Z	INFO	logging/logger.go:256	Launching gnet with 1 event-loops, listening on: tcp://127.0.0.1:19200
+2026-03-09T04:56:01.044Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.013002752}
+2026-03-09T04:56:01.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "53.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 0,
+      "total_bytes": 0,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 14409280,
+    "total_buffers": 10,
+    "total_bytes": 14409280,
+    "gets": 57003,
+    "puts": 57003
+  }
+}
+2026-03-09T04:56:02.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "54.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 3727,
+      "total_bytes": 3816448,
+      "interval_packets": 3727,
+      "interval_bytes": 3816448,
+      "pps": 3727,
+      "bps": 3816448,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 17987200,
+    "total_buffers": 10,
+    "total_bytes": 17987200,
+    "gets": 60730,
+    "puts": 60730
+  }
+}
+2026-03-09T04:56:03.185Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "55.007s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 7705,
+      "total_bytes": 7889920,
+      "interval_packets": 3978,
+      "interval_bytes": 4073472,
+      "pps": 3978,
+      "bps": 4073472,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 21806080,
+    "total_buffers": 10,
+    "total_bytes": 21806080,
+    "gets": 64708,
+    "puts": 64708
+  }
+}
+2026-03-09T04:56:04.180Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "56.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 11720,
+      "total_bytes": 12001280,
+      "interval_packets": 4015,
+      "interval_bytes": 4111360,
+      "pps": 4015,
+      "bps": 4111360,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 25660480,
+    "total_buffers": 10,
+    "total_bytes": 25660480,
+    "gets": 68723,
+    "puts": 68723
+  }
+}
+2026-03-09T04:56:05.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "57.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 15725,
+      "total_bytes": 16102400,
+      "interval_packets": 4005,
+      "interval_bytes": 4101120,
+      "pps": 4005,
+      "bps": 4101120,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 29505280,
+    "total_buffers": 10,
+    "total_bytes": 29505280,
+    "gets": 72728,
+    "puts": 72728
+  }
+}
+2026-03-09T04:56:06.179Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "58.001s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 19726,
+      "total_bytes": 20199424,
+      "interval_packets": 4001,
+      "interval_bytes": 4097024,
+      "pps": 4001,
+      "bps": 4097024,
+      "worker_pool": {
+        "size": 1,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 1,
+        "queue_available": 1,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 10,
+    "cached_bytes": 33346240,
+    "total_buffers": 10,
+    "total_bytes": 33346240,
+    "gets": 76729,
+    "puts": 76729
+  }
+}
+2026-03-09T04:56:06.905Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "tcp", "duration": "4s", "payload_size": 1024, "workers": 1, "sent_packets": 16001, "sent_bytes": 16385024, "recv_packets": 16010, "recv_bytes": 16394240, "loss_rate": 0, "order_errors": 9495, "strict_order_ok": false, "pps": 4002.0335829960695, "mbps": 32.7846591119038}

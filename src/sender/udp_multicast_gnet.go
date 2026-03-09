@@ -4,7 +4,6 @@ package sender
 import (
 	"context"
 	"fmt"
-	"hash/fnv"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -30,6 +29,7 @@ type UDPMulticastSender struct {
 	concurrency int
 	locks       []sync.Mutex
 	conns       []atomic.Pointer[net.UDPConn]
+	nextIdx     atomic.Uint64
 }
 
 // NewUDPMulticastSender 负责该函数对应的核心逻辑，详见实现细节。
@@ -78,7 +78,7 @@ func (s *UDPMulticastSender) Key() string {
 
 // Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPMulticastSender) Send(ctx context.Context, p *packet.Packet) error {
-	idx := s.pickShard(p.Payload)
+	idx := s.pickShard()
 	c := s.conns[idx].Load()
 	if c == nil {
 		var err error
@@ -166,9 +166,9 @@ func (s *UDPMulticastSender) ensureConnLocked(idx int) error {
 	return nil
 }
 
-func (s *UDPMulticastSender) pickShard(payload []byte) int {
+func (s *UDPMulticastSender) pickShard() int {
 	if s.concurrency <= 1 {
 		return 0
 	}
-	return int(fnv32aBytes(payload) % uint32(s.concurrency))
+	return int(s.nextIdx.Add(1)-1) % s.concurrency
 }
