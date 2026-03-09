@@ -9,7 +9,7 @@ import (
 )
 
 // MatchOffsetBytes 负责该函数对应的核心逻辑，详见实现细节。
-func MatchOffsetBytes(offset int, want []byte, setFlag uint32) StageFunc {
+func MatchOffsetBytes(offset int, want []byte) StageFunc {
 	if offset < 0 {
 		return func(*packet.Packet) bool { return false }
 	}
@@ -20,24 +20,11 @@ func MatchOffsetBytes(offset int, want []byte, setFlag uint32) StageFunc {
 	}
 
 	matcher := buildOffsetMatcher(want)
-	if setFlag == 0 {
-		return func(p *packet.Packet) bool {
-			if end > len(p.Payload) {
-				return false
-			}
-			return matcher(p.Payload[offset:end])
-		}
-	}
-
 	return func(p *packet.Packet) bool {
 		if end > len(p.Payload) {
 			return false
 		}
-		if !matcher(p.Payload[offset:end]) {
-			return false
-		}
-		p.Meta.Flags |= setFlag
-		return true
+		return matcher(p.Payload[offset:end])
 	}
 }
 
@@ -63,7 +50,7 @@ func buildOffsetMatcher(want []byte) func([]byte) bool {
 }
 
 // ReplaceOffsetBytes 负责该函数对应的核心逻辑，详见实现细节。
-func ReplaceOffsetBytes(offset int, with []byte, setFlag uint32) StageFunc {
+func ReplaceOffsetBytes(offset int, with []byte) StageFunc {
 	if offset < 0 {
 		return func(*packet.Packet) bool { return false }
 	}
@@ -73,29 +60,11 @@ func ReplaceOffsetBytes(offset int, with []byte, setFlag uint32) StageFunc {
 		return func(*packet.Packet) bool { return false }
 	}
 
-	if setFlag == 0 {
-		return func(p *packet.Packet) bool {
-			if end > len(p.Payload) {
-				return false
-			}
-			copy(p.Payload[offset:end], with)
-			return true
-		}
-	}
-
 	return func(p *packet.Packet) bool {
 		if end > len(p.Payload) {
 			return false
 		}
 		copy(p.Payload[offset:end], with)
-		p.Meta.Flags |= setFlag
 		return true
-	}
-}
-
-// DropIfFlag 负责该函数对应的核心逻辑，详见实现细节。
-func DropIfFlag(flag uint32) StageFunc {
-	return func(p *packet.Packet) bool {
-		return (p.Meta.Flags & flag) == 0
 	}
 }

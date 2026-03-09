@@ -200,11 +200,9 @@ Receiver(onPacket)
 
 - `match_offset_bytes`
 - `replace_offset_bytes`
-- `drop_if_flag`
 - `mark_as_file_chunk`
 - `clear_file_meta`
 
-flag 名称映射：`matched/rewritten/drop/none`。
 
 ### 6.7 task 字段
 
@@ -269,9 +267,8 @@ flag 名称映射：`matched/rewritten/drop/none`。
   },
   "pipelines": {
     "pipe_bytes": [
-      {"type": "match_offset_bytes", "offset": 0, "hex": "aabb", "flag": "matched"},
-      {"type": "replace_offset_bytes", "offset": 2, "hex": "ccdd", "flag": "rewritten"},
-      {"type": "drop_if_flag", "flag": "drop"}
+      {"type": "match_offset_bytes", "offset": 0, "hex": "aabb"},
+      {"type": "replace_offset_bytes", "offset": 2, "hex": "ccdd"}
     ],
     "pipe_stream_to_file": [
       {"type": "mark_as_file_chunk", "path": "/auto/out.bin", "bool": true}

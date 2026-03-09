@@ -294,9 +294,6 @@ type StageConfig struct {
 	// Hex 是十六进制匹配/写入参数。
 	// 用法：填写无空格 hex 串，供匹配/替换类 stage 使用。
 	Hex string `json:"hex,omitempty"`
-	// Flag 是标志位名称，用于条件路由 stage。
-	// 用法：上游 stage 设置 flag，下游按 flag 决策分支。
-	Flag string `json:"flag,omitempty"`
 	// Path 是文件语义 stage 使用的目标路径。
 	// 用法：用于写文件、改路径等场景，支持绝对或相对路径。
 	Path string `json:"path,omitempty"`
