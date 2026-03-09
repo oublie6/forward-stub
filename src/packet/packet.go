@@ -31,9 +31,6 @@ type Meta struct {
 	// Proto 表示该数据最初来源协议。
 	// 用法：用于跨协议转发时保留溯源信息，便于审计与条件处理。
 	Proto Proto
-	// Flags 是可扩展标志位集合。
-	// 用法：由 pipeline 写入控制位，在后续 stage/sender 中按位判定。
-	Flags uint32
 	// Remote 是上游对端地址或远端资源标识。
 	// 用法：网络协议通常写 socket 对端；文件协议可写远端路径。
 	Remote string

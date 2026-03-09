@@ -42,8 +42,7 @@
       {
         "type": "match_offset_bytes",
         "offset": 0,
-        "hex": "AABB",
-        "flag": "matched"
+        "hex": "AABB"
       }
     ]
   },

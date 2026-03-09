@@ -3,43 +3,68 @@ package pipeline
 
 import (
 	"bytes"
+	"encoding/binary"
 
 	"forward-stub/src/packet"
 )
 
 // MatchOffsetBytes 负责该函数对应的核心逻辑，详见实现细节。
-func MatchOffsetBytes(offset int, want []byte, setFlag uint32) StageFunc {
+func MatchOffsetBytes(offset int, want []byte) StageFunc {
+	if offset < 0 {
+		return func(*packet.Packet) bool { return false }
+	}
+	wantLen := len(want)
+	end := offset + wantLen
+	if end < offset {
+		return func(*packet.Packet) bool { return false }
+	}
+
+	matcher := buildOffsetMatcher(want)
 	return func(p *packet.Packet) bool {
-		if offset < 0 || offset+len(want) > len(p.Payload) {
+		if end > len(p.Payload) {
 			return false
 		}
-		if !bytes.Equal(p.Payload[offset:offset+len(want)], want) {
-			return false
-		}
-		if setFlag != 0 {
-			p.Meta.Flags |= setFlag
-		}
-		return true
+		return matcher(p.Payload[offset:end])
+	}
+}
+
+func buildOffsetMatcher(want []byte) func([]byte) bool {
+	switch len(want) {
+	case 0:
+		return func([]byte) bool { return true }
+	case 1:
+		w0 := want[0]
+		return func(got []byte) bool { return got[0] == w0 }
+	case 2:
+		w := binary.LittleEndian.Uint16(want)
+		return func(got []byte) bool { return binary.LittleEndian.Uint16(got) == w }
+	case 4:
+		w := binary.LittleEndian.Uint32(want)
+		return func(got []byte) bool { return binary.LittleEndian.Uint32(got) == w }
+	case 8:
+		w := binary.LittleEndian.Uint64(want)
+		return func(got []byte) bool { return binary.LittleEndian.Uint64(got) == w }
+	default:
+		return func(got []byte) bool { return bytes.Equal(got, want) }
 	}
 }
 
 // ReplaceOffsetBytes 负责该函数对应的核心逻辑，详见实现细节。
-func ReplaceOffsetBytes(offset int, with []byte, setFlag uint32) StageFunc {
+func ReplaceOffsetBytes(offset int, with []byte) StageFunc {
+	if offset < 0 {
+		return func(*packet.Packet) bool { return false }
+	}
+	withLen := len(with)
+	end := offset + withLen
+	if end < offset {
+		return func(*packet.Packet) bool { return false }
+	}
+
 	return func(p *packet.Packet) bool {
-		if offset < 0 || offset+len(with) > len(p.Payload) {
+		if end > len(p.Payload) {
 			return false
 		}
-		copy(p.Payload[offset:offset+len(with)], with)
-		if setFlag != 0 {
-			p.Meta.Flags |= setFlag
-		}
+		copy(p.Payload[offset:end], with)
 		return true
-	}
-}
-
-// DropIfFlag 负责该函数对应的核心逻辑，详见实现细节。
-func DropIfFlag(flag uint32) StageFunc {
-	return func(p *packet.Packet) bool {
-		return (p.Meta.Flags & flag) == 0
 	}
 }

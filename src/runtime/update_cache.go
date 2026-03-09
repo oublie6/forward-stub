@@ -54,6 +54,7 @@ func buildTaskPayloadLogOptions(name string, tc config.TaskConfig, lc config.Log
 }
 
 func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
+	packet.SetPayloadPoolMaxCachedBytes(cfg.Logging.PayloadPoolMaxCachedBytes)
 	lg := logx.L()
 	start := time.Now()
 	if logx.Enabled(zapcore.InfoLevel) {
