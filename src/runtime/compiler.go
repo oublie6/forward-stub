@@ -3,7 +3,9 @@ package runtime
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"forward-stub/src/config"
 	"forward-stub/src/pipeline"
@@ -27,6 +29,58 @@ func CompilePipelines(cfg map[string][]config.StageConfig) (map[string]*Compiled
 		out[name] = &CompiledPipeline{Name: name, P: pl}
 	}
 	return out, nil
+}
+
+const stageCacheGCInterval = 30 * time.Second
+
+func stageSignature(sc config.StageConfig) (string, error) {
+	b, err := json.Marshal(sc)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func (st *Store) compilePipelinesWithStageCache(cfg map[string][]config.StageConfig) (map[string]*CompiledPipeline, map[string][]string, error) {
+	out := make(map[string]*CompiledPipeline, len(cfg))
+	sigsByPipeline := make(map[string][]string, len(cfg))
+	for name, stagesCfg := range cfg {
+		pl := &pipeline.Pipeline{Name: name, Stages: make([]pipeline.StageFunc, 0, len(stagesCfg))}
+		sigs := make([]string, 0, len(stagesCfg))
+		for _, sc := range stagesCfg {
+			sig, err := stageSignature(sc)
+			if err != nil {
+				return nil, nil, fmt.Errorf("pipeline %s stage %s signature error: %w", name, sc.Type, err)
+			}
+
+			st.mu.RLock()
+			cached := st.stageCache[sig]
+			st.mu.RUnlock()
+			if cached != nil {
+				pl.Stages = append(pl.Stages, cached.Fn)
+				sigs = append(sigs, sig)
+				continue
+			}
+
+			fn, err := compileStage(sc)
+			if err != nil {
+				return nil, nil, fmt.Errorf("pipeline %s stage %s error: %w", name, sc.Type, err)
+			}
+			st.mu.Lock()
+			entry := st.stageCache[sig]
+			if entry == nil {
+				entry = &StageCacheEntry{Sig: sig, Fn: fn, Tasks: make(map[string]struct{}), ZeroAt: time.Now()}
+				st.stageCache[sig] = entry
+			}
+			st.mu.Unlock()
+
+			pl.Stages = append(pl.Stages, entry.Fn)
+			sigs = append(sigs, sig)
+		}
+		out[name] = &CompiledPipeline{Name: name, P: pl}
+		sigsByPipeline[name] = sigs
+	}
+	return out, sigsByPipeline, nil
 }
 
 // compileStage 负责该函数对应的核心逻辑，详见实现细节。

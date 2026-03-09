@@ -101,7 +101,7 @@ func (st *Store) canApplyBusinessDelta(cfg config.Config) bool {
 func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	_ = st.StopAll(ctx)
 
-	compiled, err := CompilePipelines(cfg.Pipelines)
+	compiled, sigsByPipeline, err := st.compilePipelinesWithStageCache(cfg.Pipelines)
 	if err != nil {
 		return err
 	}
@@ -116,9 +116,11 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	st.tasks = make(map[string]*TaskState)
 	st.pipelines = compiled
 	st.pipelineCfg = cfg.Pipelines
+	st.pipelineStageSigs = sigsByPipeline
 	st.subs = make(map[string]map[string]struct{})
 	st.version = cfg.Version
 	st.mu.Unlock()
+	st.gcUnusedStageCache(time.Now(), false)
 	st.setDispatchSubs(map[string][]*TaskState{})
 
 	// 1) 构建 senders：任务阶段需要引用 sender 实例。
@@ -245,14 +247,16 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	pipelineChanged := len(pipelineAdded) > 0 || len(pipelineRemoved) > 0
 
 	if pipelineChanged {
-		compiled, err := CompilePipelines(cfg.Pipelines)
+		compiled, sigsByPipeline, err := st.compilePipelinesWithStageCache(cfg.Pipelines)
 		if err != nil {
 			return err
 		}
 		st.mu.Lock()
 		st.pipelines = compiled
 		st.pipelineCfg = cfg.Pipelines
+		st.pipelineStageSigs = sigsByPipeline
 		st.mu.Unlock()
+		st.gcUnusedStageCache(time.Now(), false)
 	}
 
 	if receiverChanged {
@@ -294,7 +298,9 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	}
 
 	st.refreshDispatchSubs()
+	st.rebuildStageTaskRefs()
 	st.gcUnusedSenders()
+	st.gcUnusedStageCache(time.Now(), false)
 	if logx.Enabled(zapcore.InfoLevel) {
 		logx.L().Infow(
 			"runtime business delta applied",
@@ -570,6 +576,7 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 
 	st.mu.Lock()
 	st.tasks[name] = &TaskState{Name: name, Cfg: tc, T: tk}
+	st.retainTaskStageRefsLocked(name, tc.Pipelines)
 	for _, rn := range tc.Receivers {
 		if _, ok := st.subs[rn]; !ok {
 			st.subs[rn] = make(map[string]struct{})
@@ -586,6 +593,7 @@ func (st *Store) removeTask(name string, preserveCounter bool) *logx.TrafficCoun
 	ts := st.tasks[name]
 	if ts != nil {
 		delete(st.tasks, name)
+		st.releaseTaskStageRefsLocked(name, ts.Cfg.Pipelines)
 		for _, rn := range ts.Cfg.Receivers {
 			if sub, ok := st.subs[rn]; ok {
 				delete(sub, name)
@@ -607,6 +615,96 @@ func (st *Store) removeTask(name string, preserveCounter bool) *logx.TrafficCoun
 		ts.T.StopGraceful()
 	}
 	return counter
+}
+
+func (st *Store) retainTaskStageRefsLocked(taskName string, pipelines []string) {
+	for _, pn := range pipelines {
+		sigs := st.pipelineStageSigs[pn]
+		for _, sig := range sigs {
+			entry := st.stageCache[sig]
+			if entry == nil {
+				continue
+			}
+			if entry.Tasks == nil {
+				entry.Tasks = make(map[string]struct{})
+			}
+			if _, ok := entry.Tasks[taskName]; ok {
+				continue
+			}
+			entry.Tasks[taskName] = struct{}{}
+			entry.TaskRefs++
+		}
+	}
+}
+
+func (st *Store) releaseTaskStageRefsLocked(taskName string, pipelines []string) {
+	for _, pn := range pipelines {
+		sigs := st.pipelineStageSigs[pn]
+		for _, sig := range sigs {
+			entry := st.stageCache[sig]
+			if entry == nil || entry.Tasks == nil {
+				continue
+			}
+			if _, ok := entry.Tasks[taskName]; !ok {
+				continue
+			}
+			delete(entry.Tasks, taskName)
+			entry.TaskRefs--
+			if entry.TaskRefs <= 0 {
+				entry.TaskRefs = 0
+				entry.ZeroAt = time.Now()
+			}
+		}
+	}
+}
+
+func (st *Store) gcUnusedStageCache(now time.Time, force bool) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if !force && now.Sub(st.lastStageGC) < stageCacheGCInterval {
+		return
+	}
+	for sig, entry := range st.stageCache {
+		if entry == nil || entry.TaskRefs > 0 {
+			continue
+		}
+		if !entry.ZeroAt.IsZero() && now.Sub(entry.ZeroAt) < stageCacheGCInterval {
+			continue
+		}
+		delete(st.stageCache, sig)
+	}
+	st.lastStageGC = now
+}
+
+func (st *Store) rebuildStageTaskRefs() {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	now := time.Now()
+	for _, entry := range st.stageCache {
+		if entry == nil {
+			continue
+		}
+		entry.TaskRefs = 0
+		entry.Tasks = make(map[string]struct{})
+		entry.ZeroAt = now
+	}
+	for taskName, ts := range st.tasks {
+		for _, pn := range ts.Cfg.Pipelines {
+			sigs := st.pipelineStageSigs[pn]
+			for _, sig := range sigs {
+				entry := st.stageCache[sig]
+				if entry == nil {
+					continue
+				}
+				if _, ok := entry.Tasks[taskName]; ok {
+					continue
+				}
+				entry.Tasks[taskName] = struct{}{}
+				entry.TaskRefs++
+				entry.ZeroAt = time.Time{}
+			}
+		}
+	}
 }
 
 func (st *Store) refreshDispatchSubs() {

@@ -7,6 +7,7 @@ import (
 	"forward-stub/src/receiver"
 	"forward-stub/src/sender"
 	"forward-stub/src/task"
+	"time"
 )
 
 // ReceiverState 描述一个 receiver 在运行时缓存中的状态。
@@ -70,4 +71,13 @@ type CompiledPipeline struct {
 	// P 是编译完成的 pipeline 执行对象。
 	// 用法：在任务处理路径中串联执行各 stage。
 	P *pipeline.Pipeline
+}
+
+// StageCacheEntry 描述可复用 stage 的缓存条目。
+type StageCacheEntry struct {
+	Sig      string
+	Fn       pipeline.StageFunc
+	TaskRefs int
+	Tasks    map[string]struct{}
+	ZeroAt   time.Time
 }
