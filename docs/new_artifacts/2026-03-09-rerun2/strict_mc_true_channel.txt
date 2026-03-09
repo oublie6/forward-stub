@@ -1,0 +1,82 @@
+2026-03-09T06:27:14.035Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+2026-03-09T06:27:14.036Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":4096,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T06:27:14.036986439Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: udp://127.0.0.1:19100
+2026-03-09T06:27:14.037Z	INFO	logx/traffic_agg.go:428	traffic stats summary
+{
+  "uptime": "0s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 0,
+      "total_bytes": 0,
+      "worker_pool": {
+        "size": 2048,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 4096,
+        "queue_available": 4096,
+        "inflight": 0,
+        "fast_path": false
+      }
+    }
+  ],
+  "receivers": [
+    {
+      "receiver": "in",
+      "running": true,
+      "restart_attempted": false
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 0,
+    "cached_bytes": 0,
+    "total_buffers": 0,
+    "total_bytes": 0,
+    "gets": 0,
+    "puts": 0
+  }
+}
+2026-03-09T06:27:14.046Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.011734201}
+2026-03-09T06:27:19.903Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "udp", "duration": "4.001s", "payload_size": 1024, "workers": 1, "sent_packets": 2001, "sent_bytes": 2049024, "recv_packets": 2001, "recv_bytes": 2049024, "loss_rate": 0, "order_errors": 0, "strict_order_ok": true, "pps": 500.11915657572047, "mbps": 4.096976130668302}
+2026-03-09T06:27:19.904Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+2026-03-09T06:27:19.904Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":4096,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T06:27:19.904896914Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: udp://127.0.0.1:19100
+2026-03-09T06:27:19.915Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.010838934}
+2026-03-09T06:27:25.770Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "udp", "duration": "4s", "payload_size": 1024, "workers": 1, "sent_packets": 4002, "sent_bytes": 4098048, "recv_packets": 4002, "recv_bytes": 4098048, "loss_rate": 0, "order_errors": 0, "strict_order_ok": true, "pps": 1000.4920333320615, "mbps": 8.196030737056248}
+2026-03-09T06:27:25.770Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+2026-03-09T06:27:25.771Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":4096,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T06:27:25.771198161Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: udp://127.0.0.1:19100
+2026-03-09T06:27:25.781Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.010993168}
+2026-03-09T06:27:31.636Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "udp", "duration": "4.001s", "payload_size": 1024, "workers": 1, "sent_packets": 8001, "sent_bytes": 8193024, "recv_packets": 8001, "recv_bytes": 8193024, "loss_rate": 0, "order_errors": 0, "strict_order_ok": true, "pps": 1999.9551811068761, "mbps": 16.38363284362753}
+2026-03-09T06:27:31.636Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+2026-03-09T06:27:31.636Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":4096,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T06:27:31.636941761Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: udp://127.0.0.1:19100
+2026-03-09T06:27:31.647Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.010588236}
+2026-03-09T06:27:37.503Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "udp", "duration": "4s", "payload_size": 1024, "workers": 1, "sent_packets": 16000, "sent_bytes": 16384000, "recv_packets": 16000, "recv_bytes": 16384000, "loss_rate": 0, "order_errors": 0, "strict_order_ok": true, "pps": 3999.803906613625, "mbps": 32.766393602978816}
+2026-03-09T06:27:37.503Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+[gnet] 2026-03-09T06:27:37.503868252Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+2026-03-09T06:27:37.505Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":4096,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T06:27:37.506025544Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: tcp://127.0.0.1:19200
+2026-03-09T06:27:37.516Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.013162843}
+2026-03-09T06:27:43.373Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "tcp", "duration": "4.001s", "payload_size": 1024, "workers": 1, "sent_packets": 2000, "sent_bytes": 2048000, "recv_packets": 2001, "recv_bytes": 2049024, "loss_rate": 0, "order_errors": 2001, "strict_order_ok": false, "pps": 500.15661963376203, "mbps": 4.0972830280397785}
+2026-03-09T06:27:43.373Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+[gnet] 2026-03-09T06:27:43.373512974Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+2026-03-09T06:27:43.375Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":4096,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T06:27:43.37537181Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: tcp://127.0.0.1:19200
+2026-03-09T06:27:43.386Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.012606015}
+2026-03-09T06:27:49.241Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "tcp", "duration": "4s", "payload_size": 1024, "workers": 1, "sent_packets": 4000, "sent_bytes": 4096000, "recv_packets": 4000, "recv_bytes": 4096000, "loss_rate": 0, "order_errors": 4000, "strict_order_ok": false, "pps": 999.9512758741562, "mbps": 8.191600851961088}
+2026-03-09T06:27:49.241Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+[gnet] 2026-03-09T06:27:49.241574097Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+2026-03-09T06:27:49.244Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":4096,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T06:27:49.244480805Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: tcp://127.0.0.1:19200
+2026-03-09T06:27:49.254Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.013374519}
+2026-03-09T06:27:55.110Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "tcp", "duration": "4s", "payload_size": 1024, "workers": 1, "sent_packets": 7995, "sent_bytes": 8186880, "recv_packets": 8000, "recv_bytes": 8192000, "loss_rate": 0, "order_errors": 8000, "strict_order_ok": false, "pps": 1999.910769981176, "mbps": 16.38326902768579}
+2026-03-09T06:27:55.110Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+[gnet] 2026-03-09T06:27:55.110186205Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+2026-03-09T06:27:55.115Z	INFO	runtime/update_cache.go:76	active tasks snapshot	{"tasks": [{"execution_model":"channel","pipelines":["p"],"queue_size":4096,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-09T06:27:55.115457947Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: tcp://127.0.0.1:19200
+2026-03-09T06:27:55.125Z	INFO	runtime/update_cache.go:82	runtime cache updated	{"version": 1, "cost": 0.015482341}
+2026-03-09T06:28:00.980Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "tcp", "duration": "4s", "payload_size": 1024, "workers": 1, "sent_packets": 16005, "sent_bytes": 16389120, "recv_packets": 16005, "recv_bytes": 16389120, "loss_rate": 0, "order_errors": 16005, "strict_order_ok": false, "pps": 4001.0644216297296, "mbps": 32.776719741990746}

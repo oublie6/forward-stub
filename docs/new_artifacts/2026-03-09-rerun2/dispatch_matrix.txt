@@ -1,0 +1,39 @@
+goos: linux
+goarch: amd64
+pkg: forward-stub/src/runtime
+cpu: Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+BenchmarkDispatchMatrix/udp_to_udp_256B-2        	32841492	       432.5 ns/op	 591.92 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/udp_to_udp_4096B-2       	 7158674	      1936 ns/op	2115.87 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/udp_to_tcp_256B-2        	31879483	       423.3 ns/op	 604.82 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/udp_to_tcp_4096B-2       	 7693425	      1867 ns/op	2193.70 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/udp_to_kafka_256B-2      	35777450	       432.2 ns/op	 592.35 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/udp_to_kafka_4096B-2     	 7247539	      1891 ns/op	2166.50 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/udp_to_sftp_256B-2       	34843700	       423.4 ns/op	 604.65 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/udp_to_sftp_4096B-2      	 7501738	      1878 ns/op	2181.17 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/tcp_to_udp_256B-2        	34781404	       422.6 ns/op	 605.82 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/tcp_to_udp_4096B-2       	 7924371	      1892 ns/op	2164.80 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/tcp_to_tcp_256B-2        	36172862	       415.9 ns/op	 615.59 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/tcp_to_tcp_4096B-2       	 7724893	      1886 ns/op	2171.27 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/tcp_to_kafka_256B-2      	34812128	       438.5 ns/op	 583.78 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/tcp_to_kafka_4096B-2     	 7432581	      1977 ns/op	2071.54 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/tcp_to_sftp_256B-2       	32754709	       441.2 ns/op	 580.27 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/tcp_to_sftp_4096B-2      	 7678579	      1897 ns/op	2159.48 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/kafka_to_udp_256B-2      	34437213	       432.3 ns/op	 592.11 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/kafka_to_udp_4096B-2     	 7268481	      1999 ns/op	2049.43 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/kafka_to_tcp_256B-2      	33008582	       438.3 ns/op	 584.04 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/kafka_to_tcp_4096B-2     	 7193576	      1938 ns/op	2113.22 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/kafka_to_kafka_256B-2    	32817366	       442.5 ns/op	 578.47 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/kafka_to_kafka_4096B-2   	 7207400	      2012 ns/op	2035.70 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/kafka_to_sftp_256B-2     	33795244	       428.2 ns/op	 597.82 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/kafka_to_sftp_4096B-2    	 7255696	      1926 ns/op	2126.78 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/sftp_to_udp_256B-2       	35210245	       432.8 ns/op	 591.51 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/sftp_to_udp_4096B-2      	 7514107	      1956 ns/op	2094.09 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/sftp_to_tcp_256B-2       	35476617	       430.9 ns/op	 594.06 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/sftp_to_tcp_4096B-2      	 7191158	      1926 ns/op	2126.58 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/sftp_to_kafka_256B-2     	32150427	       433.3 ns/op	 590.76 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/sftp_to_kafka_4096B-2    	 7136182	      1961 ns/op	2088.21 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/sftp_to_sftp_256B-2      	29938904	       436.5 ns/op	 586.48 MB/s	     568 B/op	       6 allocs/op
+BenchmarkDispatchMatrix/sftp_to_sftp_4096B-2     	 6890482	      2010 ns/op	2037.44 MB/s	    4408 B/op	       6 allocs/op
+BenchmarkDispatchMatrixPoolSizesNoPayloadLog/udp_pool_1024_4096B-2         	 4323990	      3078 ns/op	1330.83 MB/s	    4440 B/op	       7 allocs/op
+BenchmarkDispatchMatrixPoolSizesNoPayloadLog/udp_pool_4096_4096B-2         	 4079257	      3268 ns/op	1253.18 MB/s	    4440 B/op	       7 allocs/op
+BenchmarkDispatchMatrixPoolSizesNoPayloadLog/udp_pool_8192_4096B-2         	
