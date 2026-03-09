@@ -29,6 +29,10 @@ type Store struct {
 
 	pipelines   map[string]*CompiledPipeline
 	pipelineCfg map[string][]config.StageConfig
+	// pipelineStageSigs 记录 pipeline 对应的 stage 签名序列，用于 task 级引用计数。
+	pipelineStageSigs map[string][]string
+	// stageCache 保存可复用 stage 实例及其被 task 使用计数。
+	stageCache map[string]*StageCacheEntry
 
 	subs map[string]map[string]struct{}
 
@@ -39,12 +43,14 @@ type Store struct {
 // NewStore 负责该函数对应的核心逻辑，详见实现细节。
 func NewStore() *Store {
 	s := &Store{
-		receivers:   make(map[string]*ReceiverState),
-		senders:     make(map[string]*SenderState),
-		tasks:       make(map[string]*TaskState),
-		pipelines:   make(map[string]*CompiledPipeline),
-		pipelineCfg: make(map[string][]config.StageConfig),
-		subs:        make(map[string]map[string]struct{}),
+		receivers:         make(map[string]*ReceiverState),
+		senders:           make(map[string]*SenderState),
+		tasks:             make(map[string]*TaskState),
+		pipelines:         make(map[string]*CompiledPipeline),
+		pipelineCfg:       make(map[string][]config.StageConfig),
+		pipelineStageSigs: make(map[string][]string),
+		stageCache:        make(map[string]*StageCacheEntry),
+		subs:              make(map[string]map[string]struct{}),
 	}
 	s.dispatchSubs.Store(map[string][]*TaskState{})
 	return s

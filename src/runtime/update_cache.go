@@ -101,7 +101,7 @@ func (st *Store) canApplyBusinessDelta(cfg config.Config) bool {
 func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	_ = st.StopAll(ctx)
 
-	compiled, err := CompilePipelines(cfg.Pipelines)
+	compiled, sigsByPipeline, err := st.compilePipelinesWithStageCache(cfg.Pipelines)
 	if err != nil {
 		return err
 	}
@@ -116,9 +116,11 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	st.tasks = make(map[string]*TaskState)
 	st.pipelines = compiled
 	st.pipelineCfg = cfg.Pipelines
+	st.pipelineStageSigs = sigsByPipeline
 	st.subs = make(map[string]map[string]struct{})
 	st.version = cfg.Version
 	st.mu.Unlock()
+	st.gcUnusedStageCache()
 	st.setDispatchSubs(map[string][]*TaskState{})
 
 	// 1) 构建 senders：任务阶段需要引用 sender 实例。
@@ -221,7 +223,7 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 }
 
 func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) error {
-	st.mu.Lock()
+	st.mu.RLock()
 	oldTasks := make(map[string]config.TaskConfig, len(st.tasks))
 	for name, ts := range st.tasks {
 		oldTasks[name] = ts.Cfg
@@ -229,6 +231,9 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	oldSenders := senderConfigSnapshot(st.senders)
 	oldReceivers := receiverConfigSnapshot(st.receivers)
 	oldPipelines := st.pipelineCfg
+	st.mu.RUnlock()
+
+	st.mu.Lock()
 	st.version = cfg.Version
 	st.mu.Unlock()
 
@@ -242,14 +247,16 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	pipelineChanged := len(pipelineAdded) > 0 || len(pipelineRemoved) > 0
 
 	if pipelineChanged {
-		compiled, err := CompilePipelines(cfg.Pipelines)
+		compiled, sigsByPipeline, err := st.compilePipelinesWithStageCache(cfg.Pipelines)
 		if err != nil {
 			return err
 		}
 		st.mu.Lock()
 		st.pipelines = compiled
 		st.pipelineCfg = cfg.Pipelines
+		st.pipelineStageSigs = sigsByPipeline
 		st.mu.Unlock()
+		st.gcUnusedStageCache()
 	}
 
 	if receiverChanged {
@@ -291,7 +298,9 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	}
 
 	st.refreshDispatchSubs()
+	st.rebuildStageTaskRefs()
 	st.gcUnusedSenders()
+	st.gcUnusedStageCache()
 	if logx.Enabled(zapcore.InfoLevel) {
 		logx.L().Infow(
 			"runtime business delta applied",
@@ -332,12 +341,12 @@ func splitDeltaWithReplace[T any](oldMap, newMap map[string]T) (added []string, 
 }
 
 func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLevel string) error {
-	st.mu.Lock()
+	st.mu.RLock()
 	oldStates := make(map[string]*SenderState, len(st.senders))
 	for n, ss := range st.senders {
 		oldStates[n] = ss
 	}
-	st.mu.Unlock()
+	st.mu.RUnlock()
 
 	for name, sc := range next {
 		old, ok := oldStates[name]
@@ -375,12 +384,12 @@ func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLe
 }
 
 func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.ReceiverConfig, gnetLogLevel string) error {
-	st.mu.Lock()
+	st.mu.RLock()
 	oldStates := make(map[string]*ReceiverState, len(st.receivers))
 	for n, rs := range st.receivers {
 		oldStates[n] = rs
 	}
-	st.mu.Unlock()
+	st.mu.RUnlock()
 
 	for name, rc := range next {
 		old, ok := oldStates[name]
@@ -426,7 +435,7 @@ func (st *Store) tryRestartStoppedReceiversOnce(ctx context.Context, next map[st
 	}
 
 	candidates := make([]restartCandidate, 0)
-	st.mu.Lock()
+	st.mu.RLock()
 	for name, rs := range st.receivers {
 		if rs.Running || rs.RestartAttempted {
 			continue
@@ -435,12 +444,20 @@ func (st *Store) tryRestartStoppedReceiversOnce(ctx context.Context, next map[st
 		if !ok || !reflect.DeepEqual(rs.Cfg, rc) {
 			continue
 		}
-		rs.RestartAttempted = true
 		candidates = append(candidates, restartCandidate{name: name, cfg: rc})
 	}
-	st.mu.Unlock()
+	st.mu.RUnlock()
 
 	for _, c := range candidates {
+		st.mu.Lock()
+		rs := st.receivers[c.name]
+		if rs == nil || rs.Running || rs.RestartAttempted || !reflect.DeepEqual(rs.Cfg, c.cfg) {
+			st.mu.Unlock()
+			continue
+		}
+		rs.RestartAttempted = true
+		st.mu.Unlock()
+
 		r, err := buildReceiver(c.name, c.cfg, gnetLogLevel)
 		if err != nil {
 			st.mu.Lock()
@@ -559,6 +576,7 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 
 	st.mu.Lock()
 	st.tasks[name] = &TaskState{Name: name, Cfg: tc, T: tk}
+	st.retainTaskStageRefsLocked(name, tc.Pipelines)
 	for _, rn := range tc.Receivers {
 		if _, ok := st.subs[rn]; !ok {
 			st.subs[rn] = make(map[string]struct{})
@@ -575,6 +593,7 @@ func (st *Store) removeTask(name string, preserveCounter bool) *logx.TrafficCoun
 	ts := st.tasks[name]
 	if ts != nil {
 		delete(st.tasks, name)
+		st.releaseTaskStageRefsLocked(name, ts.Cfg.Pipelines)
 		for _, rn := range ts.Cfg.Receivers {
 			if sub, ok := st.subs[rn]; ok {
 				delete(sub, name)
@@ -596,6 +615,85 @@ func (st *Store) removeTask(name string, preserveCounter bool) *logx.TrafficCoun
 		ts.T.StopGraceful()
 	}
 	return counter
+}
+
+func (st *Store) retainTaskStageRefsLocked(taskName string, pipelines []string) {
+	for _, pn := range pipelines {
+		sigs := st.pipelineStageSigs[pn]
+		for _, sig := range sigs {
+			entry := st.stageCache[sig]
+			if entry == nil {
+				continue
+			}
+			if entry.Tasks == nil {
+				entry.Tasks = make(map[string]struct{})
+			}
+			if _, ok := entry.Tasks[taskName]; ok {
+				continue
+			}
+			entry.Tasks[taskName] = struct{}{}
+			entry.TaskRefs++
+		}
+	}
+}
+
+func (st *Store) releaseTaskStageRefsLocked(taskName string, pipelines []string) {
+	for _, pn := range pipelines {
+		sigs := st.pipelineStageSigs[pn]
+		for _, sig := range sigs {
+			entry := st.stageCache[sig]
+			if entry == nil || entry.Tasks == nil {
+				continue
+			}
+			if _, ok := entry.Tasks[taskName]; !ok {
+				continue
+			}
+			delete(entry.Tasks, taskName)
+			entry.TaskRefs--
+			if entry.TaskRefs <= 0 {
+				entry.TaskRefs = 0
+			}
+		}
+	}
+}
+
+func (st *Store) gcUnusedStageCache() {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	for sig, entry := range st.stageCache {
+		if entry == nil || entry.TaskRefs > 0 {
+			continue
+		}
+		delete(st.stageCache, sig)
+	}
+}
+
+func (st *Store) rebuildStageTaskRefs() {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	for _, entry := range st.stageCache {
+		if entry == nil {
+			continue
+		}
+		entry.TaskRefs = 0
+		entry.Tasks = make(map[string]struct{})
+	}
+	for taskName, ts := range st.tasks {
+		for _, pn := range ts.Cfg.Pipelines {
+			sigs := st.pipelineStageSigs[pn]
+			for _, sig := range sigs {
+				entry := st.stageCache[sig]
+				if entry == nil {
+					continue
+				}
+				if _, ok := entry.Tasks[taskName]; ok {
+					continue
+				}
+				entry.Tasks[taskName] = struct{}{}
+				entry.TaskRefs++
+			}
+		}
+	}
 }
 
 func (st *Store) refreshDispatchSubs() {

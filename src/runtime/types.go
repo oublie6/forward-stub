@@ -71,3 +71,11 @@ type CompiledPipeline struct {
 	// 用法：在任务处理路径中串联执行各 stage。
 	P *pipeline.Pipeline
 }
+
+// StageCacheEntry 描述可复用 stage 的缓存条目。
+type StageCacheEntry struct {
+	Sig      string
+	Fn       pipeline.StageFunc
+	TaskRefs int
+	Tasks    map[string]struct{}
+}
