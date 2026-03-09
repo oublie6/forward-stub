@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"strings"
 	"sync"
 	"time"

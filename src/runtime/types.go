@@ -24,6 +24,10 @@ type ReceiverState struct {
 	// Running 表示实例是否已启动。
 	// 用法：防止重复启动，并在更新过程中决定停启顺序。
 	Running bool
+	// RestartAttempted 表示是否已执行过一次“未运行补启动”尝试。
+	RestartAttempted bool
+	// LastStartError 记录最近一次 receiver 启动失败原因。
+	LastStartError string
 }
 
 // SenderState 描述一个 sender 在运行时缓存中的状态。

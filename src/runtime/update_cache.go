@@ -60,6 +60,8 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		lg.Infow("updating runtime cache", "version", cfg.Version, "receivers", len(cfg.Receivers), "tasks", len(cfg.Tasks), "senders", len(cfg.Senders))
 	}
 
+	st.tryRestartStoppedReceiversOnce(ctx, cfg.Receivers, cfg.Logging.Level)
+
 	if st.canApplyBusinessDelta(cfg) {
 		if err := st.applyBusinessDelta(ctx, cfg); err != nil {
 			return err
@@ -106,6 +108,9 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 
 	// 一次性替换 store 内部索引，确保新配置以完整快照生效。
 	st.mu.Lock()
+	for name := range st.receivers {
+		logx.UnregisterReceiverRuntimeStats(name)
+	}
 	st.receivers = make(map[string]*ReceiverState)
 	st.senders = make(map[string]*SenderState)
 	st.tasks = make(map[string]*TaskState)
@@ -201,26 +206,22 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 		if err != nil {
 			return err
 		}
-		rs := &ReceiverState{Name: name, Cfg: rc, Recv: r, Running: true}
+		rs := &ReceiverState{Name: name, Cfg: rc, Recv: r}
 		st.mu.Lock()
 		st.receivers[name] = rs
 		if _, ok := st.subs[name]; !ok {
 			st.subs[name] = make(map[string]struct{})
 		}
 		st.mu.Unlock()
-
-		go func(r receiver.Receiver, rn string) {
-			if err := r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) }); err != nil {
-				logx.L().Errorw("receiver stopped with error", "receiver", rn, "error", err)
-			}
-		}(r, name)
+		st.registerReceiverRuntimeStats(name)
+		st.startReceiver(ctx, name, r)
 	}
 
 	return nil
 }
 
 func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) error {
-	st.mu.Lock()
+	st.mu.RLock()
 	oldTasks := make(map[string]config.TaskConfig, len(st.tasks))
 	for name, ts := range st.tasks {
 		oldTasks[name] = ts.Cfg
@@ -228,6 +229,9 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	oldSenders := senderConfigSnapshot(st.senders)
 	oldReceivers := receiverConfigSnapshot(st.receivers)
 	oldPipelines := st.pipelineCfg
+	st.mu.RUnlock()
+
+	st.mu.Lock()
 	st.version = cfg.Version
 	st.mu.Unlock()
 
@@ -331,12 +335,12 @@ func splitDeltaWithReplace[T any](oldMap, newMap map[string]T) (added []string, 
 }
 
 func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLevel string) error {
-	st.mu.Lock()
+	st.mu.RLock()
 	oldStates := make(map[string]*SenderState, len(st.senders))
 	for n, ss := range st.senders {
 		oldStates[n] = ss
 	}
-	st.mu.Unlock()
+	st.mu.RUnlock()
 
 	for name, sc := range next {
 		old, ok := oldStates[name]
@@ -374,12 +378,12 @@ func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLe
 }
 
 func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.ReceiverConfig, gnetLogLevel string) error {
-	st.mu.Lock()
+	st.mu.RLock()
 	oldStates := make(map[string]*ReceiverState, len(st.receivers))
 	for n, rs := range st.receivers {
 		oldStates[n] = rs
 	}
-	st.mu.Unlock()
+	st.mu.RUnlock()
 
 	for name, rc := range next {
 		old, ok := oldStates[name]
@@ -390,18 +394,15 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 		if err != nil {
 			return err
 		}
-		rs := &ReceiverState{Name: name, Cfg: rc, Recv: r, Running: true}
+		rs := &ReceiverState{Name: name, Cfg: rc, Recv: r}
 		st.mu.Lock()
 		st.receivers[name] = rs
 		if _, ok := st.subs[name]; !ok {
 			st.subs[name] = make(map[string]struct{})
 		}
 		st.mu.Unlock()
-		go func(r receiver.Receiver, rn string) {
-			if err := r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) }); err != nil {
-				logx.L().Errorw("receiver stopped with error", "receiver", rn, "error", err)
-			}
-		}(r, name)
+		st.registerReceiverRuntimeStats(name)
+		st.startReceiver(ctx, name, r)
 		if ok {
 			_ = old.Recv.Stop(ctx)
 		}
@@ -414,10 +415,106 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 		}
 		delete(st.receivers, name)
 		delete(st.subs, name)
+		logx.UnregisterReceiverRuntimeStats(name)
 		go rs.Recv.Stop(ctx)
 	}
 	st.mu.Unlock()
 	return nil
+}
+
+func (st *Store) tryRestartStoppedReceiversOnce(ctx context.Context, next map[string]config.ReceiverConfig, gnetLogLevel string) {
+	type restartCandidate struct {
+		name string
+		cfg  config.ReceiverConfig
+	}
+
+	candidates := make([]restartCandidate, 0)
+	st.mu.RLock()
+	for name, rs := range st.receivers {
+		if rs.Running || rs.RestartAttempted {
+			continue
+		}
+		rc, ok := next[name]
+		if !ok || !reflect.DeepEqual(rs.Cfg, rc) {
+			continue
+		}
+		candidates = append(candidates, restartCandidate{name: name, cfg: rc})
+	}
+	st.mu.RUnlock()
+
+	for _, c := range candidates {
+		st.mu.Lock()
+		rs := st.receivers[c.name]
+		if rs == nil || rs.Running || rs.RestartAttempted || !reflect.DeepEqual(rs.Cfg, c.cfg) {
+			st.mu.Unlock()
+			continue
+		}
+		rs.RestartAttempted = true
+		st.mu.Unlock()
+
+		r, err := buildReceiver(c.name, c.cfg, gnetLogLevel)
+		if err != nil {
+			st.mu.Lock()
+			if rs := st.receivers[c.name]; rs != nil {
+				rs.LastStartError = err.Error()
+			}
+			st.mu.Unlock()
+			logx.L().Errorw("receiver restart build failed", "receiver", c.name, "error", err)
+			continue
+		}
+
+		var old receiver.Receiver
+		st.mu.Lock()
+		if rs := st.receivers[c.name]; rs != nil {
+			old = rs.Recv
+			rs.Recv = r
+			rs.Cfg = c.cfg
+			rs.LastStartError = ""
+		}
+		st.mu.Unlock()
+
+		if old != nil {
+			_ = old.Stop(ctx)
+		}
+		st.registerReceiverRuntimeStats(c.name)
+		st.startReceiver(ctx, c.name, r)
+	}
+}
+
+func (st *Store) registerReceiverRuntimeStats(name string) {
+	logx.RegisterReceiverRuntimeStats(name, func() logx.ReceiverRuntimeStats {
+		st.mu.RLock()
+		defer st.mu.RUnlock()
+		rs := st.receivers[name]
+		if rs == nil {
+			return logx.ReceiverRuntimeStats{}
+		}
+		return logx.ReceiverRuntimeStats{Running: rs.Running, RestartAttempted: rs.RestartAttempted, LastStartError: rs.LastStartError}
+	})
+}
+
+func (st *Store) startReceiver(ctx context.Context, name string, r receiver.Receiver) {
+	st.mu.Lock()
+	if rs := st.receivers[name]; rs != nil {
+		rs.Running = true
+		rs.LastStartError = ""
+	}
+	st.mu.Unlock()
+
+	go func(r receiver.Receiver, rn string) {
+		err := r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) })
+		st.mu.Lock()
+		if rs := st.receivers[rn]; rs != nil && rs.Recv == r {
+			rs.Running = false
+			if err != nil {
+				rs.LastStartError = err.Error()
+			}
+		}
+		st.mu.Unlock()
+		if err != nil {
+			logx.L().Errorw("receiver stopped with error", "receiver", rn, "error", err)
+		}
+	}(r, name)
 }
 
 func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingConfig, counter *logx.TrafficCounter) error {
