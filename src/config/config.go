@@ -5,6 +5,7 @@ import "runtime"
 
 const (
 	DefaultControlTimeoutSec       = 5
+	DefaultConfigWatchInterval     = "2s"
 	DefaultLogLevel                = "info"
 	DefaultTrafficStatsInterval    = "1s"
 	DefaultTrafficStatsSampleEvery = 1
@@ -87,6 +88,9 @@ type ControlConfig struct {
 	// TimeoutSec 是控制面请求超时时间（秒）。
 	// 用法：网络较慢场景可适度调大，避免误判拉取失败。
 	TimeoutSec int `json:"timeout_sec,omitempty"`
+	// ConfigWatchInterval 是本地业务配置文件变更检测间隔，如 "2s"。
+	// 用法：值越小热更新越及时，但会增加文件读取开销。
+	ConfigWatchInterval string `json:"config_watch_interval,omitempty"`
 }
 
 // LoggingConfig 描述日志输出与流量统计参数。
@@ -343,6 +347,9 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.Control.TimeoutSec <= 0 {
 		c.Control.TimeoutSec = DefaultControlTimeoutSec
+	}
+	if c.Control.ConfigWatchInterval == "" {
+		c.Control.ConfigWatchInterval = DefaultConfigWatchInterval
 	}
 	if c.Logging.Level == "" {
 		c.Logging.Level = DefaultLogLevel
