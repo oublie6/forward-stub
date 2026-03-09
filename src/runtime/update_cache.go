@@ -654,8 +654,7 @@ func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (send
 		if sc.LocalPort <= 0 {
 			return nil, fmt.Errorf("sender %s udp_multicast requires local_port", name)
 		}
-		_ = conc
-		return sender.NewUDPMulticastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.Iface, sc.TTL, sc.Loop)
+		return sender.NewUDPMulticastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.Iface, sc.TTL, sc.Loop, conc)
 	case "tcp_gnet":
 		with := false
 		switch sc.Frame {

@@ -1,0 +1,15 @@
+[gnet] 2026-03-08T23:56:58.61496224Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: udp://127.0.0.1:19100
+[gnet] 2026-03-08T23:57:04.485642713Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: udp://127.0.0.1:19100
+[gnet] 2026-03-08T23:57:10.354366548Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: udp://127.0.0.1:19100
+[gnet] 2026-03-08T23:57:16.223069312Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: udp://127.0.0.1:19100
+[gnet] 2026-03-08T23:57:22.088273103Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: udp://127.0.0.1:19100
+[gnet] 2026-03-08T23:57:27.954190879Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+[gnet] 2026-03-08T23:57:27.954848904Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: tcp://127.0.0.1:19200
+[gnet] 2026-03-08T23:57:33.826980895Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+[gnet] 2026-03-08T23:57:33.827739091Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: tcp://127.0.0.1:19200
+[gnet] 2026-03-08T23:57:39.695668144Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+[gnet] 2026-03-08T23:57:39.696386026Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: tcp://127.0.0.1:19200
+[gnet] 2026-03-08T23:57:45.565346763Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+[gnet] 2026-03-08T23:57:45.566593192Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: tcp://127.0.0.1:19200
+[gnet] 2026-03-08T23:57:51.434500852Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+[gnet] 2026-03-08T23:57:51.435326756Z	INFO	logging/logger.go:256	Launching gnet with 3 event-loops, listening on: tcp://127.0.0.1:19200

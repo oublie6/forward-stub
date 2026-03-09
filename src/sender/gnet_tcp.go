@@ -25,9 +25,8 @@ type GnetTCPSender struct {
 	cliMu sync.Mutex
 	cli   *gnet.Client
 
-	connsMu sync.RWMutex
-	conns   []gnet.Conn
-	rr      uint64
+	conns atomic.Value // []gnet.Conn
+	rr    uint64
 
 	framePool sync.Pool
 }
@@ -48,6 +47,7 @@ func NewGnetTCPSender(name, remote string, withU16BELen bool, concurrency int, g
 			return &b
 		}},
 	}
+	s.conns.Store([]gnet.Conn(nil))
 	if err := s.ensureClientAndDial(); err != nil {
 		return nil, err
 	}
@@ -107,12 +107,12 @@ func (s *GnetTCPSender) Send(ctx context.Context, p *packet.Packet) error {
 
 // Close 负责该函数对应的核心逻辑，详见实现细节。
 func (s *GnetTCPSender) Close(ctx context.Context) error {
-	s.connsMu.Lock()
-	for _, c := range s.conns {
-		_ = c.Close()
+	if conns := s.loadConns(); len(conns) > 0 {
+		for _, c := range conns {
+			_ = c.Close()
+		}
 	}
-	s.conns = nil
-	s.connsMu.Unlock()
+	s.conns.Store([]gnet.Conn(nil))
 
 	s.cliMu.Lock()
 	if s.cli != nil {
@@ -121,6 +121,15 @@ func (s *GnetTCPSender) Close(ctx context.Context) error {
 	}
 	s.cliMu.Unlock()
 	return nil
+}
+
+func (s *GnetTCPSender) loadConns() []gnet.Conn {
+	v := s.conns.Load()
+	if v == nil {
+		return nil
+	}
+	conns, _ := v.([]gnet.Conn)
+	return conns
 }
 
 // ensureClientAndDial 负责该函数对应的核心逻辑，详见实现细节。
@@ -154,9 +163,7 @@ func (s *GnetTCPSender) ensureClientAndDial() error {
 		newConns = append(newConns, c)
 	}
 
-	s.connsMu.Lock()
-	s.conns = newConns
-	s.connsMu.Unlock()
+	s.conns.Store(newConns)
 
 	if len(newConns) == 0 {
 		return errors.New("tcp dial failed")
@@ -166,13 +173,15 @@ func (s *GnetTCPSender) ensureClientAndDial() error {
 
 // pickConn 负责该函数对应的核心逻辑，详见实现细节。
 func (s *GnetTCPSender) pickConn() gnet.Conn {
-	s.connsMu.RLock()
-	defer s.connsMu.RUnlock()
-	if len(s.conns) == 0 {
+	conns := s.loadConns()
+	if len(conns) == 0 {
 		return nil
 	}
-	i := int(atomic.AddUint64(&s.rr, 1)-1) % len(s.conns)
-	return s.conns[i]
+	if len(conns) == 1 {
+		return conns[0]
+	}
+	i := int(atomic.AddUint64(&s.rr, 1)-1) % len(conns)
+	return conns[i]
 }
 
 func (s *GnetTCPSender) releaseFrameBuf(bufPtr *[]byte) {
