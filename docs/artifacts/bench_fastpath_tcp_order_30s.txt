@@ -1,0 +1,36 @@
+2026-03-08T16:35:00.861Z	INFO	runtime/update_cache.go:60	updating runtime cache	{"version": 1, "receivers": 1, "tasks": 1, "senders": 1}
+[gnet] 2026-03-08T16:35:00.862828232Z	INFO	logging/logger.go:256	Starting gnet client with 3 event loops
+2026-03-08T16:35:00.868Z	INFO	runtime/update_cache.go:74	active tasks snapshot	{"tasks": [{"execution_model":"fastpath","pipelines":["p"],"queue_size":4096,"receivers":["in"],"senders":["out"],"task":"t"}]}
+[gnet] 2026-03-08T16:35:00.86956264Z	INFO	logging/logger.go:256	Launching gnet with 8 event-loops, listening on: tcp://127.0.0.1:19200
+2026-03-08T16:35:00.869Z	INFO	logx/traffic_agg.go:376	traffic stats summary
+{
+  "uptime": "0s",
+  "tasks": [
+    {
+      "task": "t",
+      "total_packets": 0,
+      "total_bytes": 0,
+      "worker_pool": {
+        "size": 2048,
+        "running": 0,
+        "free": 0,
+        "waiting": 0,
+        "queue_size": 4096,
+        "inflight": 0,
+        "fast_path": true
+      }
+    }
+  ],
+  "memory_pool": {
+    "inuse_buffers": 0,
+    "inuse_bytes": 0,
+    "cached_buffers": 0,
+    "cached_bytes": 0,
+    "total_buffers": 0,
+    "total_bytes": 0,
+    "gets": 0,
+    "puts": 0
+  }
+}
+2026-03-08T16:35:00.880Z	INFO	runtime/update_cache.go:80	runtime cache updated	{"version": 1, "cost": 0.018186651}
+2026-03-08T16:35:34.738Z	INFO	bench/main.go:686	forward benchmark result	{"proto": "tcp", "duration": "30s", "payload_size": 4096, "workers": 1, "sent_packets": 240009, "sent_bytes": 983076864, "recv_packets": 240021, "recv_bytes": 983126016, "loss_rate": 0, "order_errors": 240021, "strict_order_ok": false, "pps": 8000.689871926691, "mbps": 262.1666057232938}
