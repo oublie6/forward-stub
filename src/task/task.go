@@ -70,7 +70,7 @@ func (t *Task) Start() error {
 		t.PoolSize = 4096
 	}
 	if t.QueueSize <= 0 {
-		t.QueueSize = 4096
+		t.QueueSize = 8192
 	}
 	if t.ChannelQueueSize <= 0 {
 		t.ChannelQueueSize = t.QueueSize

@@ -332,12 +332,12 @@ make verify
 
 | 场景 | UDP 最大吞吐 (Mbps) | TCP 最大吞吐 (Mbps) |
 |---|---:|---:|
-| 1.1.1 channel + multicore=off | 32.78 | 16.39 |
-| 1.1.2 pool_size=1 + multicore=off | 8.20 | 32.77 |
-| 1.1.3 fastpath=true + multicore=off | 32.78 | 16.39 |
-| 1.2.1 channel + multicore=on | 4.10 | 32.77 |
-| 1.2.2 pool_size=1 + multicore=on | 16.39 | 16.39 |
-| 1.2.3 fastpath=true + multicore=on | 16.39 | 16.38 |
+| 1.1.1 channel + multicore=off | 32.78 | 32.77 |
+| 1.1.2 pool_size=1 + multicore=off | 32.78 | 32.76 |
+| 1.1.3 fastpath=true + multicore=off | 32.78 | 32.78 |
+| 1.2.1 channel + multicore=on | 32.78 | 32.77 |
+| 1.2.2 pool_size=1 + multicore=on | 16.38 | 32.79 |
+| 1.2.3 fastpath=true + multicore=on | 32.77 | 32.79 |
 
 ### 9.2 严格 0 丢包 + 不保序最大吞吐
 
@@ -345,12 +345,18 @@ make verify
 
 | 转发类型 | 测试口径 | 最大吞吐 |
 |---|---|---:|
-| UDP→UDP | `cmd/bench` 端到端（duration=8s） | **883.79 Mbps** |
-| TCP→TCP | `cmd/bench` 端到端（duration=8s） | **3196.49 Mbps** |
-| Kafka→Kafka（模拟） | `BenchmarkDispatchMatrix`（benchtime=12s） | **1471.27 MB/s** |
-| SFTP→SFTP（模拟） | `BenchmarkDispatchMatrix`（benchtime=12s） | **1511.47 MB/s** |
+| UDP→UDP | `cmd/bench` 端到端（duration=8s） | **893.72 Mbps** |
+| TCP→TCP | `cmd/bench` 端到端（duration=8s） | **3199.31 Mbps** |
+| Kafka→Kafka（模拟） | `BenchmarkDispatchMatrix`（benchtime=12s） | **1507.29 MB/s** |
+| SFTP→SFTP（模拟） | `BenchmarkDispatchMatrix`（benchtime=12s） | **1505.85 MB/s** |
 
 > Kafka/SFTP 为同进程模拟转发基准，不包含真实外部 broker / SFTP 服务网络与磁盘抖动影响。
+
+### 9.3 当前默认配置（已按最高吞吐配置收敛）
+
+- receiver 默认：`multicore=true`，`num_event_loop=max(8, runtime.NumCPU())`
+- sender 默认：`concurrency=8`
+- task 默认：`execution_model=pool`（原有语义），`pool_size=4096`，`queue_size=8192`
 
 ---
 

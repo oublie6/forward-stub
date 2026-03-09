@@ -1,142 +1,240 @@
-[
-  [
-    "1.1.1 channel, multicore=off",
-    "udp",
+{
+  "strict": [
     {
-      "proto": "udp",
-      "duration": "4.001s",
-      "payload_size": 1024,
-      "workers": 1,
-      "sent_packets": 15997,
-      "sent_bytes": 16380928,
-      "recv_packets": 16006,
-      "recv_bytes": 16390144,
-      "loss_rate": 0,
-      "order_errors": 0,
-      "strict_order_ok": true,
-      "pps": 4000.9918790326024,
-      "mbps": 32.77612547303508
+      "scenario": "1.1.1 channel + multicore=off",
+      "udp": {
+        "proto": "udp",
+        "duration": "4s",
+        "payload_size": 1024,
+        "workers": 1,
+        "sent_packets": 16004,
+        "sent_bytes": 16388096,
+        "recv_packets": 16004,
+        "recv_bytes": 16388096,
+        "loss_rate": 0,
+        "order_errors": 0,
+        "strict_order_ok": true,
+        "pps": 4000.9419543341264,
+        "mbps": 32.775716489905165
+      },
+      "tcp": {
+        "proto": "tcp",
+        "duration": "4s",
+        "payload_size": 1024,
+        "workers": 1,
+        "sent_packets": 16000,
+        "sent_bytes": 16384000,
+        "recv_packets": 16000,
+        "recv_bytes": 16384000,
+        "loss_rate": 0,
+        "order_errors": 0,
+        "strict_order_ok": true,
+        "pps": 3999.9330311212266,
+        "mbps": 32.76745139094509
+      }
+    },
+    {
+      "scenario": "1.1.2 pool_size=1 + multicore=off",
+      "udp": {
+        "proto": "udp",
+        "duration": "4.001s",
+        "payload_size": 1024,
+        "workers": 1,
+        "sent_packets": 16009,
+        "sent_bytes": 16393216,
+        "recv_packets": 16009,
+        "recv_bytes": 16393216,
+        "loss_rate": 0,
+        "order_errors": 0,
+        "strict_order_ok": true,
+        "pps": 4001.377652655534,
+        "mbps": 32.779285730554136
+      },
+      "tcp": {
+        "proto": "tcp",
+        "duration": "4s",
+        "payload_size": 1024,
+        "workers": 1,
+        "sent_packets": 15997,
+        "sent_bytes": 16380928,
+        "recv_packets": 15997,
+        "recv_bytes": 16380928,
+        "loss_rate": 0,
+        "order_errors": 0,
+        "strict_order_ok": true,
+        "pps": 3998.897628137977,
+        "mbps": 32.75896936970631
+      }
+    },
+    {
+      "scenario": "1.1.3 fastpath=true + multicore=off",
+      "udp": {
+        "proto": "udp",
+        "duration": "4s",
+        "payload_size": 1024,
+        "workers": 1,
+        "sent_packets": 16004,
+        "sent_bytes": 16388096,
+        "recv_packets": 16004,
+        "recv_bytes": 16388096,
+        "loss_rate": 0,
+        "order_errors": 0,
+        "strict_order_ok": true,
+        "pps": 4000.919468492708,
+        "mbps": 32.77553228589226
+      },
+      "tcp": {
+        "proto": "tcp",
+        "duration": "4s",
+        "payload_size": 1024,
+        "workers": 1,
+        "sent_packets": 15997,
+        "sent_bytes": 16380928,
+        "recv_packets": 16008,
+        "recv_bytes": 16392192,
+        "loss_rate": 0,
+        "order_errors": 0,
+        "strict_order_ok": true,
+        "pps": 4001.655767566735,
+        "mbps": 32.78156404790669
+      }
+    },
+    {
+      "scenario": "1.2.1 channel + multicore=on",
+      "udp": {
+        "proto": "udp",
+        "duration": "4s",
+        "payload_size": 1024,
+        "workers": 1,
+        "sent_packets": 15998,
+        "sent_bytes": 16381952,
+        "recv_packets": 16007,
+        "recv_bytes": 16391168,
+        "loss_rate": 0,
+        "order_errors": 0,
+        "strict_order_ok": true,
+        "pps": 4001.3281119678586,
+        "mbps": 32.7788798932407
+      },
+      "tcp": {
+        "proto": "tcp",
+        "duration": "4.001s",
+        "payload_size": 1024,
+        "workers": 1,
+        "sent_packets": 16003,
+        "sent_bytes": 16387072,
+        "recv_packets": 16003,
+        "recv_bytes": 16387072,
+        "loss_rate": 0,
+        "order_errors": 0,
+        "strict_order_ok": true,
+        "pps": 3999.9165053984384,
+        "mbps": 32.76731601222401
+      }
+    },
+    {
+      "scenario": "1.2.2 pool_size=1 + multicore=on",
+      "udp": {
+        "proto": "udp",
+        "duration": "4.001s",
+        "payload_size": 1024,
+        "workers": 1,
+        "sent_packets": 8000,
+        "sent_bytes": 8192000,
+        "recv_packets": 8000,
+        "recv_bytes": 8192000,
+        "loss_rate": 0,
+        "order_errors": 0,
+        "strict_order_ok": true,
+        "pps": 1999.593276228937,
+        "mbps": 16.38066811886745
+      },
+      "tcp": {
+        "proto": "tcp",
+        "duration": "4.001s",
+        "payload_size": 1024,
+        "workers": 1,
+        "sent_packets": 16012,
+        "sent_bytes": 16396288,
+        "recv_packets": 16012,
+        "recv_bytes": 16396288,
+        "loss_rate": 0,
+        "order_errors": 0,
+        "strict_order_ok": true,
+        "pps": 4002.4752704889447,
+        "mbps": 32.788277415845435
+      }
+    },
+    {
+      "scenario": "1.2.3 fastpath=true + multicore=on",
+      "udp": {
+        "proto": "udp",
+        "duration": "4s",
+        "payload_size": 1024,
+        "workers": 1,
+        "sent_packets": 16001,
+        "sent_bytes": 16385024,
+        "recv_packets": 16003,
+        "recv_bytes": 16387072,
+        "loss_rate": 0,
+        "order_errors": 0,
+        "strict_order_ok": true,
+        "pps": 4000.4291645808935,
+        "mbps": 32.77151571624668
+      },
+      "tcp": {
+        "proto": "tcp",
+        "duration": "4s",
+        "payload_size": 1024,
+        "workers": 1,
+        "sent_packets": 16001,
+        "sent_bytes": 16385024,
+        "recv_packets": 16010,
+        "recv_bytes": 16394240,
+        "loss_rate": 0,
+        "order_errors": 0,
+        "strict_order_ok": true,
+        "pps": 4002.392641820972,
+        "mbps": 32.7876005217974
+      }
     }
   ],
-  [
-    "1.1.1 channel, multicore=off",
-    "tcp",
-    {
-      "proto": "tcp",
-      "duration": "4.001s",
-      "payload_size": 1024,
-      "workers": 1,
-      "sent_packets": 7999,
-      "sent_bytes": 8190976,
-      "recv_packets": 8003,
-      "recv_bytes": 8195072,
-      "loss_rate": 0,
-      "order_errors": 0,
-      "strict_order_ok": true,
-      "pps": 2000.487135490275,
-      "mbps": 16.38799061393633
-    }
-  ],
-  [
-    "1.1.2 pool_size=1, multicore=off",
-    "udp",
-    null
-  ],
-  [
-    "1.1.2 pool_size=1, multicore=off",
-    "tcp",
-    null
-  ],
-  [
-    "1.1.3 fastpath=true, multicore=off",
-    "udp",
-    null
-  ],
-  [
-    "1.1.3 fastpath=true, multicore=off",
-    "tcp",
-    null
-  ],
-  [
-    "1.2.1 channel, multicore=on",
-    "udp",
-    null
-  ],
-  [
-    "1.2.1 channel, multicore=on",
-    "tcp",
-    null
-  ],
-  [
-    "1.2.2 pool_size=1, multicore=on",
-    "udp",
-    null
-  ],
-  [
-    "1.2.2 pool_size=1, multicore=on",
-    "tcp",
-    null
-  ],
-  [
-    "1.2.3 fastpath=true, multicore=on",
-    "udp",
-    null
-  ],
-  [
-    "1.2.3 fastpath=true, multicore=on",
-    "tcp",
-    null
-  ],
-  [
-    "2 unordered",
-    "udp",
-    {
-      "proto": "udp",
-      "duration": "8.001s",
-      "payload_size": 4096,
-      "workers": 4,
-      "sent_packets": 448018,
-      "sent_bytes": 1835081728,
-      "recv_packets": 215793,
-      "recv_bytes": 883888128,
-      "loss_rate": 0.5183385488975889,
-      "order_errors": 0,
-      "strict_order_ok": true,
-      "pps": 26970.993165358752,
-      "mbps": 883.7855040424756
-    }
-  ],
-  [
-    "2 unordered",
-    "tcp",
-    {
-      "proto": "tcp",
-      "duration": "8s",
-      "payload_size": 4096,
-      "workers": 4,
-      "sent_packets": 771379,
-      "sent_bytes": 3159568384,
-      "recv_packets": 780438,
-      "recv_bytes": 3196674048,
-      "loss_rate": 0,
-      "order_errors": 0,
-      "strict_order_ok": true,
-      "pps": 97549.0112038645,
-      "mbps": 3196.485999128232
-    }
-  ],
-  [
-    "2 unordered",
-    "kafka_sim",
-    {
-      "mbps": 1471.27
-    }
-  ],
-  [
-    "2 unordered",
-    "sftp_sim",
-    {
-      "mbps": 1511.47
-    }
-  ]
-]
+  "unordered_udp": {
+    "proto": "udp",
+    "duration": "8s",
+    "payload_size": 4096,
+    "workers": 4,
+    "sent_packets": 384070,
+    "sent_bytes": 1573150720,
+    "recv_packets": 218194,
+    "recv_bytes": 893722624,
+    "loss_rate": 0.4318900200484287,
+    "order_errors": 0,
+    "strict_order_ok": true,
+    "pps": 27274.21641180249,
+    "mbps": 893.7215233819439
+  },
+  "unordered_tcp": {
+    "proto": "tcp",
+    "duration": "8s",
+    "payload_size": 4096,
+    "workers": 4,
+    "sent_packets": 773472,
+    "sent_bytes": 3168141312,
+    "recv_packets": 781125,
+    "recv_bytes": 3199488000,
+    "loss_rate": 0,
+    "order_errors": 0,
+    "strict_order_ok": true,
+    "pps": 97635.12706835965,
+    "mbps": 3199.307843776009
+  },
+  "unordered_kafka_sim": {
+    "mbps": 1507.29,
+    "line": "BenchmarkDispatchMatrix/kafka_to_kafka_4096B-2   \t 5627640\t      2717 ns/op\t1507.29 MB/s\t    4408 B/op\t       6 allocs/op"
+  },
+  "unordered_sftp_sim": {
+    "mbps": 1505.85,
+    "line": "BenchmarkDispatchMatrix/sftp_to_sftp_4096B-2     \t 4973071\t      2720 ns/op\t1505.85 MB/s\t    4408 B/op\t       6 allocs/op"
+  }
+}

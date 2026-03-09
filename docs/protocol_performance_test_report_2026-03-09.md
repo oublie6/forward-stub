@@ -55,12 +55,12 @@
 
 | 场景 | UDP 最大吞吐 (Mbps) | TCP 最大吞吐 (Mbps) |
 |---|---:|---:|
-| 1.1.1 channel + multicore=off | 32.78 | 16.39 |
-| 1.1.2 pool_size=1 + multicore=off | 8.20 | 32.77 |
-| 1.1.3 fastpath=true + multicore=off | 32.78 | 16.39 |
-| 1.2.1 channel + multicore=on | 4.10 | 32.77 |
-| 1.2.2 pool_size=1 + multicore=on | 16.39 | 16.39 |
-| 1.2.3 fastpath=true + multicore=on | 16.39 | 16.38 |
+| 1.1.1 channel + multicore=off | 32.78 | 32.77 |
+| 1.1.2 pool_size=1 + multicore=off | 32.78 | 32.76 |
+| 1.1.3 fastpath=true + multicore=off | 32.78 | 32.78 |
+| 1.2.1 channel + multicore=on | 32.78 | 32.77 |
+| 1.2.2 pool_size=1 + multicore=on | 16.38 | 32.79 |
+| 1.2.3 fastpath=true + multicore=on | 32.77 | 32.79 |
 
 ---
 
@@ -75,7 +75,7 @@
 - `docs/new_artifacts/unordered_udp_max.txt`
 
 最大吞吐：
-- **883.79 Mbps**
+- **893.72 Mbps**
 
 ### 2.2 TCP 收 TCP 发最大吞吐
 
@@ -86,7 +86,7 @@
 - `docs/new_artifacts/unordered_tcp_max.txt`
 
 最大吞吐：
-- **3196.49 Mbps**
+- **3199.31 Mbps**
 
 ### 2.3 Kafka 收 Kafka 发最大吞吐（模拟）
 
@@ -97,7 +97,7 @@
 - `docs/new_artifacts/unordered_kafka_sftp_sim.txt`
 
 最大吞吐：
-- **1471.27 MB/s**
+- **1507.29 MB/s**
 
 ### 2.4 SFTP 收 SFTP 发最大吞吐（模拟）
 
@@ -108,10 +108,20 @@
 - `docs/new_artifacts/unordered_kafka_sftp_sim.txt`
 
 最大吞吐：
-- **1511.47 MB/s**
+- **1505.85 MB/s**
 
 ## 4. 结论
 
 1. 严格 0 丢包+严格保序场景下，UDP/TCP 均可达成，但最大吞吐显著低于“不保序”口径。 
 2. 不保序吞吐上限下，TCP 端到端能力明显高于 UDP（本机环境约 3.20 Gbps vs 0.88 Gbps）。
 3. Kafka/SFTP 当前使用仓库内模拟链路基准，反映框架处理上限，不代表真实外部系统端到端吞吐。
+
+
+## 5. 默认值收敛（按最高吞吐配置）
+
+已将本轮吞吐最佳配置收敛为默认值：
+
+- receiver 默认：`multicore=true`
+- receiver 默认 `num_event_loop`：`max(8, runtime.NumCPU())`
+- sender 默认：`concurrency=8`
+- task 默认：`pool_size=4096`、`queue_size=8192`（`execution_model` 为空时仍为 pool 语义）

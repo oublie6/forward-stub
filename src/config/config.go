@@ -1,6 +1,8 @@
 // config.go 定义系统配置结构体以及各模块配置字段。
 package config
 
+import "runtime"
+
 const (
 	DefaultControlTimeoutSec       = 5
 	DefaultLogLevel                = "info"
@@ -11,7 +13,11 @@ const (
 	DefaultLogRotateMaxAgeDays     = 30
 	DefaultLogRotateCompress       = true
 	DefaultPayloadLogMaxBytes      = 256
-	DefaultTaskQueueSize           = 4096
+	DefaultReceiverMulticore       = true
+	DefaultReceiverNumEventLoop    = 8
+	DefaultSenderConcurrency       = 8
+	DefaultTaskPoolSize            = 4096
+	DefaultTaskQueueSize           = 8192
 )
 
 // Config 是系统运行时的全量配置快照。
@@ -364,6 +370,9 @@ func (c *Config) ApplyDefaults() {
 		c.Logging.PayloadLogMaxBytes = DefaultPayloadLogMaxBytes
 	}
 	for name, tc := range c.Tasks {
+		if tc.PoolSize <= 0 {
+			tc.PoolSize = DefaultTaskPoolSize
+		}
 		if tc.QueueSize <= 0 {
 			tc.QueueSize = DefaultTaskQueueSize
 		}
@@ -372,4 +381,26 @@ func (c *Config) ApplyDefaults() {
 		}
 		c.Tasks[name] = tc
 	}
+	for name, rc := range c.Receivers {
+		if !rc.Multicore {
+			rc.Multicore = DefaultReceiverMulticore
+		}
+		if rc.NumEventLoop <= 0 {
+			rc.NumEventLoop = max(DefaultReceiverNumEventLoop, runtime.NumCPU())
+		}
+		c.Receivers[name] = rc
+	}
+	for name, sc := range c.Senders {
+		if sc.Concurrency <= 0 {
+			sc.Concurrency = DefaultSenderConcurrency
+		}
+		c.Senders[name] = sc
+	}
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
