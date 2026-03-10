@@ -1,0 +1,143 @@
+package config
+
+import "runtime"
+
+// Merge 将系统配置与业务配置拼装为运行时使用的完整 Config。
+func (s SystemConfig) Merge(b BusinessConfig) Config {
+	cfg := Config{
+		Version:   b.Version,
+		Control:   s.Control,
+		Logging:   s.Logging,
+		Receivers: b.Receivers,
+		Senders:   b.Senders,
+		Pipelines: b.Pipelines,
+		Tasks:     b.Tasks,
+	}
+	cfg.ApplyBusinessDefaults(s.BusinessDefaults)
+	return cfg
+}
+
+// ApplyBusinessDefaults 将 system.config 的 business 默认值应用到完整配置。
+func (c *Config) ApplyBusinessDefaults(d BusinessDefaultsConfig) {
+	if c == nil {
+		return
+	}
+	for name, tc := range c.Tasks {
+		if tc.PoolSize <= 0 && d.Task.PoolSize > 0 {
+			tc.PoolSize = d.Task.PoolSize
+		}
+		if tc.QueueSize <= 0 && d.Task.QueueSize > 0 {
+			tc.QueueSize = d.Task.QueueSize
+		}
+		if tc.ChannelQueueSize <= 0 && d.Task.ChannelQueueSize > 0 {
+			tc.ChannelQueueSize = d.Task.ChannelQueueSize
+		}
+		if tc.ExecutionModel == "" && d.Task.ExecutionModel != "" {
+			tc.ExecutionModel = d.Task.ExecutionModel
+		}
+		if tc.PayloadLogMaxBytes <= 0 && d.Task.PayloadLogMaxBytes > 0 {
+			tc.PayloadLogMaxBytes = d.Task.PayloadLogMaxBytes
+		}
+		c.Tasks[name] = tc
+	}
+	for name, rc := range c.Receivers {
+		if d.Receiver.Multicore != nil {
+			rc.Multicore = *d.Receiver.Multicore
+		}
+		if rc.NumEventLoop <= 0 && d.Receiver.NumEventLoop > 0 {
+			rc.NumEventLoop = d.Receiver.NumEventLoop
+		}
+		if rc.PayloadLogMaxBytes <= 0 && d.Receiver.PayloadLogMaxBytes > 0 {
+			rc.PayloadLogMaxBytes = d.Receiver.PayloadLogMaxBytes
+		}
+		c.Receivers[name] = rc
+	}
+	for name, sc := range c.Senders {
+		if sc.Concurrency <= 0 && d.Sender.Concurrency > 0 {
+			sc.Concurrency = d.Sender.Concurrency
+		}
+		c.Senders[name] = sc
+	}
+}
+
+// ApplyDefaults 为 receiver/task/sender 之外的配置字段填充默认值。
+// 用法：在 Validate 之前调用，避免因省略常见参数导致行为不一致。
+func (c *Config) ApplyDefaults() {
+	if c == nil {
+		return
+	}
+	if c.Control.TimeoutSec <= 0 {
+		c.Control.TimeoutSec = DefaultControlTimeoutSec
+	}
+	if c.Control.ConfigWatchInterval == "" {
+		c.Control.ConfigWatchInterval = DefaultConfigWatchInterval
+	}
+	if c.Logging.Level == "" {
+		c.Logging.Level = DefaultLogLevel
+	}
+	if c.Logging.MaxSizeMB <= 0 {
+		c.Logging.MaxSizeMB = DefaultLogRotateMaxSizeMB
+	}
+	if c.Logging.MaxBackups <= 0 {
+		c.Logging.MaxBackups = DefaultLogRotateMaxBackups
+	}
+	if c.Logging.MaxAgeDays <= 0 {
+		c.Logging.MaxAgeDays = DefaultLogRotateMaxAgeDays
+	}
+	if c.Logging.Compress == nil {
+		v := DefaultLogRotateCompress
+		c.Logging.Compress = &v
+	}
+	if c.Logging.TrafficStatsInterval == "" {
+		c.Logging.TrafficStatsInterval = DefaultTrafficStatsInterval
+	}
+	if c.Logging.TrafficStatsSampleEvery <= 0 {
+		c.Logging.TrafficStatsSampleEvery = DefaultTrafficStatsSampleEvery
+	}
+	if c.Logging.PayloadLogMaxBytes <= 0 {
+		c.Logging.PayloadLogMaxBytes = DefaultPayloadLogMaxBytes
+	}
+	if c.Logging.PayloadPoolMaxCachedBytes < 0 {
+		c.Logging.PayloadPoolMaxCachedBytes = DefaultPayloadPoolMaxCachedBytes
+	}
+	for name, tc := range c.Tasks {
+		if tc.PoolSize <= 0 {
+			tc.PoolSize = DefaultTaskPoolSize
+		}
+		if tc.QueueSize <= 0 {
+			tc.QueueSize = DefaultTaskQueueSize
+		}
+		if tc.ChannelQueueSize <= 0 {
+			tc.ChannelQueueSize = tc.QueueSize
+		}
+		if tc.PayloadLogMaxBytes <= 0 {
+			tc.PayloadLogMaxBytes = c.Logging.PayloadLogMaxBytes
+		}
+		c.Tasks[name] = tc
+	}
+	for name, rc := range c.Receivers {
+		if !rc.Multicore {
+			rc.Multicore = DefaultReceiverMulticore
+		}
+		if rc.NumEventLoop <= 0 {
+			rc.NumEventLoop = max(DefaultReceiverNumEventLoop, runtime.NumCPU())
+		}
+		if rc.PayloadLogMaxBytes <= 0 {
+			rc.PayloadLogMaxBytes = c.Logging.PayloadLogMaxBytes
+		}
+		c.Receivers[name] = rc
+	}
+	for name, sc := range c.Senders {
+		if sc.Concurrency <= 0 {
+			sc.Concurrency = DefaultSenderConcurrency
+		}
+		c.Senders[name] = sc
+	}
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

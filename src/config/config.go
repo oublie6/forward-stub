@@ -1,8 +1,6 @@
 // config.go 定义系统配置结构体以及各模块配置字段。
 package config
 
-import "runtime"
-
 const (
 	DefaultControlTimeoutSec         = 5
 	DefaultConfigWatchInterval       = "2s"
@@ -55,8 +53,37 @@ type Config struct {
 
 // SystemConfig 仅包含需要重启后生效的系统级配置。
 type SystemConfig struct {
-	Control ControlConfig `json:"control,omitempty"`
-	Logging LoggingConfig `json:"logging"`
+	Control          ControlConfig          `json:"control,omitempty"`
+	Logging          LoggingConfig          `json:"logging"`
+	BusinessDefaults BusinessDefaultsConfig `json:"business_defaults,omitempty"`
+}
+
+// BusinessDefaultsConfig 定义 business.config 中可选字段的系统级默认值。
+type BusinessDefaultsConfig struct {
+	Task     TaskDefaultConfig     `json:"task,omitempty"`
+	Receiver ReceiverDefaultConfig `json:"receiver,omitempty"`
+	Sender   SenderDefaultConfig   `json:"sender,omitempty"`
+}
+
+// TaskDefaultConfig 定义 task 的系统级默认值。
+type TaskDefaultConfig struct {
+	PoolSize           int    `json:"pool_size,omitempty"`
+	QueueSize          int    `json:"queue_size,omitempty"`
+	ChannelQueueSize   int    `json:"channel_queue_size,omitempty"`
+	ExecutionModel     string `json:"execution_model,omitempty"`
+	PayloadLogMaxBytes int    `json:"payload_log_max_bytes,omitempty"`
+}
+
+// ReceiverDefaultConfig 定义 receiver 的系统级默认值。
+type ReceiverDefaultConfig struct {
+	Multicore          *bool `json:"multicore,omitempty"`
+	NumEventLoop       int   `json:"num_event_loop,omitempty"`
+	PayloadLogMaxBytes int   `json:"payload_log_max_bytes,omitempty"`
+}
+
+// SenderDefaultConfig 定义 sender 的系统级默认值。
+type SenderDefaultConfig struct {
+	Concurrency int `json:"concurrency,omitempty"`
 }
 
 // BusinessConfig 仅包含支持热重载的业务拓扑配置。
@@ -66,19 +93,6 @@ type BusinessConfig struct {
 	Senders   map[string]SenderConfig   `json:"senders"`
 	Pipelines map[string][]StageConfig  `json:"pipelines"`
 	Tasks     map[string]TaskConfig     `json:"tasks"`
-}
-
-// Merge 将系统配置与业务配置拼装为运行时使用的完整 Config。
-func (s SystemConfig) Merge(b BusinessConfig) Config {
-	return Config{
-		Version:   b.Version,
-		Control:   s.Control,
-		Logging:   s.Logging,
-		Receivers: b.Receivers,
-		Senders:   b.Senders,
-		Pipelines: b.Pipelines,
-		Tasks:     b.Tasks,
-	}
 }
 
 // ControlConfig 描述远端配置中心参数。
@@ -335,86 +349,4 @@ type TaskConfig struct {
 	// PayloadLogMaxBytes 控制该任务 payload 摘要最大字节数。
 	// 用法：<=0 时回退到 logging.payload_log_max_bytes。
 	PayloadLogMaxBytes int `json:"payload_log_max_bytes,omitempty"`
-}
-
-// ApplyDefaults 为 receiver/task/sender 之外的配置字段填充默认值。
-// 用法：在 Validate 之前调用，避免因省略常见参数导致行为不一致。
-func (c *Config) ApplyDefaults() {
-	if c == nil {
-		return
-	}
-	if c.Control.TimeoutSec <= 0 {
-		c.Control.TimeoutSec = DefaultControlTimeoutSec
-	}
-	if c.Control.ConfigWatchInterval == "" {
-		c.Control.ConfigWatchInterval = DefaultConfigWatchInterval
-	}
-	if c.Logging.Level == "" {
-		c.Logging.Level = DefaultLogLevel
-	}
-	if c.Logging.MaxSizeMB <= 0 {
-		c.Logging.MaxSizeMB = DefaultLogRotateMaxSizeMB
-	}
-	if c.Logging.MaxBackups <= 0 {
-		c.Logging.MaxBackups = DefaultLogRotateMaxBackups
-	}
-	if c.Logging.MaxAgeDays <= 0 {
-		c.Logging.MaxAgeDays = DefaultLogRotateMaxAgeDays
-	}
-	if c.Logging.Compress == nil {
-		v := DefaultLogRotateCompress
-		c.Logging.Compress = &v
-	}
-	if c.Logging.TrafficStatsInterval == "" {
-		c.Logging.TrafficStatsInterval = DefaultTrafficStatsInterval
-	}
-	if c.Logging.TrafficStatsSampleEvery <= 0 {
-		c.Logging.TrafficStatsSampleEvery = DefaultTrafficStatsSampleEvery
-	}
-	if c.Logging.PayloadLogMaxBytes <= 0 {
-		c.Logging.PayloadLogMaxBytes = DefaultPayloadLogMaxBytes
-	}
-	if c.Logging.PayloadPoolMaxCachedBytes < 0 {
-		c.Logging.PayloadPoolMaxCachedBytes = DefaultPayloadPoolMaxCachedBytes
-	}
-	for name, tc := range c.Tasks {
-		if tc.PoolSize <= 0 {
-			tc.PoolSize = DefaultTaskPoolSize
-		}
-		if tc.QueueSize <= 0 {
-			tc.QueueSize = DefaultTaskQueueSize
-		}
-		if tc.ChannelQueueSize <= 0 {
-			tc.ChannelQueueSize = tc.QueueSize
-		}
-		if tc.PayloadLogMaxBytes <= 0 {
-			tc.PayloadLogMaxBytes = c.Logging.PayloadLogMaxBytes
-		}
-		c.Tasks[name] = tc
-	}
-	for name, rc := range c.Receivers {
-		if !rc.Multicore {
-			rc.Multicore = DefaultReceiverMulticore
-		}
-		if rc.NumEventLoop <= 0 {
-			rc.NumEventLoop = max(DefaultReceiverNumEventLoop, runtime.NumCPU())
-		}
-		if rc.PayloadLogMaxBytes <= 0 {
-			rc.PayloadLogMaxBytes = c.Logging.PayloadLogMaxBytes
-		}
-		c.Receivers[name] = rc
-	}
-	for name, sc := range c.Senders {
-		if sc.Concurrency <= 0 {
-			sc.Concurrency = DefaultSenderConcurrency
-		}
-		c.Senders[name] = sc
-	}
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"forward-stub/src/config"
+	"testing"
+)
 
 func TestResolveConfigPaths(t *testing.T) {
 	tests := []struct {
@@ -18,7 +21,7 @@ func TestResolveConfigPaths(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sys, biz, err := resolveConfigPaths(tt.legacy, tt.system, tt.business)
+			sys, biz, err := config.ResolveConfigPaths(tt.legacy, tt.system, tt.business)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error")
