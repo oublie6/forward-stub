@@ -3,10 +3,10 @@ package runtime
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"reflect"
 	"sort"
-	"strings"
 	"time"
 
 	"forward-stub/src/config"
@@ -27,34 +27,28 @@ import (
 //  2. 避免差量更新时复杂的拓扑依赖与回滚成本；
 //  3. 后续若需更高实时性，可在此基础上演进为增量热更新。
 type taskPayloadLogOptions struct {
-	recv bool
 	send bool
 	max  int
 }
 
-func buildTaskPayloadLogOptions(name string, tc config.TaskConfig, lc config.LoggingConfig) taskPayloadLogOptions {
-	if len(lc.PayloadLogTasks) == 0 {
-		return taskPayloadLogOptions{max: lc.PayloadLogMaxBytes}
-	}
-	enabled := false
-	for _, n := range lc.PayloadLogTasks {
-		if strings.TrimSpace(n) == name {
-			enabled = true
-			break
-		}
-	}
-	if !enabled {
-		return taskPayloadLogOptions{max: lc.PayloadLogMaxBytes}
-	}
+func buildTaskPayloadLogOptions(tc config.TaskConfig, lc config.LoggingConfig) taskPayloadLogOptions {
+	maxBytes := payloadLogMaxBytes(tc.PayloadLogMaxBytes, lc.PayloadLogMaxBytes)
 	return taskPayloadLogOptions{
-		recv: lc.PayloadLogRecv && tc.LogPayloadRecv,
-		send: lc.PayloadLogSend && tc.LogPayloadSend,
-		max:  lc.PayloadLogMaxBytes,
+		send: tc.LogPayloadSend,
+		max:  maxBytes,
 	}
+}
+
+func payloadLogMaxBytes(localMax int, loggingMax int) int {
+	if localMax > 0 {
+		return localMax
+	}
+	return loggingMax
 }
 
 func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	packet.SetPayloadPoolMaxCachedBytes(cfg.Logging.PayloadPoolMaxCachedBytes)
+	st.setPayloadLogDefaultMax(cfg.Logging.PayloadLogMaxBytes)
 	lg := logx.L()
 	start := time.Now()
 	if logx.Enabled(zapcore.InfoLevel) {
@@ -83,6 +77,18 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		lg.Infow("runtime cache updated", "version", cfg.Version, "cost", time.Since(start))
 	}
 	return nil
+}
+
+func (st *Store) setPayloadLogDefaultMax(max int) {
+	st.mu.Lock()
+	st.payloadLogDefaultMax = max
+	st.mu.Unlock()
+}
+
+func (st *Store) loggingPayloadLogMaxBytes() int {
+	st.mu.RLock()
+	defer st.mu.RUnlock()
+	return st.payloadLogDefaultMax
 }
 
 func (st *Store) canApplyBusinessDelta(cfg config.Config) bool {
@@ -159,7 +165,7 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 		}
 		st.mu.Unlock()
 
-		logOpts := buildTaskPayloadLogOptions(name, tc, cfg.Logging)
+		logOpts := buildTaskPayloadLogOptions(tc, cfg.Logging)
 		tk := &task.Task{
 			Name:             name,
 			Pipelines:        pipes,
@@ -169,7 +175,6 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 			ExecutionModel:   tc.ExecutionModel,
 			QueueSize:        tc.QueueSize,
 			ChannelQueueSize: tc.ChannelQueueSize,
-			LogPayloadRecv:   logOpts.recv,
 			LogPayloadSend:   logOpts.send,
 			PayloadLogMax:    logOpts.max,
 		}
@@ -209,7 +214,13 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 		if err != nil {
 			return err
 		}
-		rs := &ReceiverState{Name: name, Cfg: rc, Recv: r}
+		rs := &ReceiverState{
+			Name:           name,
+			Cfg:            rc,
+			Recv:           r,
+			LogPayloadRecv: rc.LogPayloadRecv,
+			PayloadLogMax:  payloadLogMaxBytes(rc.PayloadLogMaxBytes, cfg.Logging.PayloadLogMaxBytes),
+		}
 		st.mu.Lock()
 		st.receivers[name] = rs
 		if _, ok := st.subs[name]; !ok {
@@ -401,7 +412,13 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 		if err != nil {
 			return err
 		}
-		rs := &ReceiverState{Name: name, Cfg: rc, Recv: r}
+		rs := &ReceiverState{
+			Name:           name,
+			Cfg:            rc,
+			Recv:           r,
+			LogPayloadRecv: rc.LogPayloadRecv,
+			PayloadLogMax:  payloadLogMaxBytes(rc.PayloadLogMaxBytes, st.loggingPayloadLogMaxBytes()),
+		}
 		st.mu.Lock()
 		st.receivers[name] = rs
 		if _, ok := st.subs[name]; !ok {
@@ -410,7 +427,7 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 		st.mu.Unlock()
 		st.registerReceiverRuntimeStats(name)
 		st.startReceiver(ctx, name, r)
-		if ok {
+		if ok && old != nil && old.Recv != nil {
 			_ = old.Recv.Stop(ctx)
 		}
 	}
@@ -551,7 +568,7 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 	}
 	st.mu.Unlock()
 
-	logOpts := buildTaskPayloadLogOptions(name, tc, lc)
+	logOpts := buildTaskPayloadLogOptions(tc, lc)
 	tk := &task.Task{
 		Name:             name,
 		Pipelines:        pipes,
@@ -561,7 +578,6 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 		ExecutionModel:   tc.ExecutionModel,
 		QueueSize:        tc.QueueSize,
 		ChannelQueueSize: tc.ChannelQueueSize,
-		LogPayloadRecv:   logOpts.recv,
 		LogPayloadSend:   logOpts.send,
 		PayloadLogMax:    logOpts.max,
 	}
@@ -773,6 +789,9 @@ func senderConfigSnapshot(m map[string]*SenderState) map[string]config.SenderCon
 //  3. 单订阅者直接复用原始包，减少一次额外复制。
 func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.Packet) {
 	tasks := st.getDispatchTasks(receiverName)
+	if enabled, maxBytes := st.payloadLogRecvOptions(receiverName); enabled {
+		logReceiverPayload(receiverName, pkt, maxBytes)
+	}
 
 	if len(tasks) == 0 {
 		pkt.Release()
@@ -781,7 +800,6 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 
 	// 仅有一个订阅任务时直接复用原始包，避免无意义二次复制。
 	if len(tasks) == 1 {
-		tasks[0].T.LogPayloadReceive(receiverName, pkt)
 		tasks[0].T.Handle(ctx, pkt)
 		return
 	}
@@ -790,12 +808,49 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 	// 先为其余任务逐个 Clone，再把原始包交给首个任务，避免额外中间切片。
 	for _, ts := range tasks[1:] {
 		cp := pkt.Clone()
-		ts.T.LogPayloadReceive(receiverName, cp)
 		ts.T.Handle(ctx, cp)
 	}
 	first := tasks[0]
-	first.T.LogPayloadReceive(receiverName, pkt)
 	first.T.Handle(ctx, pkt)
+}
+
+func (st *Store) payloadLogRecvOptions(receiverName string) (bool, int) {
+	st.mu.RLock()
+	defer st.mu.RUnlock()
+	rs := st.receivers[receiverName]
+	if rs == nil {
+		return false, 0
+	}
+	return rs.LogPayloadRecv, rs.PayloadLogMax
+}
+
+func logReceiverPayload(receiver string, pkt *packet.Packet, maxBytes int) {
+	if pkt == nil || !logx.Enabled(zapcore.InfoLevel) {
+		return
+	}
+	logx.L().Infow("receiver payload recv",
+		"receiver", receiver,
+		"kind", pkt.Kind,
+		"payload_len", len(pkt.Payload),
+		"payload_hex", payloadHex(pkt.Payload, maxBytes),
+		"transfer_id", pkt.Meta.TransferID,
+		"offset", pkt.Meta.Offset,
+		"total_size", pkt.Meta.TotalSize,
+		"eof", pkt.Meta.EOF,
+	)
+}
+
+func payloadHex(b []byte, max int) string {
+	if len(b) == 0 {
+		return ""
+	}
+	if max <= 0 {
+		max = config.DefaultPayloadLogMaxBytes
+	}
+	if len(b) > max {
+		return hex.EncodeToString(b[:max]) + "...(truncated)"
+	}
+	return hex.EncodeToString(b)
 }
 
 // buildReceiver 负责该函数对应的核心逻辑，详见实现细节。

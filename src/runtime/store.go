@@ -38,6 +38,8 @@ type Store struct {
 
 	// dispatchSubs 保存 receiver -> tasks 的只读快照，供 dispatch 热路径无锁读取。
 	dispatchSubs atomic.Value // map[string][]*TaskState
+
+	payloadLogDefaultMax int
 }
 
 // NewStore 负责该函数对应的核心逻辑，详见实现细节。

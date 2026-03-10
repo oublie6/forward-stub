@@ -42,7 +42,6 @@ type Task struct {
 	ChannelQueueSize int
 	ExecutionModel   string
 
-	LogPayloadRecv bool
 	LogPayloadSend bool
 	PayloadLogMax  int
 
@@ -254,25 +253,6 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 			logx.L().Warnw("sender send failed", "task", t.Name, "sender", s.Name(), "error", err)
 		}
 	}
-}
-
-// LogPayloadReceive 在任务接收入口输出 payload 摘要日志。
-// 仅在配置开启时生效，避免对高吞吐链路造成额外日志开销。
-func (t *Task) LogPayloadReceive(receiver string, pkt *packet.Packet) {
-	if t == nil || !t.LogPayloadRecv || pkt == nil || !logx.Enabled(zapcore.InfoLevel) {
-		return
-	}
-	logx.L().Infow("task payload recv",
-		"task", t.Name,
-		"receiver", receiver,
-		"kind", pkt.Kind,
-		"payload_len", len(pkt.Payload),
-		"payload_hex", payloadHex(pkt.Payload, t.PayloadLogMax),
-		"transfer_id", pkt.Meta.TransferID,
-		"offset", pkt.Meta.Offset,
-		"total_size", pkt.Meta.TotalSize,
-		"eof", pkt.Meta.EOF,
-	)
 }
 
 func payloadHex(b []byte, max int) string {

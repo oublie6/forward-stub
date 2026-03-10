@@ -8,25 +8,21 @@ import (
 
 func TestBuildTaskPayloadLogOptions(t *testing.T) {
 	lc := config.LoggingConfig{
-		PayloadLogTasks:    []string{"t1"},
-		PayloadLogRecv:     true,
-		PayloadLogSend:     true,
 		PayloadLogMaxBytes: 128,
 	}
-	tc := config.TaskConfig{LogPayloadRecv: true, LogPayloadSend: true}
-	opt := buildTaskPayloadLogOptions("t1", tc, lc)
-	if !opt.recv || !opt.send || opt.max != 128 {
+	tc := config.TaskConfig{LogPayloadSend: true}
+	opt := buildTaskPayloadLogOptions(tc, lc)
+	if !opt.send || opt.max != 128 {
 		t.Fatalf("unexpected enabled options: %+v", opt)
 	}
 
-	opt = buildTaskPayloadLogOptions("t2", tc, lc)
-	if opt.recv || opt.send {
-		t.Fatalf("task not in whitelist should be disabled: %+v", opt)
+	opt = buildTaskPayloadLogOptions(config.TaskConfig{LogPayloadSend: false}, lc)
+	if opt.send {
+		t.Fatalf("send logging should follow task switch: %+v", opt)
 	}
 
-	lc.PayloadLogTasks = nil
-	opt = buildTaskPayloadLogOptions("t2", tc, lc)
-	if opt.recv || opt.send {
-		t.Fatalf("empty whitelist should keep disabled by default: %+v", opt)
+	opt = buildTaskPayloadLogOptions(config.TaskConfig{LogPayloadSend: true, PayloadLogMaxBytes: 32}, lc)
+	if !opt.send || opt.max != 32 {
+		t.Fatalf("task max bytes should override default: %+v", opt)
 	}
 }
