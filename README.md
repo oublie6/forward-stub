@@ -237,11 +237,17 @@ Receiver(onPacket)
 
 ## 7. 详细配置示例
 
+> 推荐使用双文件。下面给出 `system-config` 和 `business-config` 的完整示例；可直接作为生产模板按需裁剪。
+
+### 7.1 system-config 示例
+
 ```json
 {
-  "version": 1001,
-  "control": {"api": "", "timeout_sec": 5,
-    "config_watch_interval": "2s"},
+  "control": {
+    "api": "",
+    "timeout_sec": 5,
+    "config_watch_interval": "2s"
+  },
   "logging": {
     "level": "info",
     "file": "",
@@ -254,16 +260,60 @@ Receiver(onPacket)
     "payload_log_max_bytes": 256,
     "payload_pool_max_cached_bytes": 0
   },
+  "business_defaults": {
+    "task": {
+      "execution_model": "pool",
+      "pool_size": 4096,
+      "queue_size": 8192,
+      "channel_queue_size": 8192,
+      "payload_log_max_bytes": 256
+    },
+    "receiver": {
+      "multicore": true,
+      "num_event_loop": 8,
+      "payload_log_max_bytes": 256
+    },
+    "sender": {
+      "concurrency": 8
+    }
+  }
+}
+```
+
+### 7.2 business-config 示例
+
+```json
+{
+  "version": 1001,
   "receivers": {
-    "rx_udp": {"type": "udp_gnet", "listen": "0.0.0.0:19000", "multicore": true, "log_payload_recv": false, "payload_log_max_bytes": 256},
-    "rx_tcp": {"type": "tcp_gnet", "listen": "0.0.0.0:19001", "frame": "u16be", "multicore": true},
+    "rx_udp": {
+      "type": "udp_gnet",
+      "listen": "0.0.0.0:19000",
+      "multicore": true,
+      "num_event_loop": 8,
+      "read_buffer_cap": 1048576,
+      "log_payload_recv": false,
+      "payload_log_max_bytes": 256
+    },
+    "rx_tcp": {
+      "type": "tcp_gnet",
+      "listen": "0.0.0.0:19001",
+      "frame": "u16be",
+      "multicore": true
+    },
     "rx_kafka": {
       "type": "kafka",
       "listen": "127.0.0.1:9092",
       "topic": "in-topic",
       "group_id": "forward-stub-group",
+      "username": "kafka-user",
+      "password": "kafka-pass",
+      "sasl_mechanism": "PLAIN",
+      "tls": false,
       "start_offset": "latest",
-      "tls": false
+      "fetch_min_bytes": 1,
+      "fetch_max_bytes": 1048576,
+      "fetch_max_wait_ms": 100
     },
     "rx_sftp": {
       "type": "sftp",
@@ -277,11 +327,50 @@ Receiver(onPacket)
     }
   },
   "senders": {
-    "tx_udp": {"type": "udp_unicast", "local_ip": "0.0.0.0", "local_port": 20000, "remote": "127.0.0.1:21000"},
-    "tx_mcast": {"type": "udp_multicast", "local_ip": "0.0.0.0", "local_port": 20001, "remote": "239.0.0.10:21001", "iface": "eth0", "ttl": 16, "loop": false},
-    "tx_tcp": {"type": "tcp_gnet", "remote": "127.0.0.1:21002", "frame": "u16be", "concurrency": 4},
-    "tx_kafka": {"type": "kafka", "remote": "127.0.0.1:9092", "topic": "out-topic", "acks": -1, "linger_ms": 5, "batch_max_bytes": 1048576, "compression": "lz4"},
-    "tx_sftp": {"type": "sftp", "remote": "127.0.0.1:22", "username": "demo", "password": "demo", "remote_dir": "/output", "temp_suffix": ".tmp", "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"}
+    "tx_udp": {
+      "type": "udp_unicast",
+      "local_ip": "0.0.0.0",
+      "local_port": 20000,
+      "remote": "127.0.0.1:21000",
+      "concurrency": 8
+    },
+    "tx_mcast": {
+      "type": "udp_multicast",
+      "local_ip": "0.0.0.0",
+      "local_port": 20001,
+      "remote": "239.0.0.10:21001",
+      "iface": "eth0",
+      "ttl": 16,
+      "loop": false,
+      "concurrency": 8
+    },
+    "tx_tcp": {
+      "type": "tcp_gnet",
+      "remote": "127.0.0.1:21002",
+      "frame": "u16be",
+      "concurrency": 4
+    },
+    "tx_kafka": {
+      "type": "kafka",
+      "remote": "127.0.0.1:9092",
+      "topic": "out-topic",
+      "username": "kafka-user",
+      "password": "kafka-pass",
+      "sasl_mechanism": "PLAIN",
+      "acks": -1,
+      "linger_ms": 5,
+      "batch_max_bytes": 1048576,
+      "compression": "lz4"
+    },
+    "tx_sftp": {
+      "type": "sftp",
+      "remote": "127.0.0.1:22",
+      "username": "demo",
+      "password": "demo",
+      "remote_dir": "/output",
+      "temp_suffix": ".tmp",
+      "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"
+    }
   },
   "pipelines": {
     "pipe_bytes": [
@@ -300,13 +389,24 @@ Receiver(onPacket)
       "execution_model": "pool",
       "pool_size": 2048,
       "queue_size": 4096,
-      "channel_queue_size": 0,
+      "channel_queue_size": 4096,
       "log_payload_send": false,
       "payload_log_max_bytes": 256
+    },
+    "task_kafka_to_sftp": {
+      "receivers": ["rx_kafka"],
+      "pipelines": ["pipe_stream_to_file"],
+      "senders": ["tx_sftp"],
+      "execution_model": "channel",
+      "channel_queue_size": 1024
     }
   }
 }
 ```
+
+### 7.3 legacy 单文件模式
+
+如果仍使用 `-config` 单文件模式，可将上述两个 JSON 合并为一个完整配置（顶层同时包含 `control/logging/receivers/senders/pipelines/tasks`）。
 
 ---
 
