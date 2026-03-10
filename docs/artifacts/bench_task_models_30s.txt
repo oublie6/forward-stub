@@ -1,9 +1,0 @@
-goos: linux
-goarch: amd64
-pkg: forward-stub/src/task
-cpu: Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
-BenchmarkTaskExecutionModels/fastpath_sync-2         	64129321	       557.5 ns/op	     568 B/op	       6 allocs/op
-BenchmarkTaskExecutionModels/task_pool_size_1-2      	23267788	      1650 ns/op	     600 B/op	       7 allocs/op
-BenchmarkTaskExecutionModels/single_goroutine_channel-2         	57144339	       681.2 ns/op	     544 B/op	       5 allocs/op
-PASS
-ok  	forward-stub/src/task	115.906s
