@@ -145,6 +145,7 @@ Receiver(onPacket)
 - `traffic_stats_interval`: 吞吐聚合输出周期
 - `traffic_stats_sample_every`: 采样倍率
 - `payload_log_tasks/payload_log_recv/payload_log_send/payload_log_max_bytes`: payload 观测开关
+- `payload_pool_max_cached_bytes`: payload 内存池缓存上限字节数（<=0 表示不限制，默认不限制）
 
 ### 6.4 receiver 类型与字段
 
@@ -200,11 +201,9 @@ Receiver(onPacket)
 
 - `match_offset_bytes`
 - `replace_offset_bytes`
-- `drop_if_flag`
 - `mark_as_file_chunk`
 - `clear_file_meta`
 
-flag 名称映射：`matched/rewritten/drop/none`。
 
 ### 6.7 task 字段
 
@@ -236,7 +235,8 @@ flag 名称映射：`matched/rewritten/drop/none`。
     "payload_log_tasks": ["task_udp_to_tcp"],
     "payload_log_recv": false,
     "payload_log_send": false,
-    "payload_log_max_bytes": 256
+    "payload_log_max_bytes": 256,
+    "payload_pool_max_cached_bytes": 0
   },
   "receivers": {
     "rx_udp": {"type": "udp_gnet", "listen": "0.0.0.0:19000", "multicore": true},
@@ -269,9 +269,8 @@ flag 名称映射：`matched/rewritten/drop/none`。
   },
   "pipelines": {
     "pipe_bytes": [
-      {"type": "match_offset_bytes", "offset": 0, "hex": "aabb", "flag": "matched"},
-      {"type": "replace_offset_bytes", "offset": 2, "hex": "ccdd", "flag": "rewritten"},
-      {"type": "drop_if_flag", "flag": "drop"}
+      {"type": "match_offset_bytes", "offset": 0, "hex": "aabb"},
+      {"type": "replace_offset_bytes", "offset": 2, "hex": "ccdd"}
     ],
     "pipe_stream_to_file": [
       {"type": "mark_as_file_chunk", "path": "/auto/out.bin", "bool": true}

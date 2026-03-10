@@ -4,21 +4,22 @@ package config
 import "runtime"
 
 const (
-	DefaultControlTimeoutSec       = 5
-	DefaultConfigWatchInterval     = "2s"
-	DefaultLogLevel                = "info"
-	DefaultTrafficStatsInterval    = "1s"
-	DefaultTrafficStatsSampleEvery = 1
-	DefaultLogRotateMaxSizeMB      = 100
-	DefaultLogRotateMaxBackups     = 5
-	DefaultLogRotateMaxAgeDays     = 30
-	DefaultLogRotateCompress       = true
-	DefaultPayloadLogMaxBytes      = 256
-	DefaultReceiverMulticore       = true
-	DefaultReceiverNumEventLoop    = 8
-	DefaultSenderConcurrency       = 8
-	DefaultTaskPoolSize            = 4096
-	DefaultTaskQueueSize           = 8192
+	DefaultControlTimeoutSec         = 5
+	DefaultConfigWatchInterval       = "2s"
+	DefaultLogLevel                  = "info"
+	DefaultTrafficStatsInterval      = "1s"
+	DefaultTrafficStatsSampleEvery   = 1
+	DefaultLogRotateMaxSizeMB        = 100
+	DefaultLogRotateMaxBackups       = 5
+	DefaultLogRotateMaxAgeDays       = 30
+	DefaultLogRotateCompress         = true
+	DefaultPayloadLogMaxBytes        = 256
+	DefaultReceiverMulticore         = true
+	DefaultReceiverNumEventLoop      = 8
+	DefaultSenderConcurrency         = 8
+	DefaultTaskPoolSize              = 4096
+	DefaultTaskQueueSize             = 8192
+	DefaultPayloadPoolMaxCachedBytes = int64(0)
 )
 
 // Config 是系统运行时的全量配置快照。
@@ -131,6 +132,9 @@ type LoggingConfig struct {
 	// PayloadLogMaxBytes 控制日志中 payload 摘要的最大字节数。
 	// 用法：建议设置为 64~1024 之间，避免大包导致日志膨胀；<=0 时使用默认值。
 	PayloadLogMaxBytes int `json:"payload_log_max_bytes,omitempty"`
+	// PayloadPoolMaxCachedBytes 控制 payload 内存池可缓存的总字节上限。
+	// 用法：<=0 表示不限制（默认）；>0 可限制缓存内存占用峰值。
+	PayloadPoolMaxCachedBytes int64 `json:"payload_pool_max_cached_bytes,omitempty"`
 }
 
 // ReceiverConfig 描述单个接收端实例。
@@ -294,9 +298,6 @@ type StageConfig struct {
 	// Hex 是十六进制匹配/写入参数。
 	// 用法：填写无空格 hex 串，供匹配/替换类 stage 使用。
 	Hex string `json:"hex,omitempty"`
-	// Flag 是标志位名称，用于条件路由 stage。
-	// 用法：上游 stage 设置 flag，下游按 flag 决策分支。
-	Flag string `json:"flag,omitempty"`
 	// Path 是文件语义 stage 使用的目标路径。
 	// 用法：用于写文件、改路径等场景，支持绝对或相对路径。
 	Path string `json:"path,omitempty"`
@@ -375,6 +376,9 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.Logging.PayloadLogMaxBytes <= 0 {
 		c.Logging.PayloadLogMaxBytes = DefaultPayloadLogMaxBytes
+	}
+	if c.Logging.PayloadPoolMaxCachedBytes < 0 {
+		c.Logging.PayloadPoolMaxCachedBytes = DefaultPayloadPoolMaxCachedBytes
 	}
 	for name, tc := range c.Tasks {
 		if tc.PoolSize <= 0 {
