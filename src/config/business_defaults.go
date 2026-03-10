@@ -72,6 +72,9 @@ func (c *Config) ApplyDefaults() {
 	if c.Control.ConfigWatchInterval == "" {
 		c.Control.ConfigWatchInterval = DefaultConfigWatchInterval
 	}
+	if c.Control.PprofPort < 0 {
+		c.Control.PprofPort = DefaultPprofPort
+	}
 	if c.Logging.Level == "" {
 		c.Logging.Level = DefaultLogLevel
 	}
