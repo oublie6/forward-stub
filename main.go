@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"time"
 
 	"forward-stub/src/app"
 	"forward-stub/src/config"
 	"forward-stub/src/control"
 	"forward-stub/src/logx"
+
+	_ "go.uber.org/automaxprocs/maxprocs"
 )
 
 var version = "dev"
@@ -85,7 +88,7 @@ func main() {
 	defer close(watchDone)
 
 	_ = bizCfg
-	lg.Info("forward-stub started. Press Ctrl+C to stop.")
+	logStartupInfo(lg, sysPath, bizPath, cfg)
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, supportedSignals()...)
 	defer signal.Stop(sigCh)
@@ -117,6 +120,20 @@ func main() {
 			lg.Infow("reload business config success", "source", "file-watch", "version", next.Version)
 		}
 	}
+}
+
+func logStartupInfo(lg interface{ Infow(string, ...interface{}); Info(...interface{}) }, systemPath, businessPath string, cfg config.Config) {
+	lg.Infow("forward-stub startup",
+		"version", version,
+		"go_version", runtime.Version(),
+		"gomaxprocs", runtime.GOMAXPROCS(0),
+		"host_cpu_cores", runtime.NumCPU(),
+		"pid", os.Getpid(),
+		"system_config", systemPath,
+		"business_config", businessPath,
+		"config_version", cfg.Version,
+	)
+	lg.Info("forward-stub started. Press Ctrl+C to stop.")
 }
 
 func watchConfigFile(path, initialFingerprint, watchInterval string, notifyCh chan<- struct{}, done <-chan struct{}) {
