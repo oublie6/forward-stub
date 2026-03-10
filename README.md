@@ -435,37 +435,40 @@ make verify
 
 ---
 
-## 9. 吞吐量最新结果（2026-03-10）
+## 9. 吞吐量最新结果（2026-03-10，72 场景）
 
 > 说明：本节仅保留最新一轮极限无丢包扫参复测结果，历史吞吐量结果已清理。
 
 ### 9.1 基线配置（摘要）
 
-- `duration=1s`
+- `duration=300ms`
+- `warmup=100ms`
 - `payload-size=512`
 - `workers=4`
 - `multicore=true`
 - `task-execution-model=pool`
 - `task-pool-size=2048`
-- `pps-sweep=2000,8000,16000,24000`
+- `pps-sweep=2000,8000,16000`
+- 总场景数：`72`（UDP 36 + TCP 36）
 
 ### 9.2 最新关键吞吐指标（无丢包口径）
 
 | 协议 | 最优场景 | 最大PPS | 最大吞吐 |
 |---|---|---:|---:|
-| UDP | `execution_model=fastpath` | 96013 | 393.27 Mbps |
-| TCP | `payload_size=4096` | 96669 | 3167.64 Mbps |
-| TCP | `workers=8`（全场最高PPS） | 203232 | 832.44 Mbps |
+| UDP | `payload_size=512` | 64782 | 265.35 Mbps |
+| TCP | `workers=8`（全场最高PPS） | 135168 | 553.65 Mbps |
+| TCP | `payload_size=4096`（最高 Mbps） | 66515 | 2179.57 Mbps |
 
 ### 9.3 结论
 
-- UDP 在本轮扫参中，`fastpath` 模式达到无丢包最高吞吐。
-- TCP 在增大 payload（`4096`）时可显著提升 Mbps；在 `workers=8` 时达到全场最高无丢包 PPS。
+- UDP 在本轮扫参中，`payload_size=512` 与 `task_queue_size=1024`、`multicore=false` 等配置组合都接近 64K PPS 档位。
+- TCP 在本轮 300ms 短时压测中，`workers=8` 达到全场最高无丢包 PPS，`payload_size=4096` 取得最高 Mbps。
+- 由于本轮采用更短测量窗口（300ms）并统一了 sweep 档位，绝对数值不应与历史 1s 测量结果直接比较。
 
 完整测试过程、全量场景表格与 Top10 见：
 
-- `docs/perf_extreme_sweep_2026-03-10.md`
-- `docs/perf_extreme_sweep_raw_2026-03-10.json`
+- `docs/perf_extreme_sweep_2026-03-10_72.md`
+- `docs/perf_extreme_sweep_raw_2026-03-10_72.json`
 
 ---
 
@@ -495,6 +498,7 @@ docs/                 # 架构与实验文档
 src/app/              # 应用启动与运行时组装
 src/config/           # 配置模型、默认值、校验
 src/runtime/          # 运行时编译、更新、分发
+src/bootstrap/        # 启动编排（参数解析、信号、热重载触发）
 src/task/             # 执行模型与任务生命周期
 src/receiver/         # 协议接收端
 src/sender/           # 协议发送端
