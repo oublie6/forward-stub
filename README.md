@@ -319,31 +319,37 @@ make verify
 
 ---
 
-## 9. 吞吐量复测结果（2026-03-09）
+## 9. 吞吐量最新结果（2026-03-10）
 
-> 说明：本轮压测统一关闭 payload log（`PayloadLogRecv=false`, `PayloadLogSend=false`）。
+> 说明：本节仅保留最新一轮极限无丢包扫参复测结果，历史吞吐量结果已清理。
 
-### 9.1 严格 0 丢包 + 严格保序最大极限吞吐
+### 9.1 基线配置（摘要）
 
-| 场景 | UDP 最大吞吐 (Mbps) | TCP 最大吞吐 (Mbps) |
-|---|---:|---:|
-| 1.1.1 channel + multicore=off | 32.77 | 未达成严格保序（order_errors>0） |
-| 1.1.2 pool_size=1 + multicore=off | 32.78 | 未达成严格保序（order_errors>0） |
-| 1.1.3 fastpath=true + multicore=off | 32.78 | 未达成严格保序（order_errors>0） |
-| 1.2.1 channel + multicore=on | 32.77 | 未达成严格保序（order_errors>0） |
-| 1.2.2 pool + multicore=on | 32.79 | 未达成严格保序（order_errors>0） |
-| 1.2.3 fastpath + multicore=on | 复测中断（建议单独跑） | 复测中断（建议单独跑） |
+- `duration=1s`
+- `payload-size=512`
+- `workers=4`
+- `multicore=true`
+- `task-execution-model=pool`
+- `task-pool-size=2048`
+- `pps-sweep=2000,8000,16000,24000`
 
-### 9.2 严格 0 丢包 + 不保序最大极限吞吐
+### 9.2 最新关键吞吐指标（无丢包口径）
 
-| 转发类型 | 最大吞吐 |
-|---|---:|
-| 2.1 UDP 收 UDP 发 | 98.31 Mbps（0 丢包口径） |
-| 2.2 TCP 收 TCP 发 | 4212.25 Mbps（0 丢包口径） |
-| 2.3 Kafka 收 Kafka 发（模拟） | 2035.70 MB/s |
-| 2.4 SFTP 收 SFTP 发 | 2037.44 MB/s |
+| 协议 | 最优场景 | 最大PPS | 最大吞吐 |
+|---|---|---:|---:|
+| UDP | `execution_model=fastpath` | 96013 | 393.27 Mbps |
+| TCP | `payload_size=4096` | 96669 | 3167.64 Mbps |
+| TCP | `workers=8`（全场最高PPS） | 203232 | 832.44 Mbps |
 
-详细测试命令、原始输出与结论见：`docs/protocol_throughput_rerun_2026-03-09.md`。
+### 9.3 结论
+
+- UDP 在本轮扫参中，`fastpath` 模式达到无丢包最高吞吐。
+- TCP 在增大 payload（`4096`）时可显著提升 Mbps；在 `workers=8` 时达到全场最高无丢包 PPS。
+
+完整测试过程、全量场景表格与 Top10 见：
+
+- `docs/perf_extreme_sweep_2026-03-10.md`
+- `docs/perf_extreme_sweep_raw_2026-03-10.json`
 
 ---
 
