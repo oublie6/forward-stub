@@ -16,6 +16,7 @@
 
 - 负责配置加载、默认值填充、语义校验。
 - 分系统配置与业务配置，业务配置支持热更新。
+- system.config 支持 `business_defaults`，可统一下发 receiver/sender/task 默认值。
 - 通过版本号驱动 runtime 更新。
 
 ### 1.2 运行层
@@ -57,7 +58,7 @@
 
 - gnet 驱动 UDP/TCP IO，降低调度开销。
 - ants pool 支撑高并发任务执行。
-- packet payload 复用减少 GC。
+- packet payload 与 TCP frame 均使用 bytebufferpool 复用，减少 GC 与小对象分配。
 - 有界队列与 in-flight 计数实现可控背压。
 - 运行时统计聚合常驻，降低业务路径额外成本。
 

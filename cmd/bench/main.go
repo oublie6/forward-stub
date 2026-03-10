@@ -430,9 +430,7 @@ func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFas
 	return config.Config{
 		Version: 1,
 		Logging: config.LoggingConfig{
-			Level:          "warn",
-			PayloadLogRecv: false,
-			PayloadLogSend: false,
+			Level: "warn",
 		},
 		Receivers: map[string]config.ReceiverConfig{
 			"in": rc,

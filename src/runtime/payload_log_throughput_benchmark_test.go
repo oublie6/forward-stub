@@ -32,7 +32,6 @@ func BenchmarkPayloadLogSwitchThroughput(b *testing.B) {
 						Name:           "bench-" + proto,
 						FastPath:       true,
 						Senders:        []sender.Sender{cap},
-						LogPayloadRecv: payloadLogEnabled,
 						LogPayloadSend: payloadLogEnabled,
 						PayloadLogMax:  128,
 					}

@@ -55,8 +55,16 @@ type Config struct {
 
 // SystemConfig 仅包含需要重启后生效的系统级配置。
 type SystemConfig struct {
-	Control ControlConfig `json:"control,omitempty"`
-	Logging LoggingConfig `json:"logging"`
+	Control          ControlConfig          `json:"control,omitempty"`
+	Logging          LoggingConfig          `json:"logging"`
+	BusinessDefaults BusinessDefaultsConfig `json:"business_defaults,omitempty"`
+}
+
+// BusinessDefaultsConfig 描述可由 system.config 下发的业务配置默认值。
+type BusinessDefaultsConfig struct {
+	Receiver ReceiverConfig `json:"receiver,omitempty"`
+	Sender   SenderConfig   `json:"sender,omitempty"`
+	Task     TaskConfig     `json:"task,omitempty"`
 }
 
 // BusinessConfig 仅包含支持热重载的业务拓扑配置。
@@ -70,6 +78,7 @@ type BusinessConfig struct {
 
 // Merge 将系统配置与业务配置拼装为运行时使用的完整 Config。
 func (s SystemConfig) Merge(b BusinessConfig) Config {
+	b = s.applyBusinessDefaults(b)
 	return Config{
 		Version:   b.Version,
 		Control:   s.Control,
@@ -120,17 +129,8 @@ type LoggingConfig struct {
 	// TrafficStatsSampleEvery 为采样倍率，1 表示全量统计。
 	// 用法：高吞吐场景可调大以降低统计开销。
 	TrafficStatsSampleEvery int `json:"traffic_stats_sample_every,omitempty"`
-	// PayloadLogTasks 是启用 payload 打印的任务名白名单。
-	// 用法：仅名单内任务会打印 payload 收发日志；为空表示全部任务均不打印。
-	PayloadLogTasks []string `json:"payload_log_tasks,omitempty"`
-	// PayloadLogRecv 控制是否打印任务接收侧 payload 日志。
-	// 用法：开启后会在 dispatch 进入任务前输出 task/receiver/元信息与 payload 摘要。
-	PayloadLogRecv bool `json:"payload_log_recv,omitempty"`
-	// PayloadLogSend 控制是否打印任务发送侧 payload 日志。
-	// 用法：开启后会在 sender.Send 前输出 task/sender/元信息与 payload 摘要。
-	PayloadLogSend bool `json:"payload_log_send,omitempty"`
-	// PayloadLogMaxBytes 控制日志中 payload 摘要的最大字节数。
-	// 用法：建议设置为 64~1024 之间，避免大包导致日志膨胀；<=0 时使用默认值。
+	// PayloadLogMaxBytes 是 payload 摘要日志的默认最大字节数。
+	// 用法：receiver/task 未单独配置时使用该值；建议设置为 64~1024。
 	PayloadLogMaxBytes int `json:"payload_log_max_bytes,omitempty"`
 	// PayloadPoolMaxCachedBytes 控制 payload 内存池可缓存的总字节上限。
 	// 用法：<=0 表示不限制（默认）；>0 可限制缓存内存占用峰值。
@@ -208,6 +208,12 @@ type ReceiverConfig struct {
 	// HostKeyFingerprint 是 SFTP 服务端主机公钥指纹（SSH SHA256 格式）。
 	// 用法：必须与服务端实际指纹一致，防止中间人攻击；示例：SHA256:AbCd....
 	HostKeyFingerprint string `json:"host_key_fingerprint,omitempty"`
+	// LogPayloadRecv 控制该 receiver 是否打印接收 payload 日志。
+	// 用法：用于定位输入侧问题；建议仅在排障窗口开启。
+	LogPayloadRecv bool `json:"log_payload_recv,omitempty"`
+	// PayloadLogMaxBytes 控制该 receiver 的 payload 摘要最大字节数。
+	// 用法：<=0 时回退到 logging.payload_log_max_bytes。
+	PayloadLogMaxBytes int `json:"payload_log_max_bytes,omitempty"`
 }
 
 // SenderConfig 描述单个发送端实例。
@@ -332,12 +338,12 @@ type TaskConfig struct {
 	// Senders 是处理完成后要投递的发送端名称列表。
 	// 用法：可配置多个 sender 实现一份输入多路分发。
 	Senders []string `json:"senders"`
-	// LogPayloadRecv 控制该任务是否打印“接收到任务前”的 payload 日志（需 logging.PayloadLogRecv=true 且命中白名单）。
-	// 用法：用于针对单任务定位输入问题，默认关闭。
-	LogPayloadRecv bool `json:"log_payload_recv,omitempty"`
-	// LogPayloadSend 控制该任务是否打印“发送到 sender 前”的 payload 日志（需 logging.PayloadLogSend=true 且命中白名单）。
+	// LogPayloadSend 控制该任务是否打印“发送到 sender 前”的 payload 日志。
 	// 用法：用于针对单任务定位输出问题，默认关闭。
 	LogPayloadSend bool `json:"log_payload_send,omitempty"`
+	// PayloadLogMaxBytes 控制该任务 payload 摘要最大字节数。
+	// 用法：<=0 时回退到 logging.payload_log_max_bytes。
+	PayloadLogMaxBytes int `json:"payload_log_max_bytes,omitempty"`
 }
 
 // ApplyDefaults 为 receiver/task/sender 之外的配置字段填充默认值。
@@ -390,6 +396,9 @@ func (c *Config) ApplyDefaults() {
 		if tc.ChannelQueueSize <= 0 {
 			tc.ChannelQueueSize = tc.QueueSize
 		}
+		if tc.PayloadLogMaxBytes <= 0 {
+			tc.PayloadLogMaxBytes = c.Logging.PayloadLogMaxBytes
+		}
 		c.Tasks[name] = tc
 	}
 	for name, rc := range c.Receivers {
@@ -398,6 +407,9 @@ func (c *Config) ApplyDefaults() {
 		}
 		if rc.NumEventLoop <= 0 {
 			rc.NumEventLoop = max(DefaultReceiverNumEventLoop, runtime.NumCPU())
+		}
+		if rc.PayloadLogMaxBytes <= 0 {
+			rc.PayloadLogMaxBytes = c.Logging.PayloadLogMaxBytes
 		}
 		c.Receivers[name] = rc
 	}

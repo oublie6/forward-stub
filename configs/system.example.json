@@ -11,6 +11,25 @@
     "max_age_days": 30,
     "compress": true,
     "traffic_stats_interval": "1s",
-    "traffic_stats_sample_every": 1
+    "traffic_stats_sample_every": 1,
+    "payload_log_max_bytes": 256,
+    "payload_pool_max_cached_bytes": 0
+  },
+  "business_defaults": {
+    "receiver": {
+      "multicore": true,
+      "num_event_loop": 8,
+      "payload_log_max_bytes": 256
+    },
+    "sender": {
+      "concurrency": 8
+    },
+    "task": {
+      "execution_model": "pool",
+      "pool_size": 4096,
+      "queue_size": 8192,
+      "channel_queue_size": 8192,
+      "payload_log_max_bytes": 256
+    }
   }
 }

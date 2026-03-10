@@ -144,8 +144,9 @@ Receiver(onPacket)
 - `max_size_mb/max_backups/max_age_days/compress`: 滚动日志策略
 - `traffic_stats_interval`: 吞吐聚合输出周期
 - `traffic_stats_sample_every`: 采样倍率
-- `payload_log_tasks/payload_log_recv/payload_log_send/payload_log_max_bytes`: payload 观测开关
+- `payload_log_max_bytes`: payload 摘要日志默认最大字节数（receiver/task 可覆盖）
 - `payload_pool_max_cached_bytes`: payload 内存池缓存上限字节数（<=0 表示不限制，默认不限制）
+- `business_defaults`: system.config 可下发 business 默认参数（receiver/sender/task），business 未显式配置时自动继承
 
 ### 6.4 receiver 类型与字段
 
@@ -212,7 +213,8 @@ Receiver(onPacket)
 - `senders`: fan-out 下游
 - `execution_model`: `fastpath | pool | channel`
 - `pool_size`、`queue_size`、`channel_queue_size`
-- `log_payload_recv`、`log_payload_send`
+- receiver: `log_payload_recv`、`payload_log_max_bytes`
+- task: `log_payload_send`、`payload_log_max_bytes`
 
 ---
 
@@ -232,14 +234,16 @@ Receiver(onPacket)
     "compress": true,
     "traffic_stats_interval": "1s",
     "traffic_stats_sample_every": 1,
-    "payload_log_tasks": ["task_udp_to_tcp"],
-    "payload_log_recv": false,
-    "payload_log_send": false,
     "payload_log_max_bytes": 256,
     "payload_pool_max_cached_bytes": 0
   },
+  "business_defaults": {
+    "receiver": {"multicore": true, "num_event_loop": 8, "payload_log_max_bytes": 256},
+    "sender": {"concurrency": 8},
+    "task": {"execution_model": "pool", "pool_size": 4096, "queue_size": 8192, "channel_queue_size": 8192, "payload_log_max_bytes": 256}
+  },
   "receivers": {
-    "rx_udp": {"type": "udp_gnet", "listen": "0.0.0.0:19000", "multicore": true},
+    "rx_udp": {"type": "udp_gnet", "listen": "0.0.0.0:19000", "multicore": true, "log_payload_recv": false, "payload_log_max_bytes": 256},
     "rx_tcp": {"type": "tcp_gnet", "listen": "0.0.0.0:19001", "frame": "u16be", "multicore": true},
     "rx_kafka": {
       "type": "kafka",
@@ -285,8 +289,8 @@ Receiver(onPacket)
       "pool_size": 2048,
       "queue_size": 4096,
       "channel_queue_size": 0,
-      "log_payload_recv": false,
-      "log_payload_send": false
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
     }
   }
 }
@@ -325,26 +329,24 @@ make verify
 
 ### 9.1 基线配置（摘要）
 
-- `duration=1s`
-- `payload-size=512`
-- `workers=4`
-- `multicore=true`
-- `task-execution-model=pool`
-- `task-pool-size=2048`
-- `pps-sweep=2000,8000,16000,24000`
+- `duration=2s`
+- `warmup=1s`
+- `pps-sweep=4000,8000,16000,32000,64000,96000`
+- execution_model 场景：`payload_size=512, workers=2`
+- payload 场景：`execution_model=pool, workers=8`
 
 ### 9.2 最新关键吞吐指标（无丢包口径）
 
 | 协议 | 最优场景 | 最大PPS | 最大吞吐 |
 |---|---|---:|---:|
-| UDP | `execution_model=fastpath` | 96013 | 393.27 Mbps |
-| TCP | `payload_size=4096` | 96669 | 3167.64 Mbps |
-| TCP | `workers=8`（全场最高PPS） | 203232 | 832.44 Mbps |
+| UDP | `payload_size=512` | 32016 | 131.14 Mbps |
+| TCP | `payload_size=256`（全场最高PPS） | 313994 | 643.06 Mbps |
+| TCP | `payload_size=4096`（全场最高Mbps） | 98480 | 3227.00 Mbps |
 
 ### 9.3 结论
 
-- UDP 在本轮扫参中，`fastpath` 模式达到无丢包最高吞吐。
-- TCP 在增大 payload（`4096`）时可显著提升 Mbps；在 `workers=8` 时达到全场最高无丢包 PPS。
+- UDP 在本机环境下无丢包上限约 3.2 万 PPS，`payload_size=512` 的 Mbps 更高。
+- TCP 在小包（`payload_size=256`）达到全场最高 PPS，在大包（`4096`）达到全场最高 Mbps。
 
 完整测试过程、全量场景表格与 Top10 见：
 

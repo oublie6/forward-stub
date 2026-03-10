@@ -13,6 +13,7 @@ import (
 
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/logging"
+	"github.com/valyala/bytebufferpool"
 )
 
 type GnetTCPSender struct {
@@ -28,7 +29,7 @@ type GnetTCPSender struct {
 	conns atomic.Value // []gnet.Conn
 	rr    uint64
 
-	framePool sync.Pool
+	framePool bytebufferpool.Pool
 }
 
 // NewGnetTCPSender 负责该函数对应的核心逻辑，详见实现细节。
@@ -42,10 +43,6 @@ func NewGnetTCPSender(name, remote string, withU16BELen bool, concurrency int, g
 		withU16BELen: withU16BELen,
 		concurrency:  concurrency,
 		gnetLogLevel: logx.ParseGnetLogLevel(gnetLogLevel),
-		framePool: sync.Pool{New: func() any {
-			b := make([]byte, 0, 2048)
-			return &b
-		}},
 	}
 	s.conns.Store([]gnet.Conn(nil))
 	if err := s.ensureClientAndDial(); err != nil {
@@ -83,8 +80,8 @@ func (s *GnetTCPSender) Send(ctx context.Context, p *packet.Packet) error {
 	if n > 65535 {
 		return nil
 	}
-	bufPtr := s.framePool.Get().(*[]byte)
-	buf := *bufPtr
+	bb := s.framePool.Get()
+	buf := bb.B
 	if cap(buf) < 2+n {
 		buf = make([]byte, 2+n)
 	} else {
@@ -92,13 +89,13 @@ func (s *GnetTCPSender) Send(ctx context.Context, p *packet.Packet) error {
 	}
 	binary.BigEndian.PutUint16(buf[:2], uint16(n))
 	copy(buf[2:], p.Payload)
-	*bufPtr = buf
+	bb.B = buf
 
 	if err := c.AsyncWrite(buf, func(gnet.Conn, error) error {
-		s.releaseFrameBuf(bufPtr)
+		s.releaseFrameBuf(bb)
 		return nil
 	}); err != nil {
-		s.releaseFrameBuf(bufPtr)
+		s.releaseFrameBuf(bb)
 		_ = c.Close()
 		return err
 	}
@@ -184,16 +181,15 @@ func (s *GnetTCPSender) pickConn() gnet.Conn {
 	return conns[i]
 }
 
-func (s *GnetTCPSender) releaseFrameBuf(bufPtr *[]byte) {
-	if bufPtr == nil {
+func (s *GnetTCPSender) releaseFrameBuf(bb *bytebufferpool.ByteBuffer) {
+	if bb == nil {
 		return
 	}
-	b := *bufPtr
+	b := bb.B
 	if cap(b) > 64<<10 {
-		b = make([]byte, 0, 2048)
+		bb.B = make([]byte, 0, 2048)
 	} else {
-		b = b[:0]
+		bb.B = b[:0]
 	}
-	*bufPtr = b
-	s.framePool.Put(bufPtr)
+	s.framePool.Put(bb)
 }
