@@ -12,7 +12,9 @@
       "multicore": true,
       "num_event_loop": 0,
       "read_buffer_cap": 0,
-      "frame": ""
+      "frame": "",
+      "log_payload_recv": true,
+      "payload_log_max_bytes": 128
     },
     "udp_in2": {
       "type": "udp_gnet",
@@ -58,8 +60,8 @@
       "senders": [
         "udp_uni_out"
       ],
-      "log_payload_recv": true,
-      "log_payload_send": true
+      "log_payload_send": true,
+      "payload_log_max_bytes": 128
     },
     "udp_task_multicast": {
       "pool_size": 64,
@@ -83,11 +85,6 @@
     "max_size_mb": 100,
     "max_backups": 5,
     "max_age_days": 30,
-    "payload_log_tasks": [
-      "udp_task_unicast"
-    ],
-    "payload_log_recv": true,
-    "payload_log_send": true,
     "payload_log_max_bytes": 128
   }
 }

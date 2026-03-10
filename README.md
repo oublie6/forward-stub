@@ -144,7 +144,7 @@ Receiver(onPacket)
 - `max_size_mb/max_backups/max_age_days/compress`: 滚动日志策略
 - `traffic_stats_interval`: 吞吐聚合输出周期
 - `traffic_stats_sample_every`: 采样倍率
-- `payload_log_tasks/payload_log_recv/payload_log_send/payload_log_max_bytes`: payload 观测开关
+- `payload_log_max_bytes`: payload 摘要日志默认最大字节数（receiver/task 可覆盖）
 - `payload_pool_max_cached_bytes`: payload 内存池缓存上限字节数（<=0 表示不限制，默认不限制）
 
 ### 6.4 receiver 类型与字段
@@ -212,7 +212,8 @@ Receiver(onPacket)
 - `senders`: fan-out 下游
 - `execution_model`: `fastpath | pool | channel`
 - `pool_size`、`queue_size`、`channel_queue_size`
-- `log_payload_recv`、`log_payload_send`
+- receiver: `log_payload_recv`、`payload_log_max_bytes`
+- task: `log_payload_send`、`payload_log_max_bytes`
 
 ---
 
@@ -232,14 +233,11 @@ Receiver(onPacket)
     "compress": true,
     "traffic_stats_interval": "1s",
     "traffic_stats_sample_every": 1,
-    "payload_log_tasks": ["task_udp_to_tcp"],
-    "payload_log_recv": false,
-    "payload_log_send": false,
     "payload_log_max_bytes": 256,
     "payload_pool_max_cached_bytes": 0
   },
   "receivers": {
-    "rx_udp": {"type": "udp_gnet", "listen": "0.0.0.0:19000", "multicore": true},
+    "rx_udp": {"type": "udp_gnet", "listen": "0.0.0.0:19000", "multicore": true, "log_payload_recv": false, "payload_log_max_bytes": 256},
     "rx_tcp": {"type": "tcp_gnet", "listen": "0.0.0.0:19001", "frame": "u16be", "multicore": true},
     "rx_kafka": {
       "type": "kafka",
@@ -285,8 +283,8 @@ Receiver(onPacket)
       "pool_size": 2048,
       "queue_size": 4096,
       "channel_queue_size": 0,
-      "log_payload_recv": false,
-      "log_payload_send": false
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
     }
   }
 }

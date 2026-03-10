@@ -100,3 +100,37 @@ func TestTryRestartStoppedReceiversOnceMarksAttemptAndDoesNotRetry(t *testing.T)
 		t.Fatalf("expected no second retry mutation, got=%q want=%q", rs.LastStartError, firstErr)
 	}
 }
+
+func TestApplyBusinessDeltaUpdatesPayloadLogOptions(t *testing.T) {
+	st := NewStore()
+	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
+	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
+	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
+	st.subs["r1"] = map[string]struct{}{}
+	st.receivers["r1"] = &ReceiverState{Name: "r1", Cfg: config.ReceiverConfig{Type: "udp_gnet", Listen: ":1"}, Running: true}
+
+	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{PayloadLogMaxBytes: 128}, nil); err != nil {
+		t.Fatalf("add initial task: %v", err)
+	}
+
+	cfg := config.Config{
+		Version:   2,
+		Receivers: map[string]config.ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":1", LogPayloadRecv: true, PayloadLogMaxBytes: 64}},
+		Senders:   map[string]config.SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:12345"}},
+		Pipelines: map[string][]config.StageConfig{"p1": {}},
+		Tasks: map[string]config.TaskConfig{
+			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath", LogPayloadSend: true, PayloadLogMaxBytes: 32},
+		},
+		Logging: config.LoggingConfig{PayloadLogMaxBytes: 128},
+	}
+
+	if err := st.applyBusinessDelta(context.Background(), cfg); err != nil {
+		t.Fatalf("apply delta: %v", err)
+	}
+	if !st.receivers["r1"].LogPayloadRecv || st.receivers["r1"].PayloadLogMax != 64 {
+		t.Fatalf("receiver payload log options not updated: %+v", st.receivers["r1"])
+	}
+	if !st.tasks["t1"].T.LogPayloadSend || st.tasks["t1"].T.PayloadLogMax != 32 {
+		t.Fatalf("task payload log options not updated: %+v", st.tasks["t1"].T)
+	}
+}

@@ -28,6 +28,10 @@ type ReceiverState struct {
 	RestartAttempted bool
 	// LastStartError 记录最近一次 receiver 启动失败原因。
 	LastStartError string
+	// LogPayloadRecv 表示是否记录该 receiver 入站 payload。
+	LogPayloadRecv bool
+	// PayloadLogMax 是该 receiver payload 摘要最大字节数。
+	PayloadLogMax int
 }
 
 // SenderState 描述一个 sender 在运行时缓存中的状态。
