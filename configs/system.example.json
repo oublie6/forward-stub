@@ -12,5 +12,22 @@
     "compress": true,
     "traffic_stats_interval": "1s",
     "traffic_stats_sample_every": 1
+  },
+  "business_defaults": {
+    "task": {
+      "execution_model": "pool",
+      "pool_size": 4096,
+      "queue_size": 8192,
+      "channel_queue_size": 8192,
+      "payload_log_max_bytes": 256
+    },
+    "receiver": {
+      "multicore": true,
+      "num_event_loop": 8,
+      "payload_log_max_bytes": 256
+    },
+    "sender": {
+      "concurrency": 8
+    }
   }
 }

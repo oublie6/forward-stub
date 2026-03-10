@@ -125,11 +125,21 @@ Receiver(onPacket)
 
 ### 6.2 顶层结构
 
+`system-config`（系统级）示例：
+
+```json
+{
+  "control": {...},
+  "logging": {...},
+  "business_defaults": {...}
+}
+```
+
+`business-config`（热重载级）示例：
+
 ```json
 {
   "version": 1001,
-  "control": {...},
-  "logging": {...},
   "receivers": {...},
   "senders": {...},
   "pipelines": {...},
@@ -205,7 +215,15 @@ Receiver(onPacket)
 - `clear_file_meta`
 
 
-### 6.7 task 字段
+### 6.7 business_defaults（system-config）
+
+- `task.execution_model/pool_size/queue_size/channel_queue_size/payload_log_max_bytes`
+- `receiver.multicore/num_event_loop/payload_log_max_bytes`
+- `sender.concurrency`
+
+规则：business-config 显式配置优先；未配置时先使用 `business_defaults`，再回退代码内置默认值。
+
+### 6.8 task 字段
 
 - `receivers`: 订阅哪些 receiver
 - `pipelines`: 按顺序执行

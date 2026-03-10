@@ -30,13 +30,13 @@ func main() {
 		return
 	}
 
-	sysPath, bizPath, err := resolveConfigPaths(*legacyPath, *systemPath, *businessPath)
+	sysPath, bizPath, err := config.ResolveConfigPaths(*legacyPath, *systemPath, *businessPath)
 	if err != nil {
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
 		os.Exit(1)
 	}
 
-	sysCfg, bizCfg, cfg, err := loadConfigPair(sysPath, bizPath)
+	sysCfg, bizCfg, cfg, err := loadConfigPair(context.Background(), sysPath, bizPath)
 	if err != nil {
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
 		os.Exit(1)
@@ -152,22 +152,9 @@ func watchConfigFile(path, initialFingerprint, watchInterval string, notifyCh ch
 	}
 }
 
-func resolveConfigPaths(legacyPath, systemPath, businessPath string) (string, string, error) {
-	if systemPath != "" || businessPath != "" {
-		if systemPath == "" || businessPath == "" {
-			return "", "", fmt.Errorf("must provide both -system-config and -business-config")
-		}
-		return systemPath, businessPath, nil
-	}
-	if legacyPath == "" {
-		return "", "", fmt.Errorf("must provide -system-config and -business-config, or use -config as legacy mode")
-	}
-	return legacyPath, legacyPath, nil
-}
-
 func reloadAndApplyBusinessConfig(ctx context.Context, rt *app.Runtime, systemPath, businessPath, sourceKey, sourceValue string) (config.Config, bool) {
 	lg := logx.L()
-	systemCfg, businessCfg, next, err := loadConfigPair(systemPath, businessPath)
+	systemCfg, businessCfg, next, err := loadConfigPair(ctx, systemPath, businessPath)
 	if err != nil {
 		lg.Errorw("reload config failed", sourceKey, sourceValue, "error", err)
 		return config.Config{}, false
@@ -184,20 +171,14 @@ func reloadAndApplyBusinessConfig(ctx context.Context, rt *app.Runtime, systemPa
 	return next, true
 }
 
-func loadConfigPair(systemPath, businessPath string) (config.SystemConfig, config.BusinessConfig, config.Config, error) {
-	sys, err := config.LoadSystemLocal(systemPath)
+func loadConfigPair(ctx context.Context, systemPath, businessPath string) (config.SystemConfig, config.BusinessConfig, config.Config, error) {
+	sys, biz, cfg, err := config.LoadLocalPair(systemPath, businessPath)
 	if err != nil {
-		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("load system config error: %w", err)
+		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, err
 	}
-	biz, err := config.LoadBusinessLocal(businessPath)
-	if err != nil {
-		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("load business config error: %w", err)
-	}
-	cfg := sys.Merge(biz)
-	cfg.ApplyDefaults()
 	if cfg.Control.API != "" {
 		cli := control.NewConfigAPIClient(cfg.Control.API, cfg.Control.TimeoutSec)
-		cfg, err = cli.FetchConfig(context.Background())
+		cfg, err = cli.FetchConfig(ctx)
 		if err != nil {
 			return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("fetch config from api error: %w", err)
 		}
