@@ -22,4 +22,5 @@ require (
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.25 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.12.0 // indirect
+	go.uber.org/automaxprocs v1.6.0 // indirect
 )
