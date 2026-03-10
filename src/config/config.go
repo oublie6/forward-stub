@@ -4,6 +4,7 @@ package config
 const (
 	DefaultControlTimeoutSec         = 5
 	DefaultConfigWatchInterval       = "2s"
+	DefaultPprofPort                 = 0
 	DefaultLogLevel                  = "info"
 	DefaultTrafficStatsInterval      = "1s"
 	DefaultTrafficStatsSampleEvery   = 1
@@ -106,6 +107,9 @@ type ControlConfig struct {
 	// ConfigWatchInterval 是本地业务配置文件变更检测间隔，如 "2s"。
 	// 用法：值越小热更新越及时，但会增加文件读取开销。
 	ConfigWatchInterval string `json:"config_watch_interval,omitempty"`
+	// PprofPort 是 pprof HTTP 服务端口；<=0 表示禁用。
+	// 用法：配置后可通过 /debug/pprof/* 触发采集与诊断。
+	PprofPort int `json:"pprof_port,omitempty"`
 }
 
 // LoggingConfig 描述日志输出与流量统计参数。

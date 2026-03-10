@@ -5,14 +5,19 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime"
 	"time"
 
 	"forward-stub/src/app"
 	"forward-stub/src/config"
 	"forward-stub/src/control"
 	"forward-stub/src/logx"
+
+	_ "go.uber.org/automaxprocs/maxprocs"
 )
 
 var version = "dev"
@@ -63,6 +68,8 @@ func main() {
 	defer func() { _ = logx.Sync() }()
 	lg := logx.L()
 
+	pprofSrv := startPprofServer(lg, cfg.Control.PprofPort)
+
 	rt := app.NewRuntime()
 	if err := rt.UpdateCache(context.Background(), cfg); err != nil {
 		lg.Errorf("UpdateCache error: %v", err)
@@ -85,7 +92,7 @@ func main() {
 	defer close(watchDone)
 
 	_ = bizCfg
-	lg.Info("forward-stub started. Press Ctrl+C to stop.")
+	logStartupInfo(lg, sysPath, bizPath, cfg)
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, supportedSignals()...)
 	defer signal.Stop(sigCh)
@@ -103,6 +110,7 @@ func main() {
 
 			if isStopSignal(s) {
 				_ = rt.Stop(context.Background())
+				shutdownPprofServer(pprofSrv, lg)
 				lg.Info("forward-stub stopped.")
 				return
 			}
@@ -116,6 +124,58 @@ func main() {
 			}
 			lg.Infow("reload business config success", "source", "file-watch", "version", next.Version)
 		}
+	}
+}
+
+func logStartupInfo(lg interface {
+	Infow(string, ...interface{})
+	Info(...interface{})
+}, systemPath, businessPath string, cfg config.Config) {
+	lg.Infow("forward-stub startup",
+		"version", version,
+		"go_version", runtime.Version(),
+		"gomaxprocs", runtime.GOMAXPROCS(0),
+		"host_cpu_cores", runtime.NumCPU(),
+		"pid", os.Getpid(),
+		"system_config", systemPath,
+		"business_config", businessPath,
+		"config_version", cfg.Version,
+	)
+	lg.Info("forward-stub started. Press Ctrl+C to stop.")
+}
+
+func startPprofServer(lg interface {
+	Infow(string, ...interface{})
+	Warnw(string, ...interface{})
+}, port int) *http.Server {
+	if port <= 0 {
+		return nil
+	}
+	addr := fmt.Sprintf(":%d", port)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	srv := &http.Server{Addr: addr, Handler: mux}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			lg.Warnw("pprof http server exited unexpectedly", "addr", addr, "error", err)
+		}
+	}()
+	lg.Infow("pprof http server enabled", "addr", addr)
+	return srv
+}
+
+func shutdownPprofServer(srv *http.Server, lg interface{ Warnw(string, ...interface{}) }) {
+	if srv == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		lg.Warnw("shutdown pprof http server failed", "addr", srv.Addr, "error", err)
 	}
 }
 

@@ -1,7 +1,8 @@
 {
   "control": {
     "timeout_sec": 5,
-    "config_watch_interval": "2s"
+    "config_watch_interval": "2s",
+    "pprof_port": 6060
   },
   "logging": {
     "level": "info",
