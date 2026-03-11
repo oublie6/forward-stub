@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"forward-stub/src/config"
 	"forward-stub/src/pipeline"
@@ -102,6 +103,38 @@ func compileStage(sc config.StageConfig) (pipeline.StageFunc, error) {
 		return pipeline.MarkAsFileChunk(sc.Path, eof), nil
 	case "clear_file_meta":
 		return pipeline.ClearFileMeta(), nil
+
+	case "route_offset_bytes_sender":
+		if len(sc.Cases) == 0 {
+			return nil, fmt.Errorf("route_offset_bytes_sender requires non-empty cases")
+		}
+		keys := make([]string, 0, len(sc.Cases))
+		for k := range sc.Cases {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		routes := make(map[string]string, len(sc.Cases))
+		keyLen := -1
+		for _, hk := range keys {
+			v, err := hex.DecodeString(hk)
+			if err != nil {
+				return nil, fmt.Errorf("route case %s invalid hex: %w", hk, err)
+			}
+			if len(v) == 0 {
+				return nil, fmt.Errorf("route case %s empty hex", hk)
+			}
+			if keyLen < 0 {
+				keyLen = len(v)
+			} else if len(v) != keyLen {
+				return nil, fmt.Errorf("route case %s length mismatch, want %d got %d", hk, keyLen, len(v))
+			}
+			sn := sc.Cases[hk]
+			if sn == "" {
+				return nil, fmt.Errorf("route case %s sender empty", hk)
+			}
+			routes[string(v)] = sn
+		}
+		return pipeline.RouteSenderByOffsetBytes(sc.Offset, keyLen, routes, sc.DefaultSender), nil
 	default:
 		return nil, fmt.Errorf("unknown stage type: %s", sc.Type)
 	}

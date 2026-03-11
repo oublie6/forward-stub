@@ -59,6 +59,9 @@ type Meta struct {
 	// EOF 标记该 chunk 是否为该文件最后一个分块。
 	// 用法：sender 通常在 EOF 且写满 total_size 后触发最终提交。
 	EOF bool
+	// RouteSender 是 pipeline 可选填充的“目标 sender 名称”。
+	// 用法：当该值非空时，task 仅向同名 sender 发送，支持单任务内按字段分流。
+	RouteSender string
 }
 
 // Envelope 是实际传递给 pipeline/sender 的数据单元。
