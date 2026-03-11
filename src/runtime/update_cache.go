@@ -775,7 +775,11 @@ func (st *Store) gcUnusedStageCache() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	for sig, entry := range st.stageCache {
-		if entry == nil || entry.TaskRefs > 0 {
+		if entry == nil {
+			delete(st.stageCache, sig)
+			continue
+		}
+		if entry.TaskRefs > 0 {
 			continue
 		}
 		delete(st.stageCache, sig)
