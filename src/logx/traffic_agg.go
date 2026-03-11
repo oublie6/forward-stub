@@ -63,16 +63,8 @@ type TaskRuntimeStats struct {
 	FastPath       bool
 }
 
-type ReceiverRuntimeStats struct {
-	Running          bool
-	RestartAttempted bool
-	LastStartError   string
-}
-
 var taskRuntimeStatsMu sync.RWMutex
 var taskRuntimeStatsFn = make(map[string]func() TaskRuntimeStats)
-var receiverRuntimeStatsMu sync.RWMutex
-var receiverRuntimeStatsFn = make(map[string]func() ReceiverRuntimeStats)
 
 // RegisterTaskRuntimeStats 注册 task 运行时统计回调，供聚合日志输出线程池状态。
 func RegisterTaskRuntimeStats(task string, fn func() TaskRuntimeStats) {
@@ -113,39 +105,6 @@ func listTaskRuntimeStats() map[string]TaskRuntimeStats {
 			continue
 		}
 		out[task] = fn()
-	}
-	return out
-}
-
-// RegisterReceiverRuntimeStats 注册 receiver 运行时统计回调，供聚合日志输出运行状态。
-func RegisterReceiverRuntimeStats(receiver string, fn func() ReceiverRuntimeStats) {
-	if receiver == "" || fn == nil {
-		return
-	}
-	receiverRuntimeStatsMu.Lock()
-	receiverRuntimeStatsFn[receiver] = fn
-	receiverRuntimeStatsMu.Unlock()
-}
-
-// UnregisterReceiverRuntimeStats 注销 receiver 运行时统计回调。
-func UnregisterReceiverRuntimeStats(receiver string) {
-	if receiver == "" {
-		return
-	}
-	receiverRuntimeStatsMu.Lock()
-	delete(receiverRuntimeStatsFn, receiver)
-	receiverRuntimeStatsMu.Unlock()
-}
-
-func listReceiverRuntimeStats() map[string]ReceiverRuntimeStats {
-	receiverRuntimeStatsMu.RLock()
-	defer receiverRuntimeStatsMu.RUnlock()
-	out := make(map[string]ReceiverRuntimeStats, len(receiverRuntimeStatsFn))
-	for receiver, fn := range receiverRuntimeStatsFn {
-		if fn == nil {
-			continue
-		}
-		out[receiver] = fn()
 	}
 	return out
 }
@@ -291,25 +250,14 @@ func (h *trafficStatsHub) flush(elapsed, interval time.Duration) {
 		}
 		summary.addRuntimeOnlyTask(task, runtime)
 	}
-	for receiver, runtime := range listReceiverRuntimeStats() {
-		summary.addReceiverRuntime(receiver, runtime)
-	}
 	if summary.hasData() {
 		summary.log()
 	}
 }
 
 type trafficSummary struct {
-	Uptime    string                `json:"uptime"`
-	Tasks     []taskAggregateStats  `json:"tasks"`
-	Receivers []receiverRuntimeItem `json:"receivers,omitempty"`
-}
-
-type receiverRuntimeItem struct {
-	Receiver         string `json:"receiver"`
-	Running          bool   `json:"running"`
-	RestartAttempted bool   `json:"restart_attempted"`
-	LastStartError   string `json:"last_start_error,omitempty"`
+	Uptime string               `json:"uptime"`
+	Tasks  []taskAggregateStats `json:"tasks"`
 }
 
 type taskAggregateStats struct {
@@ -387,7 +335,7 @@ func diffCounter(cur, prev uint64) uint64 {
 }
 
 func (s *trafficSummary) hasData() bool {
-	return len(s.Tasks) > 0 || len(s.Receivers) > 0
+	return len(s.Tasks) > 0
 }
 
 func (s *trafficSummary) log() {
@@ -412,15 +360,6 @@ func (s *trafficSummary) addRuntimeOnlyTask(task string, runtime TaskRuntimeStat
 			Inflight:       runtime.Inflight,
 			FastPath:       runtime.FastPath,
 		},
-	})
-}
-
-func (s *trafficSummary) addReceiverRuntime(receiver string, runtime ReceiverRuntimeStats) {
-	s.Receivers = append(s.Receivers, receiverRuntimeItem{
-		Receiver:         receiver,
-		Running:          runtime.Running,
-		RestartAttempted: runtime.RestartAttempted,
-		LastStartError:   runtime.LastStartError,
 	})
 }
 

@@ -4,7 +4,6 @@ package runtime
 import (
 	"context"
 	"forward-stub/src/config"
-	"forward-stub/src/logx"
 	"sync"
 	"sync/atomic"
 
@@ -111,7 +110,6 @@ func (s *Store) StopAll(ctx context.Context) error {
 	for _, r := range receivers {
 		r := r
 		rg.Go(func() error {
-			logx.UnregisterReceiverRuntimeStats(r.Name)
 			if err := r.Recv.Stop(rctx); err != nil {
 				rmu.Lock()
 				errs = multierr.Append(errs, err)

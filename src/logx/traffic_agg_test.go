@@ -67,23 +67,3 @@ func TestTrafficSummaryIncludesRuntimeOnlyTaskWithoutTraffic(t *testing.T) {
 		t.Fatalf("unexpected runtime-only worker stats: %+v", item.WorkerPool)
 	}
 }
-
-func TestTrafficSummaryIncludesReceiverRuntimeStats(t *testing.T) {
-	RegisterReceiverRuntimeStats("rx-a", func() ReceiverRuntimeStats {
-		return ReceiverRuntimeStats{Running: false, RestartAttempted: true, LastStartError: "bind failed"}
-	})
-	defer UnregisterReceiverRuntimeStats("rx-a")
-
-	s := newTrafficSummary(time.Second)
-	s.addReceiverRuntime("rx-a", listReceiverRuntimeStats()["rx-a"])
-	if len(s.Receivers) != 1 {
-		t.Fatalf("expected one receiver runtime item, got %d", len(s.Receivers))
-	}
-	item := s.Receivers[0]
-	if item.Receiver != "rx-a" || item.Running || !item.RestartAttempted || item.LastStartError != "bind failed" {
-		t.Fatalf("unexpected receiver runtime item: %+v", item)
-	}
-	if !s.hasData() {
-		t.Fatalf("summary with receiver runtime stats should be considered having data")
-	}
-}

@@ -74,9 +74,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		lg.Infow("updating runtime cache", "version", cfg.Version, "receivers", len(cfg.Receivers), "tasks", len(cfg.Tasks), "senders", len(cfg.Senders))
 	}
 
-	st.tryRestartStoppedReceiversOnce(ctx, cfg.Receivers, cfg.Logging.Level)
-
-	if st.canApplyBusinessDelta(cfg) {
+	if st.canApplyBusinessDelta() {
 		if err := st.applyBusinessDelta(ctx, cfg); err != nil {
 			return err
 		}
@@ -116,19 +114,12 @@ func (st *Store) loggingPayloadLogMaxBytes() int {
 
 // canApplyBusinessDelta 判断当前是否可走“增量热更新”路径。
 //
-// 约束：
-//  1. 当前必须已有运行态对象（不是冷启动）；
-//  2. 现存 receiver 必须都处于 Running，避免在不一致状态上继续增量变更。
-func (st *Store) canApplyBusinessDelta(cfg config.Config) bool {
+// 约束：当前必须已有运行态对象（不是冷启动）。
+func (st *Store) canApplyBusinessDelta() bool {
 	st.mu.RLock()
 	defer st.mu.RUnlock()
 	if len(st.receivers) == 0 && len(st.senders) == 0 && len(st.tasks) == 0 {
 		return false
-	}
-	for _, rs := range st.receivers {
-		if !rs.Running {
-			return false
-		}
 	}
 	return true
 }
@@ -149,9 +140,6 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 
 	// 一次性替换 store 内部索引，确保新配置以完整快照生效。
 	st.mu.Lock()
-	for name := range st.receivers {
-		logx.UnregisterReceiverRuntimeStats(name)
-	}
 	st.receivers = make(map[string]*ReceiverState)
 	st.senders = make(map[string]*SenderState)
 	st.tasks = make(map[string]*TaskState)
@@ -262,7 +250,6 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 			st.subs[name] = make(map[string]struct{})
 		}
 		st.mu.Unlock()
-		st.registerReceiverRuntimeStats(name)
 		st.startReceiver(ctx, name, r)
 	}
 	st.refreshRecvPayloadLogOptions()
@@ -377,8 +364,8 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 // splitDeltaWithReplace 计算两份命名配置的差异集合。
 //
 // 返回值语义：
-//  - added: 新增项 + 配置内容发生变化而需要“重建”的项；
-//  - removed: 删除项 + 配置内容发生变化而需要“下线旧实例”的项。
+//   - added: 新增项 + 配置内容发生变化而需要“重建”的项；
+//   - removed: 删除项 + 配置内容发生变化而需要“下线旧实例”的项。
 //
 // 通过“变更视为 remove+add”统一后续处理模型，可减少分支复杂度。
 func splitDeltaWithReplace[T any](oldMap, newMap map[string]T) (added []string, removed []string) {
@@ -488,7 +475,6 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 			st.subs[name] = make(map[string]struct{})
 		}
 		st.mu.Unlock()
-		st.registerReceiverRuntimeStats(name)
 		st.startReceiver(ctx, name, r)
 		if ok && old != nil && old.Recv != nil {
 			_ = old.Recv.Stop(ctx)
@@ -502,7 +488,6 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 		}
 		delete(st.receivers, name)
 		delete(st.subs, name)
-		logx.UnregisterReceiverRuntimeStats(name)
 		go rs.Recv.Stop(ctx)
 	}
 	st.mu.Unlock()
@@ -510,109 +495,12 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 	return nil
 }
 
-// tryRestartStoppedReceiversOnce 尝试“自愈式”重启一次已停止的 receiver。
-//
-// 触发条件：
-//  1. 当前 receiver 处于非 Running；
-//  2. 本轮尚未尝试重启；
-//  3. 新配置中仍存在且配置内容未变化。
-//
-// 设计目标：在不触发全量替换的情况下，快速拉起短暂失败的入口。
-func (st *Store) tryRestartStoppedReceiversOnce(ctx context.Context, next map[string]config.ReceiverConfig, gnetLogLevel string) {
-	type restartCandidate struct {
-		name string
-		cfg  config.ReceiverConfig
-	}
-
-	candidates := make([]restartCandidate, 0)
-	st.mu.RLock()
-	for name, rs := range st.receivers {
-		if rs.Running || rs.RestartAttempted {
-			continue
-		}
-		rc, ok := next[name]
-		if !ok || !reflect.DeepEqual(rs.Cfg, rc) {
-			continue
-		}
-		candidates = append(candidates, restartCandidate{name: name, cfg: rc})
-	}
-	st.mu.RUnlock()
-
-	for _, c := range candidates {
-		st.mu.Lock()
-		rs := st.receivers[c.name]
-		if rs == nil || rs.Running || rs.RestartAttempted || !reflect.DeepEqual(rs.Cfg, c.cfg) {
-			st.mu.Unlock()
-			continue
-		}
-		rs.RestartAttempted = true
-		st.mu.Unlock()
-
-		r, err := buildReceiver(c.name, c.cfg, gnetLogLevel)
-		if err != nil {
-			st.mu.Lock()
-			if rs := st.receivers[c.name]; rs != nil {
-				rs.LastStartError = err.Error()
-			}
-			st.mu.Unlock()
-			logx.L().Errorw("receiver restart build failed", "receiver", c.name, "error", err)
-			continue
-		}
-
-		var old receiver.Receiver
-		st.mu.Lock()
-		if rs := st.receivers[c.name]; rs != nil {
-			old = rs.Recv
-			rs.Recv = r
-			rs.Cfg = c.cfg
-			rs.LastStartError = ""
-		}
-		st.mu.Unlock()
-
-		if old != nil {
-			_ = old.Stop(ctx)
-		}
-		st.registerReceiverRuntimeStats(c.name)
-		st.startReceiver(ctx, c.name, r)
-	}
-}
-
-// registerReceiverRuntimeStats 注册 receiver 运行态快照回调。
-//
-// 聚合日志线程会周期性调用该回调，输出 receiver 运行状态与最近错误。
-func (st *Store) registerReceiverRuntimeStats(name string) {
-	logx.RegisterReceiverRuntimeStats(name, func() logx.ReceiverRuntimeStats {
-		st.mu.RLock()
-		defer st.mu.RUnlock()
-		rs := st.receivers[name]
-		if rs == nil {
-			return logx.ReceiverRuntimeStats{}
-		}
-		return logx.ReceiverRuntimeStats{Running: rs.Running, RestartAttempted: rs.RestartAttempted, LastStartError: rs.LastStartError}
-	})
-}
-
-// startReceiver 异步启动单个 receiver，并在退出时回填运行状态。
+// startReceiver 异步启动单个 receiver。
 //
 // receiver 回调统一进入 dispatch，负责 fan-out 到相关 task。
 func (st *Store) startReceiver(ctx context.Context, name string, r receiver.Receiver) {
-	st.mu.Lock()
-	if rs := st.receivers[name]; rs != nil {
-		rs.Running = true
-		rs.LastStartError = ""
-	}
-	st.mu.Unlock()
-
 	go func(r receiver.Receiver, rn string) {
 		err := r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) })
-		st.mu.Lock()
-		if rs := st.receivers[rn]; rs != nil && rs.Recv == r {
-			rs.Running = false
-			if err != nil {
-				rs.LastStartError = err.Error()
-			}
-		}
-		st.mu.Unlock()
 		if err != nil {
 			logx.L().Errorw("receiver stopped with error", "receiver", rn, "error", err)
 		}
