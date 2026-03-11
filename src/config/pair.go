@@ -27,6 +27,5 @@ func LoadLocalPair(systemPath, businessPath string) (SystemConfig, BusinessConfi
 		return SystemConfig{}, BusinessConfig{}, Config{}, fmt.Errorf("load business config error: %w", err)
 	}
 	cfg := sys.Merge(biz)
-	cfg.ApplyDefaults()
 	return sys, biz, cfg, nil
 }

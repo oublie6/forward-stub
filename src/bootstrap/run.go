@@ -143,6 +143,48 @@ func logStartupInfo(lg interface {
 	lg.Info("forward-stub started. Press Ctrl+C to stop.")
 }
 
+type pprofResponseRecorder struct {
+	http.ResponseWriter
+	status int
+	size   int
+}
+
+func (r *pprofResponseRecorder) WriteHeader(statusCode int) {
+	r.status = statusCode
+	r.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (r *pprofResponseRecorder) Write(b []byte) (int, error) {
+	if r.status == 0 {
+		r.status = http.StatusOK
+	}
+	n, err := r.ResponseWriter.Write(b)
+	r.size += n
+	return n, err
+}
+
+func withPprofRequestLog(next http.Handler, lg interface{ Infow(string, ...interface{}) }) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rw := &pprofResponseRecorder{ResponseWriter: w}
+		next.ServeHTTP(rw, r)
+		status := rw.status
+		if status == 0 {
+			status = http.StatusOK
+		}
+		lg.Infow("pprof request completed",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"query", r.URL.RawQuery,
+			"remote_addr", r.RemoteAddr,
+			"user_agent", r.UserAgent(),
+			"status", status,
+			"response_bytes", rw.size,
+			"duration", time.Since(start).String(),
+		)
+	})
+}
+
 func startPprofServer(lg interface {
 	Infow(string, ...interface{})
 	Warnw(string, ...interface{})
@@ -157,7 +199,7 @@ func startPprofServer(lg interface {
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	srv := &http.Server{Addr: addr, Handler: mux}
+	srv := &http.Server{Addr: addr, Handler: withPprofRequestLog(mux, lg)}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			lg.Warnw("pprof http server exited unexpectedly", "addr", addr, "error", err)
@@ -240,8 +282,8 @@ func loadConfigPair(ctx context.Context, systemPath, businessPath string) (confi
 		if err != nil {
 			return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("fetch config from api error: %w", err)
 		}
-		cfg.ApplyDefaults()
 	}
+	cfg.ApplyDefaults()
 	if err := cfg.Validate(); err != nil {
 		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("config validate error: %w", err)
 	}

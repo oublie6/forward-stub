@@ -13,7 +13,12 @@ import (
 )
 
 // Store 持有运行时对象的全集快照。
-//
+
+type recvPayloadLogOption struct {
+	enabled bool
+	max     int
+}
+
 // 设计说明：
 //  1. 通过单把互斥锁保护元数据 map，避免复杂的细粒度锁导致状态不一致；
 //  2. UpdateCache 在重建时整体替换 map，Store 提供“快照后异步处理”的能力；
@@ -38,6 +43,8 @@ type Store struct {
 
 	// dispatchSubs 保存 receiver -> tasks 的只读快照，供 dispatch 热路径无锁读取。
 	dispatchSubs atomic.Value // map[string][]*TaskState
+	// recvPayloadLogOptions 保存 receiver payload 日志配置只读快照，供 dispatch 热路径无锁读取。
+	recvPayloadLogOptions atomic.Value // map[string]recvPayloadLogOption
 
 	payloadLogDefaultMax int
 }
@@ -55,6 +62,7 @@ func NewStore() *Store {
 		subs:              make(map[string]map[string]struct{}),
 	}
 	s.dispatchSubs.Store(map[string][]*TaskState{})
+	s.recvPayloadLogOptions.Store(map[string]recvPayloadLogOption{})
 	return s
 }
 
@@ -136,4 +144,19 @@ func (s *Store) StopAll(ctx context.Context) error {
 	_ = sg.Wait()
 
 	return errs
+}
+
+// setRecvPayloadLogOptions 负责该函数对应的核心逻辑，详见实现细节。
+func (s *Store) setRecvPayloadLogOptions(m map[string]recvPayloadLogOption) {
+	s.recvPayloadLogOptions.Store(m)
+}
+
+// getRecvPayloadLogOption 负责该函数对应的核心逻辑，详见实现细节。
+func (s *Store) getRecvPayloadLogOption(receiver string) (recvPayloadLogOption, bool) {
+	v := s.recvPayloadLogOptions.Load()
+	if v == nil {
+		return recvPayloadLogOption{}, false
+	}
+	opt, ok := v.(map[string]recvPayloadLogOption)[receiver]
+	return opt, ok
 }

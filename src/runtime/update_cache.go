@@ -129,6 +129,7 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	st.mu.Unlock()
 	st.gcUnusedStageCache()
 	st.setDispatchSubs(map[string][]*TaskState{})
+	st.setRecvPayloadLogOptions(map[string]recvPayloadLogOption{})
 
 	// 1) 构建 senders：任务阶段需要引用 sender 实例。
 	for name, sc := range cfg.Senders {
@@ -230,6 +231,7 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 		st.registerReceiverRuntimeStats(name)
 		st.startReceiver(ctx, name, r)
 	}
+	st.refreshRecvPayloadLogOptions()
 
 	return nil
 }
@@ -443,6 +445,7 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 		go rs.Recv.Stop(ctx)
 	}
 	st.mu.Unlock()
+	st.refreshRecvPayloadLogOptions()
 	return nil
 }
 
@@ -789,8 +792,8 @@ func senderConfigSnapshot(m map[string]*SenderState) map[string]config.SenderCon
 //  3. 单订阅者直接复用原始包，减少一次额外复制。
 func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.Packet) {
 	tasks := st.getDispatchTasks(receiverName)
-	if enabled, maxBytes := st.payloadLogRecvOptions(receiverName); enabled {
-		logReceiverPayload(receiverName, pkt, maxBytes)
+	if opt, ok := st.getRecvPayloadLogOption(receiverName); ok && opt.enabled {
+		logReceiverPayload(receiverName, pkt, opt.max)
 	}
 
 	if len(tasks) == 0 {
@@ -814,14 +817,17 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 	first.T.Handle(ctx, pkt)
 }
 
-func (st *Store) payloadLogRecvOptions(receiverName string) (bool, int) {
+func (st *Store) refreshRecvPayloadLogOptions() {
+	snapshot := make(map[string]recvPayloadLogOption)
 	st.mu.RLock()
-	defer st.mu.RUnlock()
-	rs := st.receivers[receiverName]
-	if rs == nil {
-		return false, 0
+	for name, rs := range st.receivers {
+		if rs == nil {
+			continue
+		}
+		snapshot[name] = recvPayloadLogOption{enabled: rs.LogPayloadRecv, max: rs.PayloadLogMax}
 	}
-	return rs.LogPayloadRecv, rs.PayloadLogMax
+	st.mu.RUnlock()
+	st.setRecvPayloadLogOptions(snapshot)
 }
 
 func logReceiverPayload(receiver string, pkt *packet.Packet, maxBytes int) {
