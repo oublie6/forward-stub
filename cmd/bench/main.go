@@ -405,7 +405,7 @@ func waitForSinkDrain(m *metrics, maxWait, stableFor time.Duration) {
 
 // benchConfig 负责该函数对应的核心逻辑，详见实现细节。
 func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize, taskQueueSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, workers int) config.Config {
-	rc := config.ReceiverConfig{Multicore: multicore, NumEventLoop: receiverEventLoops, ReadBufferCap: receiverReadBufferCap}
+	rc := config.ReceiverConfig{Multicore: &multicore, NumEventLoop: receiverEventLoops, ReadBufferCap: receiverReadBufferCap}
 	sc := config.SenderConfig{Concurrency: 1}
 	switch proto {
 	case "udp":

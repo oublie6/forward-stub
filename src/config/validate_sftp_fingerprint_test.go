@@ -13,6 +13,7 @@ func TestValidateSSHHostKeyFingerprint(t *testing.T) {
 		{name: "bad prefix", in: "MD5:abc", valid: false},
 		{name: "missing digest", in: "SHA256:", valid: false},
 		{name: "invalid base64", in: "SHA256:***", valid: false},
+		{name: "wrong digest length", in: "SHA256:YWJj", valid: false},
 	}
 	for _, tc := range cases {
 		err := ValidateSSHHostKeyFingerprint(tc.in)

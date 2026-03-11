@@ -863,7 +863,10 @@ func payloadHex(b []byte, max int) string {
 
 // buildReceiver 负责该函数对应的核心逻辑，详见实现细节。
 func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (receiver.Receiver, error) {
-	multicore := rc.Multicore
+	multicore := config.DefaultReceiverMulticore
+	if rc.Multicore != nil {
+		multicore = *rc.Multicore
+	}
 	numEventLoop := rc.NumEventLoop
 	if numEventLoop <= 0 {
 		numEventLoop = config.DefaultReceiverNumEventLoop
