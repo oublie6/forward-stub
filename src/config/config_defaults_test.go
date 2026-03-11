@@ -13,10 +13,10 @@ func TestApplyDefaultsSetsControlDefaults(t *testing.T) {
 	}
 }
 
-func TestApplyDefaultsNormalizesNegativePprofPort(t *testing.T) {
+func TestApplyDefaultsKeepsDisabledPprofPort(t *testing.T) {
 	cfg := Config{Control: ControlConfig{PprofPort: -1}}
 	cfg.ApplyDefaults()
-	if cfg.Control.PprofPort != 0 {
+	if cfg.Control.PprofPort != -1 {
 		t.Fatalf("unexpected pprof_port after defaults: %d", cfg.Control.PprofPort)
 	}
 }

@@ -27,8 +27,8 @@ func (c *Config) Validate() error {
 		return errors.New("logging payload_pool_max_cached_bytes must be >= 0")
 	}
 
-	if c.Control.PprofPort < 0 || c.Control.PprofPort > 65535 {
-		return errors.New("control pprof_port must be in [0,65535]")
+	if c.Control.PprofPort < -1 || c.Control.PprofPort > 65535 {
+		return errors.New("control pprof_port must be in [-1,65535]")
 	}
 
 	for tn, t := range c.Tasks {
