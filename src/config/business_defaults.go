@@ -2,6 +2,11 @@ package config
 
 import "runtime"
 
+const (
+	defaultTaskPoolPerCPUFactor  = 256
+	defaultTaskQueuePerCPUFactor = 512
+)
+
 // Merge 将系统配置与业务配置拼装为运行时使用的完整 Config。
 func (s SystemConfig) Merge(b BusinessConfig) Config {
 	cfg := Config{
@@ -104,11 +109,15 @@ func (c *Config) ApplyDefaults() {
 		c.Logging.PayloadPoolMaxCachedBytes = DefaultPayloadPoolMaxCachedBytes
 	}
 	for name, tc := range c.Tasks {
+		profile := c.inferTaskProtocol(tc)
+		if tc.ExecutionModel == "" {
+			tc.ExecutionModel = defaultTaskExecutionModel(profile)
+		}
 		if tc.PoolSize <= 0 {
-			tc.PoolSize = DefaultTaskPoolSize
+			tc.PoolSize = defaultTaskPoolSize(profile)
 		}
 		if tc.QueueSize <= 0 {
-			tc.QueueSize = DefaultTaskQueueSize
+			tc.QueueSize = defaultTaskQueueSize(profile)
 		}
 		if tc.ChannelQueueSize <= 0 {
 			tc.ChannelQueueSize = tc.QueueSize
@@ -120,10 +129,10 @@ func (c *Config) ApplyDefaults() {
 	}
 	for name, rc := range c.Receivers {
 		if !rc.Multicore {
-			rc.Multicore = DefaultReceiverMulticore
+			rc.Multicore = defaultReceiverMulticore(rc.Type)
 		}
 		if rc.NumEventLoop <= 0 {
-			rc.NumEventLoop = max(DefaultReceiverNumEventLoop, runtime.NumCPU())
+			rc.NumEventLoop = defaultReceiverEventLoops(rc.Type)
 		}
 		if rc.PayloadLogMaxBytes <= 0 {
 			rc.PayloadLogMaxBytes = c.Logging.PayloadLogMaxBytes
@@ -132,10 +141,105 @@ func (c *Config) ApplyDefaults() {
 	}
 	for name, sc := range c.Senders {
 		if sc.Concurrency <= 0 {
-			sc.Concurrency = DefaultSenderConcurrency
+			sc.Concurrency = defaultSenderConcurrency(sc.Type)
 		}
 		c.Senders[name] = sc
 	}
+}
+
+func (c *Config) inferTaskProtocol(tc TaskConfig) string {
+	for _, rn := range tc.Receivers {
+		rc, ok := c.Receivers[rn]
+		if !ok {
+			continue
+		}
+		if p := normalizeProtocol(rc.Type); p != "" {
+			return p
+		}
+	}
+	for _, sn := range tc.Senders {
+		sc, ok := c.Senders[sn]
+		if !ok {
+			continue
+		}
+		if p := normalizeProtocol(sc.Type); p != "" {
+			return p
+		}
+	}
+	return ""
+}
+
+func normalizeProtocol(tp string) string {
+	switch tp {
+	case "udp_gnet", "udp_unicast", "udp_multicast":
+		return "udp"
+	case "tcp_gnet":
+		return "tcp"
+	case "kafka", "sftp":
+		return tp
+	default:
+		return ""
+	}
+}
+
+func defaultTaskExecutionModel(proto string) string {
+	if proto == "udp" || proto == "tcp" {
+		return "fastpath"
+	}
+	return "pool"
+}
+
+func defaultTaskPoolSize(proto string) int {
+	if proto == "udp" || proto == "tcp" {
+		return max(512, runtime.NumCPU()*defaultTaskPoolPerCPUFactor)
+	}
+	return max(DefaultTaskPoolSize, runtime.NumCPU()*defaultTaskPoolPerCPUFactor)
+}
+
+func defaultTaskQueueSize(proto string) int {
+	if proto == "udp" || proto == "tcp" {
+		return max(1024, runtime.NumCPU()*defaultTaskQueuePerCPUFactor)
+	}
+	return max(DefaultTaskQueueSize, runtime.NumCPU()*defaultTaskQueuePerCPUFactor)
+}
+
+func defaultReceiverMulticore(receiverType string) bool {
+	if normalizeProtocol(receiverType) == "udp" {
+		return false
+	}
+	return DefaultReceiverMulticore
+}
+
+func defaultReceiverEventLoops(receiverType string) int {
+	if normalizeProtocol(receiverType) == "udp" {
+		return clamp(runtime.NumCPU()/2, 1, 8)
+	}
+	return max(DefaultReceiverNumEventLoop, runtime.NumCPU())
+}
+
+func defaultSenderConcurrency(senderType string) int {
+	switch normalizeProtocol(senderType) {
+	case "udp":
+		return clamp(runtime.NumCPU()/2, 2, 8)
+	case "tcp":
+		return clamp(runtime.NumCPU(), 2, 16)
+	case "kafka":
+		return clamp(runtime.NumCPU()/2, 2, 8)
+	case "sftp":
+		return clamp(runtime.NumCPU()/2, 1, 4)
+	default:
+		return DefaultSenderConcurrency
+	}
+}
+
+func clamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 func max(a, b int) int {
