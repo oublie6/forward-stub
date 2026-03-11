@@ -41,8 +41,9 @@ func (c *Config) ApplyBusinessDefaults(d BusinessDefaultsConfig) {
 		c.Tasks[name] = tc
 	}
 	for name, rc := range c.Receivers {
-		if d.Receiver.Multicore != nil {
-			rc.Multicore = *d.Receiver.Multicore
+		if rc.Multicore == nil && d.Receiver.Multicore != nil {
+			v := *d.Receiver.Multicore
+			rc.Multicore = &v
 		}
 		if rc.NumEventLoop <= 0 && d.Receiver.NumEventLoop > 0 {
 			rc.NumEventLoop = d.Receiver.NumEventLoop
@@ -119,8 +120,9 @@ func (c *Config) ApplyDefaults() {
 		c.Tasks[name] = tc
 	}
 	for name, rc := range c.Receivers {
-		if !rc.Multicore {
-			rc.Multicore = DefaultReceiverMulticore
+		if rc.Multicore == nil {
+			v := DefaultReceiverMulticore
+			rc.Multicore = &v
 		}
 		if rc.NumEventLoop <= 0 {
 			rc.NumEventLoop = max(DefaultReceiverNumEventLoop, runtime.NumCPU())

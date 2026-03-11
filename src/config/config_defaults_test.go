@@ -20,3 +20,12 @@ func TestApplyDefaultsKeepsDisabledPprofPort(t *testing.T) {
 		t.Fatalf("unexpected pprof_port after defaults: %d", cfg.Control.PprofPort)
 	}
 }
+
+func TestApplyDefaultsSetsReceiverMulticoreWhenUnset(t *testing.T) {
+	cfg := Config{Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000"}}}
+	cfg.ApplyDefaults()
+	rc := cfg.Receivers["r1"]
+	if rc.Multicore == nil || !*rc.Multicore {
+		t.Fatalf("unexpected receiver multicore default: %+v", rc.Multicore)
+	}
+}

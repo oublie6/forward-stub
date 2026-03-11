@@ -171,8 +171,12 @@ func ValidateSSHHostKeyFingerprint(f string) error {
 	if raw == "" {
 		return errors.New("missing base64 digest")
 	}
-	if _, err := base64.RawStdEncoding.DecodeString(raw); err != nil {
+	digest, err := base64.RawStdEncoding.DecodeString(raw)
+	if err != nil {
 		return fmt.Errorf("invalid base64 digest: %w", err)
+	}
+	if len(digest) != 32 {
+		return fmt.Errorf("invalid digest length: got %d, want 32", len(digest))
 	}
 	return nil
 }
