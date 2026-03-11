@@ -1,60 +1,51 @@
 # 代码审查报告（2026-03-11）
 
 ## 范围
-- 项目整体结构、配置加载、热更新路径、运行时更新关键路径。
-- 本次以静态审阅 + 自动化检查为主。
+- 项目整体（`main`、`cmd/bench`、`src/*`）的静态审阅。
+- 自动化检查覆盖：`go test ./...`、`go vet ./...`、`go test -race ./...`。
 
 ## 自动化检查结果
 - `go test ./...`：通过。
 - `go vet ./...`：通过。
-- `golangci-lint run ./...`：受环境工具链版本限制未完成（当前 golangci-lint 构建于 go1.24，项目目标 Go 版本为 1.25）。
+- `go test -race ./...`：失败，当前主要集中在 `src/runtime` 相关路径。
 
 ## 主要发现
 
-### 1) 配置解析默认允许未知字段，存在“配置拼写错误静默生效”风险（中）
+### 1) `Task.StopGraceful` 与统计回调并发访问存在数据竞争（高）
 **现象**
-- 本地配置加载与 API 配置加载均使用 `encoding/json` 默认行为反序列化，未启用 `DisallowUnknownFields`。
-- 这会导致配置文件里出现拼写错误字段时不会报错，系统可能继续以默认值运行，降低问题可观测性。
-
-**依据**
-- `LoadLocal/LoadSystemLocal/LoadBusinessLocal` 使用 `json.Unmarshal`。 
-- `FetchConfig` 使用 `json.NewDecoder(resp.Body).Decode(&cfg)`，同样未禁用未知字段。
-
-**建议**
-- 引入严格模式（可通过配置开关控制兼容性）：
-  - 本地文件：使用 `json.Decoder` 并启用 `DisallowUnknownFields`；
-  - API 拉取：同样启用严格解码。
-- 若担心存量兼容，可先在日志中告警未知字段并在后续版本切换为强校验。
-
-### 2) API 模式下“仅允许业务热更新”的边界可能被绕过（高）
-**现象**
-- 热更新前会调用 `CheckSystemConfigStable(systemCfg)` 验证系统配置不变。
-- 但当启用 `Control.API` 时，`loadConfigPair` 先读取本地 `systemCfg`，随后用 API 返回的完整 `cfg` 覆盖运行配置。
-- 这意味着：系统配置稳定性校验是对“本地 system 配置”做的，而非对“实际将生效的 API 配置里的系统字段”做的。
-
-**依据**
-- `reloadAndApplyBusinessConfig` 仅校验 `systemCfg`，然后直接 `rt.UpdateCache(ctx, next)`。
-- `loadConfigPair` 在 `cfg.Control.API != ""` 时将 `cfg` 替换为 API 返回值。
+- `Task` 在 `StopGraceful()` 中会写 `t.pool/t.ch/t.sendStats`（置空、close）。
+- 同时，流量聚合线程通过 `listTaskRuntimeStats -> fn()` 异步调用 `Task.runtimeStats()`，会读取 `t.pool/t.ch`。
+- `-race` 已复现该冲突：`task.go:222`（写）与 `task.go:283`（读）。
 
 **影响**
-- 在 API 返回内容包含系统级字段变化时，可能绕过“系统配置变更需重启”的约束，导致运行期行为与预期治理策略不一致。
+- 关闭/热更新窗口内出现未定义行为风险，可能导致统计不准、测试不稳定，极端情况下触发崩溃。
 
-**建议**
-- 在 API 模式下，显式拆分并校验 API 返回的系统配置部分；
-- 或将 API 端返回限制为“仅业务配置”，由类型和协议层面杜绝系统字段漂移。
+**建议（低影响优先）**
+- 为 `Task` 增加轻量状态锁（仅保护 `pool/ch/sendStats` 的读写），`runtimeStats()` 做只读快照；
+- 或将 `pool/ch` 改为可原子读取的包装状态，避免 stop 路径与统计线程直接并发读写裸指针。
 
-### 3) 运行时更新路径包含固定 10ms sleep，可能带来可预测性与吞吐尾延迟影响（低）
+### 2) TCP 实际转发测试存在启动时序脆弱性（中）
 **现象**
-- `UpdateCache` 末尾包含 `time.Sleep(10 * time.Millisecond)`。
+- `TestForwardMatrixTCPToTCP_Actual` 偶发 `connect: connection refused`。
+- 该用例在 `UpdateCache` 返回后立即 `Dial` 到 receiver 端口，未显式等待 gnet listener 就绪。
 
 **影响**
-- 在频繁更新（例如压测/自动化回放）场景下，会引入稳定且不可忽略的额外延迟；
-- 该方式依赖时间窗口而非确定性状态信号，鲁棒性受机器负载和调度影响。
+- 在 `-race` 或低性能环境下，测试稳定性下降，容易出现假失败，影响并发回归可信度。
 
 **建议**
-- 考虑用“组件 ready 信号”或“可观测状态轮询 + 超时”替代固定 sleep；
-- 若暂不改造，建议将该延迟参数化并记录触发原因，便于后续验证与收敛。
+- 为测试增加就绪探测（重试 `Dial` + 总超时预算），或在 runtime 暴露 receiver ready 信号供测试等待。
+
+### 3) 回调注册表在读锁内执行回调，放大锁持有窗口（低）
+**现象**
+- `listTaskRuntimeStats()` 持有 `taskRuntimeStatsMu.RLock` 时直接执行 `fn()`。
+- 若回调计算变重或发生阻塞，会延长读锁持有时间，影响注册/注销时延。
+
+**影响**
+- 当前影响偏可维护性与可扩展性；高频统计周期下可能放大锁竞争。
+
+**建议**
+- 先复制 `task->fn` 快照再释放锁，锁外执行回调，避免把回调成本放进临界区。
 
 ## 总结
-- 当前主干质量较好，基础测试与 `go vet` 结果健康。
-- 建议优先处理 **发现 2（高风险）**，其余两项可作为稳定性与可维护性改进排期。
+- 常规质量门（`go test`、`go vet`）健康。
+- 并发风险仍建议优先处理 **发现 1（高）**，并同步修复 **发现 2** 以提升 `-race` 回归稳定性。

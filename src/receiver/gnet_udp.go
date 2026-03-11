@@ -4,6 +4,7 @@ package receiver
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"forward-stub/src/logx"
 	"forward-stub/src/packet"
@@ -25,7 +26,7 @@ type GnetUDP struct {
 
 	stopMu sync.Mutex
 	stopFn func(context.Context) error
-	stats  *logx.TrafficCounter
+	stats  atomic.Pointer[logx.TrafficCounter]
 }
 
 // NewGnetUDP 负责该函数对应的核心逻辑，详见实现细节。
@@ -50,18 +51,17 @@ func (r *GnetUDP) Key() string { return "udp_gnet|" + r.listen }
 func (r *GnetUDP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
 	if logx.Enabled(zapcore.InfoLevel) {
-		r.stats = logx.AcquireTrafficCounter(
+		r.stats.Store(logx.AcquireTrafficCounter(
 			"receiver traffic stats",
 			"role", "receiver",
 			"receiver", r.Name(),
 			"receiver_key", r.Key(),
 			"proto", "udp",
-		)
+		))
 	}
 	defer func() {
-		if r.stats != nil {
-			r.stats.Close()
-			r.stats = nil
+		if stats := r.stats.Swap(nil); stats != nil {
+			stats.Close()
 		}
 	}()
 	return gnet.Run(
@@ -82,15 +82,13 @@ func (r *GnetUDP) Stop(ctx context.Context) error {
 	fn := r.stopFn
 	r.stopMu.Unlock()
 	if fn != nil {
-		if r.stats != nil {
-			r.stats.Close()
-			r.stats = nil
+		if stats := r.stats.Swap(nil); stats != nil {
+			stats.Close()
 		}
 		return fn(ctx)
 	}
-	if r.stats != nil {
-		r.stats.Close()
-		r.stats = nil
+	if stats := r.stats.Swap(nil); stats != nil {
+		stats.Close()
 	}
 	return nil
 }
@@ -117,8 +115,8 @@ func (h *udpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 		return gnet.None
 	}
 	_, _ = c.Discard(len(in))
-	if h.recv.stats != nil {
-		h.recv.stats.AddBytes(len(in))
+	if stats := h.recv.stats.Load(); stats != nil {
+		stats.AddBytes(len(in))
 	}
 	payload, rel := packet.CopyFrom(in)
 	h.recv.onPacket(&packet.Packet{
