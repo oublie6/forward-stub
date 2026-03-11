@@ -72,42 +72,13 @@ func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
 	}
 }
 
-func TestTryRestartStoppedReceiversOnceMarksAttemptAndDoesNotRetry(t *testing.T) {
-	st := NewStore()
-	st.receivers["r1"] = &ReceiverState{
-		Name:    "r1",
-		Cfg:     config.ReceiverConfig{Type: "unknown", Listen: "127.0.0.1:1234"},
-		Running: false,
-	}
-
-	next := map[string]config.ReceiverConfig{
-		"r1": {Type: "unknown", Listen: "127.0.0.1:1234"},
-	}
-
-	st.tryRestartStoppedReceiversOnce(context.Background(), next, "error")
-	rs := st.receivers["r1"]
-	if !rs.RestartAttempted {
-		t.Fatalf("expected restart attempt to be marked")
-	}
-	if rs.LastStartError == "" {
-		t.Fatalf("expected restart build error to be recorded")
-	}
-
-	firstErr := rs.LastStartError
-	st.tryRestartStoppedReceiversOnce(context.Background(), next, "error")
-	rs = st.receivers["r1"]
-	if rs.LastStartError != firstErr {
-		t.Fatalf("expected no second retry mutation, got=%q want=%q", rs.LastStartError, firstErr)
-	}
-}
-
 func TestApplyBusinessDeltaUpdatesPayloadLogOptions(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
 	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
 	st.subs["r1"] = map[string]struct{}{}
-	st.receivers["r1"] = &ReceiverState{Name: "r1", Cfg: config.ReceiverConfig{Type: "udp_gnet", Listen: ":1"}, Running: true}
+	st.receivers["r1"] = &ReceiverState{Name: "r1", Cfg: config.ReceiverConfig{Type: "udp_gnet", Listen: ":1"}}
 
 	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{PayloadLogMaxBytes: 128}, nil); err != nil {
 		t.Fatalf("add initial task: %v", err)
