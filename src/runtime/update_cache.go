@@ -31,6 +31,12 @@ type taskPayloadLogOptions struct {
 	max  int
 }
 
+// buildTaskPayloadLogOptions 计算单个 task 的 payload 日志策略。
+//
+// 规则：
+//  1. 是否打印发送 payload 由 task 自身开关 tc.LogPayloadSend 决定；
+//  2. 日志截断上限优先使用 task 局部配置；
+//  3. 若 task 未配置上限，则回退到全局 logging 配置。
 func buildTaskPayloadLogOptions(tc config.TaskConfig, lc config.LoggingConfig) taskPayloadLogOptions {
 	maxBytes := payloadLogMaxBytes(tc.PayloadLogMaxBytes, lc.PayloadLogMaxBytes)
 	return taskPayloadLogOptions{
@@ -39,6 +45,10 @@ func buildTaskPayloadLogOptions(tc config.TaskConfig, lc config.LoggingConfig) t
 	}
 }
 
+// payloadLogMaxBytes 解析“局部优先、全局兜底”的日志截断上限。
+//
+// 当 localMax > 0 时，说明调用方明确指定了上限，直接采用；
+// 否则回退到 logging 级别的默认值。
 func payloadLogMaxBytes(localMax int, loggingMax int) int {
 	if localMax > 0 {
 		return localMax
@@ -46,6 +56,15 @@ func payloadLogMaxBytes(localMax int, loggingMax int) int {
 	return loggingMax
 }
 
+// UpdateCache 是运行时配置更新入口。
+//
+// 处理流程：
+//  1. 更新全局 payload 池与日志默认参数；
+//  2. 尝试一次“仅重启曾经失败的 receiver”；
+//  3. 如果当前状态允许，则走业务增量更新；否则执行全量重建；
+//  4. 打印任务快照与耗时，便于排障和容量评估。
+//
+// 注意：这里仅负责“切换运行时对象”，不做配置合法性校验（校验应在更上层完成）。
 func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	packet.SetPayloadPoolMaxCachedBytes(cfg.Logging.PayloadPoolMaxCachedBytes)
 	st.setPayloadLogDefaultMax(cfg.Logging.PayloadLogMaxBytes)
@@ -79,18 +98,27 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	return nil
 }
 
+// setPayloadLogDefaultMax 更新 Store 持有的“全局 payload 日志默认截断长度”。
+//
+// 该值会在 receiver/task 未显式配置最大长度时作为兜底值使用。
 func (st *Store) setPayloadLogDefaultMax(max int) {
 	st.mu.Lock()
 	st.payloadLogDefaultMax = max
 	st.mu.Unlock()
 }
 
+// loggingPayloadLogMaxBytes 读取当前 Store 的全局 payload 日志截断默认值。
 func (st *Store) loggingPayloadLogMaxBytes() int {
 	st.mu.RLock()
 	defer st.mu.RUnlock()
 	return st.payloadLogDefaultMax
 }
 
+// canApplyBusinessDelta 判断当前是否可走“增量热更新”路径。
+//
+// 约束：
+//  1. 当前必须已有运行态对象（不是冷启动）；
+//  2. 现存 receiver 必须都处于 Running，避免在不一致状态上继续增量变更。
 func (st *Store) canApplyBusinessDelta(cfg config.Config) bool {
 	st.mu.RLock()
 	defer st.mu.RUnlock()
@@ -105,6 +133,12 @@ func (st *Store) canApplyBusinessDelta(cfg config.Config) bool {
 	return true
 }
 
+// replaceAll 执行全量替换：停旧实例、清空索引、重建并启动新实例。
+//
+// 顺序说明：
+//  1. 先 build sender（task 依赖 sender）；
+//  2. 再 build task（建立 pipeline + sender + 订阅关系）；
+//  3. 生成 dispatch 快照后再启动 receiver，避免切换窗口漏分发。
 func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	_ = st.StopAll(ctx)
 
@@ -236,6 +270,14 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	return nil
 }
 
+// applyBusinessDelta 按 receiver/sender/pipeline/task 维度执行差量更新。
+//
+// 策略：
+//  1. 先判断各模块是否变化；
+//  2. pipeline 变化时先重编译；
+//  3. receiver/sender 分别应用增量；
+//  4. task 通过“先删后加”处理替换场景，并在必要时复用统计对象；
+//  5. 最后统一刷新分发表、阶段引用和垃圾回收。
 func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) error {
 	st.mu.RLock()
 	oldTasks := make(map[string]config.TaskConfig, len(st.tasks))
@@ -332,6 +374,13 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	return nil
 }
 
+// splitDeltaWithReplace 计算两份命名配置的差异集合。
+//
+// 返回值语义：
+//  - added: 新增项 + 配置内容发生变化而需要“重建”的项；
+//  - removed: 删除项 + 配置内容发生变化而需要“下线旧实例”的项。
+//
+// 通过“变更视为 remove+add”统一后续处理模型，可减少分支复杂度。
 func splitDeltaWithReplace[T any](oldMap, newMap map[string]T) (added []string, removed []string) {
 	for name, oldCfg := range oldMap {
 		newCfg, ok := newMap[name]
@@ -354,6 +403,12 @@ func splitDeltaWithReplace[T any](oldMap, newMap map[string]T) (added []string, 
 	return added, removed
 }
 
+// applySenderDelta 增量更新 sender 集合。
+//
+// 处理要点：
+//  1. 未变更 sender 直接复用；
+//  2. 变更项先创建新 sender，再替换 Store 中引用，最后关闭旧 sender；
+//  3. 对已不存在且引用计数为 0 的 sender 做回收。
 func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLevel string) error {
 	st.mu.RLock()
 	oldStates := make(map[string]*SenderState, len(st.senders))
@@ -397,6 +452,12 @@ func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLe
 	return nil
 }
 
+// applyReceiverDelta 增量更新 receiver 集合。
+//
+// 处理要点：
+//  1. 对新增或变更 receiver 先构建并启动新实例，再停止旧实例；
+//  2. 清理已删除 receiver 的订阅与运行时统计；
+//  3. 最后刷新 receiver payload 日志配置快照。
 func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.ReceiverConfig, gnetLogLevel string) error {
 	st.mu.RLock()
 	oldStates := make(map[string]*ReceiverState, len(st.receivers))
@@ -449,6 +510,14 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 	return nil
 }
 
+// tryRestartStoppedReceiversOnce 尝试“自愈式”重启一次已停止的 receiver。
+//
+// 触发条件：
+//  1. 当前 receiver 处于非 Running；
+//  2. 本轮尚未尝试重启；
+//  3. 新配置中仍存在且配置内容未变化。
+//
+// 设计目标：在不触发全量替换的情况下，快速拉起短暂失败的入口。
 func (st *Store) tryRestartStoppedReceiversOnce(ctx context.Context, next map[string]config.ReceiverConfig, gnetLogLevel string) {
 	type restartCandidate struct {
 		name string
@@ -508,6 +577,9 @@ func (st *Store) tryRestartStoppedReceiversOnce(ctx context.Context, next map[st
 	}
 }
 
+// registerReceiverRuntimeStats 注册 receiver 运行态快照回调。
+//
+// 聚合日志线程会周期性调用该回调，输出 receiver 运行状态与最近错误。
 func (st *Store) registerReceiverRuntimeStats(name string) {
 	logx.RegisterReceiverRuntimeStats(name, func() logx.ReceiverRuntimeStats {
 		st.mu.RLock()
@@ -520,6 +592,9 @@ func (st *Store) registerReceiverRuntimeStats(name string) {
 	})
 }
 
+// startReceiver 异步启动单个 receiver，并在退出时回填运行状态。
+//
+// receiver 回调统一进入 dispatch，负责 fan-out 到相关 task。
 func (st *Store) startReceiver(ctx context.Context, name string, r receiver.Receiver) {
 	st.mu.Lock()
 	if rs := st.receivers[name]; rs != nil {
@@ -544,6 +619,14 @@ func (st *Store) startReceiver(ctx context.Context, name string, r receiver.Rece
 	}(r, name)
 }
 
+// addTask 创建并接入一个任务。
+//
+// 步骤：
+//  1. 解析并绑定 pipelines；
+//  2. 绑定 senders 并增加 sender 引用计数；
+//  3. 按配置创建 task 并启动；
+//  4. 更新 task 索引、stage 引用和 receiver 订阅；
+//  5. 刷新 dispatch 快照使新 task 立即可接收流量。
 func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingConfig, counter *logx.TrafficCounter) error {
 	st.mu.RLock()
 	compiled := st.pipelines
@@ -608,6 +691,10 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 	return nil
 }
 
+// removeTask 从运行态移除任务并释放关联引用。
+//
+// 当 preserveCounter=true 时，会把 task 的发送统计对象分离出来并返回，
+// 以便同名任务重建时继续复用，避免统计断档。
 func (st *Store) removeTask(name string, preserveCounter bool) *logx.TrafficCounter {
 	st.mu.Lock()
 	ts := st.tasks[name]
@@ -637,6 +724,9 @@ func (st *Store) removeTask(name string, preserveCounter bool) *logx.TrafficCoun
 	return counter
 }
 
+// retainTaskStageRefsLocked 为 task 关联的所有 pipeline stage 增加引用计数。
+//
+// 调用方必须持有 st.mu（写锁），该函数不自行加锁。
 func (st *Store) retainTaskStageRefsLocked(taskName string, pipelines []string) {
 	for _, pn := range pipelines {
 		sigs := st.pipelineStageSigs[pn]
@@ -657,6 +747,9 @@ func (st *Store) retainTaskStageRefsLocked(taskName string, pipelines []string) 
 	}
 }
 
+// releaseTaskStageRefsLocked 释放 task 对 stage cache 的引用。
+//
+// 调用方必须持有 st.mu（写锁），该函数不自行加锁。
 func (st *Store) releaseTaskStageRefsLocked(taskName string, pipelines []string) {
 	for _, pn := range pipelines {
 		sigs := st.pipelineStageSigs[pn]
@@ -677,17 +770,25 @@ func (st *Store) releaseTaskStageRefsLocked(taskName string, pipelines []string)
 	}
 }
 
+// gcUnusedStageCache 清理没有任何 task 引用的 stage cache 条目。
 func (st *Store) gcUnusedStageCache() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	for sig, entry := range st.stageCache {
-		if entry == nil || entry.TaskRefs > 0 {
+		if entry == nil {
+			delete(st.stageCache, sig)
+			continue
+		}
+		if entry.TaskRefs > 0 {
 			continue
 		}
 		delete(st.stageCache, sig)
 	}
 }
 
+// rebuildStageTaskRefs 基于当前 tasks 全量重建 stage 引用计数。
+//
+// 该方法用于在复杂增量变更后做一次“纠偏”，保证引用计数一致。
 func (st *Store) rebuildStageTaskRefs() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -716,6 +817,9 @@ func (st *Store) rebuildStageTaskRefs() {
 	}
 }
 
+// refreshDispatchSubs 重建 receiver -> task 的只读分发表快照。
+//
+// dispatch 读取该快照进行无锁分发，避免热路径频繁争用 Store 主锁。
 func (st *Store) refreshDispatchSubs() {
 	dispatchSubs := make(map[string][]*TaskState)
 	st.mu.RLock()
@@ -732,6 +836,7 @@ func (st *Store) refreshDispatchSubs() {
 	st.setDispatchSubs(dispatchSubs)
 }
 
+// gcUnusedSenders 回收当前引用计数为 0 的 sender 实例。
 func (st *Store) gcUnusedSenders() {
 	unused := make([]sender.Sender, 0)
 	st.mu.Lock()
@@ -748,6 +853,7 @@ func (st *Store) gcUnusedSenders() {
 	}
 }
 
+// taskSnapshot 生成任务拓扑与执行模型的可观测快照，用于日志输出。
 func (st *Store) taskSnapshot() []map[string]any {
 	st.mu.RLock()
 	defer st.mu.RUnlock()
@@ -768,6 +874,7 @@ func (st *Store) taskSnapshot() []map[string]any {
 	return out
 }
 
+// receiverConfigSnapshot 提取 receiver 配置快照，便于后续做差异比较。
 func receiverConfigSnapshot(m map[string]*ReceiverState) map[string]config.ReceiverConfig {
 	out := make(map[string]config.ReceiverConfig, len(m))
 	for n, s := range m {
@@ -776,6 +883,7 @@ func receiverConfigSnapshot(m map[string]*ReceiverState) map[string]config.Recei
 	return out
 }
 
+// senderConfigSnapshot 提取 sender 配置快照，便于后续做差异比较。
 func senderConfigSnapshot(m map[string]*SenderState) map[string]config.SenderConfig {
 	out := make(map[string]config.SenderConfig, len(m))
 	for n, s := range m {
@@ -830,6 +938,11 @@ func (st *Store) refreshRecvPayloadLogOptions() {
 	st.setRecvPayloadLogOptions(snapshot)
 }
 
+// logReceiverPayload 按 receiver 侧日志策略输出 payload 观测日志。
+//
+// 注意：
+//  1. 仅在 info 级别启用；
+//  2. payload 内容按 maxBytes 截断，避免超大包放大日志开销。
 func logReceiverPayload(receiver string, pkt *packet.Packet, maxBytes int) {
 	if pkt == nil || !logx.Enabled(zapcore.InfoLevel) {
 		return
@@ -846,6 +959,7 @@ func logReceiverPayload(receiver string, pkt *packet.Packet, maxBytes int) {
 	)
 }
 
+// payloadHex 将 payload 编码为十六进制字符串，并在超过上限时截断。
 func payloadHex(b []byte, max int) string {
 	if len(b) == 0 {
 		return ""
