@@ -65,6 +65,19 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("task %s sender %s not found", tn, sn)
 			}
 		}
+		for _, pn := range t.Pipelines {
+			stages := c.Pipelines[pn]
+			for _, sc := range stages {
+				if sc.Type != "route_offset_bytes_sender" {
+					continue
+				}
+				for _, target := range routeStageTargets(sc) {
+					if !containsString(t.Senders, target) {
+						return fmt.Errorf("task %s pipeline %s route target sender %s not in task senders", tn, pn, target)
+					}
+				}
+			}
+		}
 	}
 
 	for rn, r := range c.Receivers {
@@ -179,4 +192,27 @@ func ValidateSSHHostKeyFingerprint(f string) error {
 		return fmt.Errorf("invalid digest length: got %d, want 32", len(digest))
 	}
 	return nil
+}
+
+func containsString(items []string, want string) bool {
+	for _, it := range items {
+		if it == want {
+			return true
+		}
+	}
+	return false
+}
+
+func routeStageTargets(sc StageConfig) []string {
+	targets := make([]string, 0, len(sc.Cases)+1)
+	for _, sn := range sc.Cases {
+		if sn == "" || containsString(targets, sn) {
+			continue
+		}
+		targets = append(targets, sn)
+	}
+	if sc.DefaultSender != "" && !containsString(targets, sc.DefaultSender) {
+		targets = append(targets, sc.DefaultSender)
+	}
+	return targets
 }

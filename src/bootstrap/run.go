@@ -278,10 +278,11 @@ func loadConfigPair(ctx context.Context, systemPath, businessPath string) (confi
 	}
 	if cfg.Control.API != "" {
 		cli := control.NewConfigAPIClient(cfg.Control.API, cfg.Control.TimeoutSec)
-		cfg, err = cli.FetchConfig(ctx)
+		biz, err = cli.FetchBusinessConfig(ctx)
 		if err != nil {
-			return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("fetch config from api error: %w", err)
+			return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("fetch business config from api error: %w", err)
 		}
+		cfg = sys.Merge(biz)
 	}
 	cfg.ApplyDefaults()
 	if err := cfg.Validate(); err != nil {

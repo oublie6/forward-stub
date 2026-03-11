@@ -88,8 +88,6 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 		lg.Infow("active tasks snapshot", "tasks", st.taskSnapshot())
 	}
 
-	// 给 gnet 一个很短的启动时间，避免立即 Stop/Update 时边界问题。
-	time.Sleep(10 * time.Millisecond)
 	if logx.Enabled(zapcore.InfoLevel) {
 		lg.Infow("runtime cache updated", "version", cfg.Version, "cost", time.Since(start))
 	}
@@ -232,6 +230,7 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	st.setDispatchSubs(dispatchSubs)
 
 	// 4) 构建并启动 receivers：消息入口最终回调 dispatch。
+	startAcks := make([]<-chan struct{}, 0, len(cfg.Receivers))
 	for name, rc := range cfg.Receivers {
 		r, err := buildReceiver(name, rc, cfg.Logging.Level)
 		if err != nil {
@@ -250,8 +249,9 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 			st.subs[name] = make(map[string]struct{})
 		}
 		st.mu.Unlock()
-		st.startReceiver(ctx, name, r)
+		startAcks = append(startAcks, st.startReceiver(ctx, name, r))
 	}
+	st.waitReceiversStartInvoked(startAcks)
 	st.refreshRecvPayloadLogOptions()
 
 	return nil
@@ -475,7 +475,8 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 			st.subs[name] = make(map[string]struct{})
 		}
 		st.mu.Unlock()
-		st.startReceiver(ctx, name, r)
+		startAck := st.startReceiver(ctx, name, r)
+		<-startAck
 		if ok && old != nil && old.Recv != nil {
 			_ = old.Recv.Stop(ctx)
 		}
@@ -498,13 +499,22 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 // startReceiver 异步启动单个 receiver。
 //
 // receiver 回调统一进入 dispatch，负责 fan-out 到相关 task。
-func (st *Store) startReceiver(ctx context.Context, name string, r receiver.Receiver) {
-	go func(r receiver.Receiver, rn string) {
+func (st *Store) startReceiver(ctx context.Context, name string, r receiver.Receiver) <-chan struct{} {
+	started := make(chan struct{})
+	go func(r receiver.Receiver, rn string, ack chan<- struct{}) {
+		close(ack)
 		err := r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) })
 		if err != nil {
 			logx.L().Errorw("receiver stopped with error", "receiver", rn, "error", err)
 		}
-	}(r, name)
+	}(r, name, started)
+	return started
+}
+
+func (st *Store) waitReceiversStartInvoked(started []<-chan struct{}) {
+	for _, ack := range started {
+		<-ack
+	}
 }
 
 // addTask 创建并接入一个任务。

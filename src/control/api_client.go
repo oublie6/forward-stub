@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -24,25 +25,33 @@ func NewConfigAPIClient(baseURL string, timeoutSeconds int) *ConfigAPIClient {
 	}
 }
 
-// FetchConfig 负责该函数对应的核心逻辑，详见实现细节。
-func (c *ConfigAPIClient) FetchConfig(ctx context.Context) (config.Config, error) {
+// FetchBusinessConfig 从远端 API 拉取业务配置（仅允许 business 维度字段）。
+func (c *ConfigAPIClient) FetchBusinessConfig(ctx context.Context) (config.BusinessConfig, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL, nil)
 	if err != nil {
-		return config.Config{}, err
+		return config.BusinessConfig{}, err
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return config.Config{}, err
+		return config.BusinessConfig{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode/100 != 2 {
-		return config.Config{}, fmt.Errorf("config api status=%s", resp.Status)
+		return config.BusinessConfig{}, fmt.Errorf("config api status=%s", resp.Status)
 	}
 
-	var cfg config.Config
-	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
-		return config.Config{}, err
+	var cfg config.BusinessConfig
+	dec := json.NewDecoder(resp.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&cfg); err != nil {
+		return config.BusinessConfig{}, err
+	}
+	var trailing struct{}
+	if err := dec.Decode(&trailing); err == nil {
+		return config.BusinessConfig{}, fmt.Errorf("invalid json: trailing data")
+	} else if err != io.EOF {
+		return config.BusinessConfig{}, err
 	}
 	return cfg, nil
 }

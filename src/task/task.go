@@ -51,6 +51,8 @@ type Task struct {
 
 	sendStats *logx.TrafficCounter
 
+	sendersByName map[string]sender.Sender
+
 	accepting atomic.Bool
 	inflight  sync.WaitGroup
 
@@ -94,6 +96,7 @@ func (t *Task) Start() error {
 		go t.channelWorker()
 	}
 
+	t.rebuildSenderIndex()
 	t.accepting.Store(true)
 	if t.sendStats == nil && logx.Enabled(zapcore.InfoLevel) {
 		t.sendStats = logx.AcquireTrafficCounter(
@@ -223,6 +226,7 @@ func (t *Task) StopGraceful() {
 		t.sendStats.Close()
 		t.sendStats = nil
 	}
+	t.sendersByName = nil
 }
 
 // processAndSend 依次执行 pipeline，再将结果发送到所有 sender。
@@ -232,26 +236,16 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 			return
 		}
 	}
+	if pkt.Meta.RouteSender != "" {
+		if s, ok := t.sendersByName[pkt.Meta.RouteSender]; ok {
+			t.sendToSender(ctx, pkt, s)
+			return
+		}
+		logx.L().Warnw("route sender not found in task", "task", t.Name, "route_sender", pkt.Meta.RouteSender)
+		return
+	}
 	for _, s := range t.Senders {
-		if t.sendStats != nil {
-			t.sendStats.AddBytes(len(pkt.Payload))
-		}
-		if t.LogPayloadSend && logx.Enabled(zapcore.InfoLevel) {
-			logx.L().Infow("task payload send",
-				"task", t.Name,
-				"sender", s.Name(),
-				"kind", pkt.Kind,
-				"payload_len", len(pkt.Payload),
-				"payload_hex", payloadHex(pkt.Payload, t.PayloadLogMax),
-				"transfer_id", pkt.Meta.TransferID,
-				"offset", pkt.Meta.Offset,
-				"total_size", pkt.Meta.TotalSize,
-				"eof", pkt.Meta.EOF,
-			)
-		}
-		if err := s.Send(ctx, pkt); err != nil {
-			logx.L().Warnw("sender send failed", "task", t.Name, "sender", s.Name(), "error", err)
-		}
+		t.sendToSender(ctx, pkt, s)
 	}
 }
 
@@ -295,4 +289,41 @@ func (t *Task) runtimeStats() logx.TaskRuntimeStats {
 		}
 	}
 	return stats
+}
+
+func (t *Task) rebuildSenderIndex() {
+	if len(t.Senders) == 0 {
+		t.sendersByName = nil
+		return
+	}
+	idx := make(map[string]sender.Sender, len(t.Senders))
+	for _, s := range t.Senders {
+		if s == nil {
+			continue
+		}
+		idx[s.Name()] = s
+	}
+	t.sendersByName = idx
+}
+
+func (t *Task) sendToSender(ctx context.Context, pkt *packet.Packet, s sender.Sender) {
+	if t.sendStats != nil {
+		t.sendStats.AddBytes(len(pkt.Payload))
+	}
+	if t.LogPayloadSend && logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("task payload send",
+			"task", t.Name,
+			"sender", s.Name(),
+			"kind", pkt.Kind,
+			"payload_len", len(pkt.Payload),
+			"payload_hex", payloadHex(pkt.Payload, t.PayloadLogMax),
+			"transfer_id", pkt.Meta.TransferID,
+			"offset", pkt.Meta.Offset,
+			"total_size", pkt.Meta.TotalSize,
+			"eof", pkt.Meta.EOF,
+		)
+	}
+	if err := s.Send(ctx, pkt); err != nil {
+		logx.L().Errorw("sender send error", "task", t.Name, "sender", s.Name(), "error", err)
+	}
 }

@@ -319,6 +319,12 @@ type StageConfig struct {
 	// Bool 是布尔开关参数（指针用于区分未配置与 false）。
 	// 用法：需要三态语义（未设/true/false）时通过该字段表达。
 	Bool *bool `json:"bool,omitempty"`
+	// Cases 是“匹配值(hex) -> sender 名称”的分流表。
+	// 用法：用于 switch 类路由 stage，将某个固定字段映射到目标 sender。
+	Cases map[string]string `json:"cases,omitempty"`
+	// DefaultSender 是 switch 路由未命中时的默认 sender。
+	// 用法：为空表示未命中直接丢弃（stage 返回 false）。
+	DefaultSender string `json:"default_sender,omitempty"`
 }
 
 // TaskConfig 描述任务绑定关系与执行模型。
