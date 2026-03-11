@@ -4,6 +4,7 @@ package receiver
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"forward-stub/src/logx"
 	"forward-stub/src/packet"
@@ -26,7 +27,7 @@ type GnetTCP struct {
 
 	stopMu sync.Mutex
 	stopFn func(context.Context) error
-	stats  *logx.TrafficCounter
+	stats  atomic.Pointer[logx.TrafficCounter]
 }
 
 // NewGnetTCP 负责该函数对应的核心逻辑，详见实现细节。
@@ -52,18 +53,17 @@ func (r *GnetTCP) Key() string { return "tcp_gnet|" + r.listen }
 func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
 	if logx.Enabled(zapcore.InfoLevel) {
-		r.stats = logx.AcquireTrafficCounter(
+		r.stats.Store(logx.AcquireTrafficCounter(
 			"receiver traffic stats",
 			"role", "receiver",
 			"receiver", r.Name(),
 			"receiver_key", r.Key(),
 			"proto", "tcp",
-		)
+		))
 	}
 	defer func() {
-		if r.stats != nil {
-			r.stats.Close()
-			r.stats = nil
+		if stats := r.stats.Swap(nil); stats != nil {
+			stats.Close()
 		}
 	}()
 	return gnet.Run(
@@ -84,15 +84,13 @@ func (r *GnetTCP) Stop(ctx context.Context) error {
 	fn := r.stopFn
 	r.stopMu.Unlock()
 	if fn != nil {
-		if r.stats != nil {
-			r.stats.Close()
-			r.stats = nil
+		if stats := r.stats.Swap(nil); stats != nil {
+			stats.Close()
 		}
 		return fn(ctx)
 	}
-	if r.stats != nil {
-		r.stats.Close()
-		r.stats = nil
+	if stats := r.stats.Swap(nil); stats != nil {
+		stats.Close()
 	}
 	return nil
 }
@@ -138,8 +136,8 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	cs.buf = append(cs.buf, in...)
 
 	if h.recv.framer == nil {
-		if h.recv.stats != nil {
-			h.recv.stats.AddBytes(len(cs.buf))
+		if stats := h.recv.stats.Load(); stats != nil {
+			stats.AddBytes(len(cs.buf))
 		}
 		payload, rel := packet.CopyFrom(cs.buf)
 		cs.buf = cs.buf[:0]
@@ -165,8 +163,8 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	cs.buf = append(cs.buf[:0], remain...)
 
 	for _, fr := range frames {
-		if h.recv.stats != nil {
-			h.recv.stats.AddBytes(len(fr))
+		if stats := h.recv.stats.Load(); stats != nil {
+			stats.AddBytes(len(fr))
 		}
 		payload, rel := packet.CopyFrom(fr)
 		h.recv.onPacket(&packet.Packet{
