@@ -1,7 +1,57 @@
 package sender
 
-import "testing"
+import (
+	"sync/atomic"
+	"testing"
+)
 
+func TestNextShardIndexNonPowerOfTwoRoundRobin(t *testing.T) {
+	var next atomic.Uint64
+	got := []int{
+		nextShardIndex(&next, 3),
+		nextShardIndex(&next, 3),
+		nextShardIndex(&next, 3),
+		nextShardIndex(&next, 3),
+		nextShardIndex(&next, 3),
+	}
+	want := []int{0, 1, 2, 0, 1}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("idx[%d]=%d want=%d", i, got[i], want[i])
+		}
+	}
+}
+
+func TestNextShardIndexPowerOfTwoUsesMaskPath(t *testing.T) {
+	var next atomic.Uint64
+	got := []int{
+		nextShardIndex(&next, 4),
+		nextShardIndex(&next, 4),
+		nextShardIndex(&next, 4),
+		nextShardIndex(&next, 4),
+		nextShardIndex(&next, 4),
+	}
+	want := []int{0, 1, 2, 3, 0}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("idx[%d]=%d want=%d", i, got[i], want[i])
+		}
+	}
+}
+
+func TestNextShardIndexRecoversWhenCounterOutOfBound(t *testing.T) {
+	var next atomic.Uint64
+	next.Store(100)
+	if got := nextShardIndex(&next, 3); got != 0 {
+		t.Fatalf("idx=%d want=0", got)
+	}
+	if got := nextShardIndex(&next, 3); got != 0 {
+		t.Fatalf("idx=%d want=0", got)
+	}
+	if got := nextShardIndex(&next, 3); got != 1 {
+		t.Fatalf("idx=%d want=1", got)
+	}
+}
 func TestKafkaPickShardRoundRobin(t *testing.T) {
 	s := &KafkaSender{concurrency: 3}
 	got := []int{s.pickShard(), s.pickShard(), s.pickShard(), s.pickShard(), s.pickShard()}
