@@ -5,24 +5,7 @@ import (
 	"testing"
 )
 
-func TestNextShardIndexNonPowerOfTwoRoundRobin(t *testing.T) {
-	var next atomic.Uint64
-	got := []int{
-		nextShardIndex(&next, 3),
-		nextShardIndex(&next, 3),
-		nextShardIndex(&next, 3),
-		nextShardIndex(&next, 3),
-		nextShardIndex(&next, 3),
-	}
-	want := []int{0, 1, 2, 0, 1}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("idx[%d]=%d want=%d", i, got[i], want[i])
-		}
-	}
-}
-
-func TestNextShardIndexPowerOfTwoUsesMaskPath(t *testing.T) {
+func TestNextShardIndexPowerOfTwoRoundRobin(t *testing.T) {
 	var next atomic.Uint64
 	got := []int{
 		nextShardIndex(&next, 4),
@@ -39,23 +22,38 @@ func TestNextShardIndexPowerOfTwoUsesMaskPath(t *testing.T) {
 	}
 }
 
-func TestNextShardIndexRecoversWhenCounterOutOfBound(t *testing.T) {
+func TestNextShardIndexSingleShardAlwaysZero(t *testing.T) {
+	var next atomic.Uint64
+	got := []int{
+		nextShardIndex(&next, 1),
+		nextShardIndex(&next, 1),
+		nextShardIndex(&next, 1),
+	}
+	want := []int{0, 0, 0}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("idx[%d]=%d want=%d", i, got[i], want[i])
+		}
+	}
+}
+
+func TestNextShardIndexUsesBitMaskWhenCounterOutOfBound(t *testing.T) {
 	var next atomic.Uint64
 	next.Store(100)
-	if got := nextShardIndex(&next, 3); got != 0 {
+	if got := nextShardIndex(&next, 4); got != 0 {
 		t.Fatalf("idx=%d want=0", got)
 	}
-	if got := nextShardIndex(&next, 3); got != 0 {
-		t.Fatalf("idx=%d want=0", got)
-	}
-	if got := nextShardIndex(&next, 3); got != 1 {
+	if got := nextShardIndex(&next, 4); got != 1 {
 		t.Fatalf("idx=%d want=1", got)
+	}
+	if got := nextShardIndex(&next, 4); got != 2 {
+		t.Fatalf("idx=%d want=2", got)
 	}
 }
 func TestKafkaPickShardRoundRobin(t *testing.T) {
-	s := &KafkaSender{concurrency: 3}
+	s := &KafkaSender{concurrency: 4}
 	got := []int{s.pickShard(), s.pickShard(), s.pickShard(), s.pickShard(), s.pickShard()}
-	want := []int{0, 1, 2, 0, 1}
+	want := []int{0, 1, 2, 3, 0}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("idx[%d]=%d want=%d", i, got[i], want[i])
@@ -75,7 +73,7 @@ func TestUDPPickShardRoundRobin(t *testing.T) {
 }
 
 func TestSFTPPickShardTransferAffinityWithRoundRobinAssignment(t *testing.T) {
-	s := &SFTPSender{concurrency: 3, transferShard: map[string]int{}}
+	s := &SFTPSender{concurrency: 4, transferShard: map[string]int{}}
 	if got := s.pickShard("t1"); got != 0 {
 		t.Fatalf("t1 first shard=%d want=0", got)
 	}

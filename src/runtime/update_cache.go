@@ -280,13 +280,11 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	st.version = cfg.Version
 	st.mu.Unlock()
 
-	receiverAdded, receiverRemoved := splitDeltaWithReplace(oldReceivers, cfg.Receivers)
-	senderAdded, senderRemoved := splitDeltaWithReplace(oldSenders, cfg.Senders)
-	pipelineAdded, pipelineRemoved := splitDeltaWithReplace(oldPipelines, cfg.Pipelines)
-	taskAdded, taskRemoved := splitDeltaWithReplace(oldTasks, cfg.Tasks)
-	if len(senderAdded) > 0 || len(senderRemoved) > 0 {
-		taskAdded, taskRemoved = expandTaskDeltaForSenderChanges(oldTasks, cfg.Tasks, taskAdded, taskRemoved, senderAdded, senderRemoved)
-	}
+	plan := planBusinessDelta(oldReceivers, oldSenders, oldPipelines, oldTasks, cfg)
+	receiverAdded, receiverRemoved := plan.receiverAdded, plan.receiverRemoved
+	senderAdded, senderRemoved := plan.senderAdded, plan.senderRemoved
+	pipelineAdded, pipelineRemoved := plan.pipelineAdded, plan.pipelineRemoved
+	taskAdded, taskRemoved := plan.taskAdded, plan.taskRemoved
 
 	receiverChanged := len(receiverAdded) > 0 || len(receiverRemoved) > 0
 	senderChanged := len(senderAdded) > 0 || len(senderRemoved) > 0
@@ -362,6 +360,46 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 		)
 	}
 	return nil
+}
+
+type businessDeltaPlan struct {
+	receiverAdded   []string
+	receiverRemoved []string
+	senderAdded     []string
+	senderRemoved   []string
+	pipelineAdded   []string
+	pipelineRemoved []string
+	taskAdded       []string
+	taskRemoved     []string
+}
+
+func planBusinessDelta(
+	oldReceivers map[string]config.ReceiverConfig,
+	oldSenders map[string]config.SenderConfig,
+	oldPipelines map[string][]config.StageConfig,
+	oldTasks map[string]config.TaskConfig,
+	cfg config.Config,
+) businessDeltaPlan {
+	receiverAdded, receiverRemoved := splitDeltaWithReplace(oldReceivers, cfg.Receivers)
+	senderAdded, senderRemoved := splitDeltaWithReplace(oldSenders, cfg.Senders)
+	pipelineAdded, pipelineRemoved := splitDeltaWithReplace(oldPipelines, cfg.Pipelines)
+	taskAdded, taskRemoved := splitDeltaWithReplace(oldTasks, cfg.Tasks)
+	if len(senderAdded) > 0 || len(senderRemoved) > 0 {
+		taskAdded, taskRemoved = expandTaskDeltaForSenderChanges(oldTasks, cfg.Tasks, taskAdded, taskRemoved, senderAdded, senderRemoved)
+	}
+	if len(pipelineAdded) > 0 || len(pipelineRemoved) > 0 {
+		taskAdded, taskRemoved = expandTaskDeltaForPipelineChanges(oldTasks, cfg.Tasks, taskAdded, taskRemoved, pipelineAdded, pipelineRemoved)
+	}
+	return businessDeltaPlan{
+		receiverAdded:   receiverAdded,
+		receiverRemoved: receiverRemoved,
+		senderAdded:     senderAdded,
+		senderRemoved:   senderRemoved,
+		pipelineAdded:   pipelineAdded,
+		pipelineRemoved: pipelineRemoved,
+		taskAdded:       taskAdded,
+		taskRemoved:     taskRemoved,
+	}
 }
 
 // splitDeltaWithReplace 计算两份命名配置的差异集合。
@@ -447,6 +485,66 @@ func expandTaskDeltaForSenderChanges(
 func taskUsesChangedSender(tc config.TaskConfig, changed map[string]struct{}) bool {
 	for _, senderName := range tc.Senders {
 		if _, ok := changed[senderName]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func expandTaskDeltaForPipelineChanges(
+	oldTasks map[string]config.TaskConfig,
+	newTasks map[string]config.TaskConfig,
+	taskAdded []string,
+	taskRemoved []string,
+	pipelineAdded []string,
+	pipelineRemoved []string,
+) ([]string, []string) {
+	changedPipelines := make(map[string]struct{}, len(pipelineAdded)+len(pipelineRemoved))
+	for _, name := range pipelineAdded {
+		changedPipelines[name] = struct{}{}
+	}
+	for _, name := range pipelineRemoved {
+		changedPipelines[name] = struct{}{}
+	}
+	if len(changedPipelines) == 0 {
+		return taskAdded, taskRemoved
+	}
+
+	addedSet := make(map[string]struct{}, len(taskAdded))
+	for _, name := range taskAdded {
+		addedSet[name] = struct{}{}
+	}
+	removedSet := make(map[string]struct{}, len(taskRemoved))
+	for _, name := range taskRemoved {
+		removedSet[name] = struct{}{}
+	}
+
+	for taskName, oldTC := range oldTasks {
+		newTC, ok := newTasks[taskName]
+		if !ok {
+			continue
+		}
+		if !taskUsesChangedPipeline(oldTC, changedPipelines) && !taskUsesChangedPipeline(newTC, changedPipelines) {
+			continue
+		}
+		if _, ok := removedSet[taskName]; !ok {
+			taskRemoved = append(taskRemoved, taskName)
+			removedSet[taskName] = struct{}{}
+		}
+		if _, ok := addedSet[taskName]; !ok {
+			taskAdded = append(taskAdded, taskName)
+			addedSet[taskName] = struct{}{}
+		}
+	}
+
+	sort.Strings(taskAdded)
+	sort.Strings(taskRemoved)
+	return taskAdded, taskRemoved
+}
+
+func taskUsesChangedPipeline(tc config.TaskConfig, changed map[string]struct{}) bool {
+	for _, pipelineName := range tc.Pipelines {
+		if _, ok := changed[pipelineName]; ok {
 			return true
 		}
 	}

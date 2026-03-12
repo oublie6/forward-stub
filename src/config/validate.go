@@ -118,6 +118,9 @@ func (c *Config) Validate() error {
 	}
 
 	for sn, s := range c.Senders {
+		if err := validateSenderConcurrency(sn, s.Concurrency); err != nil {
+			return err
+		}
 		switch s.Type {
 		case "udp_unicast", "udp_multicast", "tcp_gnet":
 		case "kafka":
@@ -215,4 +218,14 @@ func routeStageTargets(sc StageConfig) []string {
 		targets = append(targets, sc.DefaultSender)
 	}
 	return targets
+}
+
+func validateSenderConcurrency(senderName string, concurrency int) error {
+	if concurrency <= 0 {
+		return nil
+	}
+	if concurrency&(concurrency-1) != 0 {
+		return fmt.Errorf("sender %s concurrency must be a power of two", senderName)
+	}
+	return nil
 }
