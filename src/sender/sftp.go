@@ -68,6 +68,7 @@ type SFTPSender struct {
 	// 用法：用于 SSH 握手阶段校验服务端身份，抵御中间人攻击。
 	hostKeyFingerprint string
 	concurrency        int
+	shardMask          int
 
 	// locks 串行化每个分片内 Send 与连接状态变更，避免并发写冲突。
 	locks []sync.Mutex
@@ -114,6 +115,7 @@ func NewSFTPSender(name string, sc config.SenderConfig) (*SFTPSender, error) {
 		hostKeyFingerprint: strings.TrimSpace(sc.HostKeyFingerprint),
 		concurrency:        kafkaIntDefault(sc.Concurrency, 1),
 	}
+	s.shardMask = s.concurrency - 1
 	s.locks = make([]sync.Mutex, s.concurrency)
 	s.sshClients = make([]*ssh.Client, s.concurrency)
 	s.sftpClis = make([]*sftp.Client, s.concurrency)
@@ -301,7 +303,7 @@ func (s *SFTPSender) pickShard(transferID string) int {
 	if idx, ok := s.transferShard[transferID]; ok {
 		return idx
 	}
-	idx := nextShardIndex(&s.nextIdx, s.concurrency)
+	idx := nextShardIndex(&s.nextIdx, s.shardMask)
 	s.transferShard[transferID] = idx
 	return idx
 }
