@@ -31,7 +31,8 @@ const (
 //  3. channel：单 goroutine + 有界 channel，顺序处理；
 //  4. 停机时通过 accepting + inflight 保证优雅退出。
 type Task struct {
-	Name string
+	stateMu sync.RWMutex
+	Name    string
 
 	Pipelines []*pipeline.Pipeline
 	Senders   []sender.Sender
@@ -212,19 +213,28 @@ func (t *Task) DetachTrafficCounter() *logx.TrafficCounter {
 func (t *Task) StopGraceful() {
 	t.accepting.Store(false)
 	t.inflight.Wait()
-	if t.pool != nil {
-		t.pool.Release()
-		t.pool = nil
-	}
-	if t.ch != nil {
-		close(t.ch)
-		t.wg.Wait()
-		t.ch = nil
-	}
 	logx.UnregisterTaskRuntimeStats(t.Name)
-	if t.sendStats != nil {
-		t.sendStats.Close()
-		t.sendStats = nil
+	t.stateMu.Lock()
+	pool := t.pool
+	t.pool = nil
+	ch := t.ch
+	sendStats := t.sendStats
+	t.sendStats = nil
+	t.stateMu.Unlock()
+	if pool != nil {
+		pool.Release()
+	}
+	if ch != nil {
+		close(ch)
+		t.wg.Wait()
+		t.stateMu.Lock()
+		if t.ch == ch {
+			t.ch = nil
+		}
+		t.stateMu.Unlock()
+	}
+	if sendStats != nil {
+		sendStats.Close()
 	}
 	t.sendersByName = nil
 }
@@ -269,10 +279,14 @@ func (t *Task) runtimeStats() logx.TaskRuntimeStats {
 		Inflight:  t.inflightCount.Load(),
 		FastPath:  t.ExecutionModel == ExecutionModelFastPath,
 	}
-	if t.pool != nil {
-		stats.PoolRunning = t.pool.Running()
-		stats.PoolFree = t.pool.Free()
-		stats.PoolWaiting = t.pool.Waiting()
+	t.stateMu.RLock()
+	pool := t.pool
+	ch := t.ch
+	t.stateMu.RUnlock()
+	if pool != nil {
+		stats.PoolRunning = pool.Running()
+		stats.PoolFree = pool.Free()
+		stats.PoolWaiting = pool.Waiting()
 		if stats.QueueSize > 0 {
 			stats.QueueAvailable = stats.QueueSize - stats.PoolWaiting
 			if stats.QueueAvailable < 0 {
@@ -280,10 +294,10 @@ func (t *Task) runtimeStats() logx.TaskRuntimeStats {
 			}
 		}
 	}
-	if t.ch != nil && t.ChannelQueueSize > 0 {
+	if ch != nil && t.ChannelQueueSize > 0 {
 		stats.QueueSize = t.ChannelQueueSize
-		stats.PoolWaiting = len(t.ch)
-		stats.QueueAvailable = cap(t.ch) - len(t.ch)
+		stats.PoolWaiting = len(ch)
+		stats.QueueAvailable = cap(ch) - len(ch)
 		if stats.QueueAvailable < 0 {
 			stats.QueueAvailable = 0
 		}

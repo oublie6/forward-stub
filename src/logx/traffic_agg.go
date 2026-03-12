@@ -98,12 +98,17 @@ func lookupTaskRuntimeStats(task string) (TaskRuntimeStats, bool) {
 
 func listTaskRuntimeStats() map[string]TaskRuntimeStats {
 	taskRuntimeStatsMu.RLock()
-	defer taskRuntimeStatsMu.RUnlock()
-	out := make(map[string]TaskRuntimeStats, len(taskRuntimeStatsFn))
+	fns := make(map[string]func() TaskRuntimeStats, len(taskRuntimeStatsFn))
 	for task, fn := range taskRuntimeStatsFn {
 		if fn == nil {
 			continue
 		}
+		fns[task] = fn
+	}
+	taskRuntimeStatsMu.RUnlock()
+
+	out := make(map[string]TaskRuntimeStats, len(fns))
+	for task, fn := range fns {
 		out[task] = fn()
 	}
 	return out
@@ -129,11 +134,16 @@ type TrafficCounter struct {
 	hub *trafficStatsHub
 	key string
 	c   *trafficCounter
+	// closed 仅用于避免 Close/AddBytes 并发时的重复释放与数据竞争。
+	closed atomic.Bool
 }
 
 // AddBytes 负责该函数对应的核心逻辑，详见实现细节。
 func (tc *TrafficCounter) AddBytes(n int) {
 	if tc == nil || tc.c == nil || n <= 0 {
+		return
+	}
+	if tc.closed.Load() {
 		return
 	}
 	seq := tc.c.seen.Add(1)
@@ -149,10 +159,10 @@ func (tc *TrafficCounter) Close() {
 	if tc == nil || tc.hub == nil || tc.key == "" {
 		return
 	}
+	if !tc.closed.CompareAndSwap(false, true) {
+		return
+	}
 	tc.hub.release(tc.key)
-	tc.hub = nil
-	tc.c = nil
-	tc.key = ""
 }
 
 type trafficStatsHub struct {
