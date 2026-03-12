@@ -65,6 +65,153 @@ func TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts(t *testin
 	}
 }
 
+func TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks(t *testing.T) {
+	oldTasks := map[string]config.TaskConfig{
+		"t1": {Pipelines: []string{"p1", "p2"}},
+		"t2": {Pipelines: []string{"p3"}},
+	}
+	newTasks := map[string]config.TaskConfig{
+		"t1": {Pipelines: []string{"p1", "p2"}},
+		"t2": {Pipelines: []string{"p3"}},
+	}
+
+	added, removed := expandTaskDeltaForPipelineChanges(
+		oldTasks,
+		newTasks,
+		nil,
+		nil,
+		[]string{"p2"},
+		nil,
+	)
+
+	if !reflect.DeepEqual(added, []string{"t1"}) {
+		t.Fatalf("unexpected added tasks: %v", added)
+	}
+	if !reflect.DeepEqual(removed, []string{"t1"}) {
+		t.Fatalf("unexpected removed tasks: %v", removed)
+	}
+}
+
+func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
+	type op string
+	const (
+		opAdd    op = "add"
+		opRemove op = "remove"
+		opModify op = "modify"
+	)
+
+	oldReceivers := map[string]config.ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":10001"}}
+	oldSenders := map[string]config.SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:9001"}}
+	oldPipelines := map[string][]config.StageConfig{"p1": {{Type: "trim"}}}
+	oldTasks := map[string]config.TaskConfig{
+		"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+	}
+
+	applyReceiverOp := func(base map[string]config.ReceiverConfig, o op) map[string]config.ReceiverConfig {
+		next := map[string]config.ReceiverConfig{"r1": base["r1"]}
+		switch o {
+		case opAdd:
+			next["r2"] = config.ReceiverConfig{Type: "udp_gnet", Listen: ":10002"}
+		case opRemove:
+			delete(next, "r1")
+		case opModify:
+			next["r1"] = config.ReceiverConfig{Type: "udp_gnet", Listen: ":10003"}
+		}
+		return next
+	}
+	applySenderOp := func(base map[string]config.SenderConfig, o op) map[string]config.SenderConfig {
+		next := map[string]config.SenderConfig{"s1": base["s1"]}
+		switch o {
+		case opAdd:
+			next["s2"] = config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:9002"}
+		case opRemove:
+			delete(next, "s1")
+		case opModify:
+			next["s1"] = config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:9003"}
+		}
+		return next
+	}
+	applyPipelineOp := func(base map[string][]config.StageConfig, o op) map[string][]config.StageConfig {
+		next := map[string][]config.StageConfig{"p1": base["p1"]}
+		switch o {
+		case opAdd:
+			next["p2"] = []config.StageConfig{{Type: "trim"}}
+		case opRemove:
+			delete(next, "p1")
+		case opModify:
+			next["p1"] = []config.StageConfig{{Type: "drop"}}
+		}
+		return next
+	}
+	applyTaskOp := func(base map[string]config.TaskConfig, o op) map[string]config.TaskConfig {
+		next := map[string]config.TaskConfig{"t1": base["t1"]}
+		switch o {
+		case opAdd:
+			next["t2"] = config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}}
+		case opRemove:
+			delete(next, "t1")
+		case opModify:
+			tc := next["t1"]
+			tc.QueueSize = 2048
+			next["t1"] = tc
+		}
+		return next
+	}
+
+	ops := []op{opAdd, opRemove, opModify}
+	for _, rop := range ops {
+		for _, sop := range ops {
+			for _, pop := range ops {
+				for _, top := range ops {
+					nextCfg := config.Config{
+						Receivers: applyReceiverOp(oldReceivers, rop),
+						Senders:   applySenderOp(oldSenders, sop),
+						Pipelines: applyPipelineOp(oldPipelines, pop),
+						Tasks:     applyTaskOp(oldTasks, top),
+					}
+					plan := planBusinessDelta(oldReceivers, oldSenders, oldPipelines, oldTasks, nextCfg)
+
+					if hasDup(plan.taskAdded) {
+						t.Fatalf("taskAdded has duplicates in scenario r=%s s=%s p=%s t=%s: %v", rop, sop, pop, top, plan.taskAdded)
+					}
+					if hasDup(plan.taskRemoved) {
+						t.Fatalf("taskRemoved has duplicates in scenario r=%s s=%s p=%s t=%s: %v", rop, sop, pop, top, plan.taskRemoved)
+					}
+
+					t1ExistsInNew := top != opRemove
+					if t1ExistsInNew {
+						if sop == opModify || sop == opRemove || pop == opModify || pop == opRemove {
+							if !contains(plan.taskAdded, "t1") || !contains(plan.taskRemoved, "t1") {
+								t.Fatalf("t1 should be rebuilt in scenario r=%s s=%s p=%s t=%s: added=%v removed=%v", rop, sop, pop, top, plan.taskAdded, plan.taskRemoved)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func contains(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasDup(items []string) bool {
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		if _, ok := seen[item]; ok {
+			return true
+		}
+		seen[item] = struct{}{}
+	}
+	return false
+}
+
 func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
