@@ -98,12 +98,17 @@ func lookupTaskRuntimeStats(task string) (TaskRuntimeStats, bool) {
 
 func listTaskRuntimeStats() map[string]TaskRuntimeStats {
 	taskRuntimeStatsMu.RLock()
-	defer taskRuntimeStatsMu.RUnlock()
-	out := make(map[string]TaskRuntimeStats, len(taskRuntimeStatsFn))
+	fns := make(map[string]func() TaskRuntimeStats, len(taskRuntimeStatsFn))
 	for task, fn := range taskRuntimeStatsFn {
 		if fn == nil {
 			continue
 		}
+		fns[task] = fn
+	}
+	taskRuntimeStatsMu.RUnlock()
+
+	out := make(map[string]TaskRuntimeStats, len(fns))
+	for task, fn := range fns {
 		out[task] = fn()
 	}
 	return out
