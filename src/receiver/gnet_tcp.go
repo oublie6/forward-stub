@@ -15,13 +15,14 @@ import (
 )
 
 type GnetTCP struct {
-	name          string
-	listen        string
-	multicore     bool
-	numEventLoop  int
-	readBufferCap int
-	framer        Framer
-	gnetLogLevel  logging.Level
+	name             string
+	listen           string
+	multicore        bool
+	numEventLoop     int
+	readBufferCap    int
+	socketRecvBuffer int
+	framer           Framer
+	gnetLogLevel     logging.Level
 
 	onPacket func(*packet.Packet)
 
@@ -31,15 +32,16 @@ type GnetTCP struct {
 }
 
 // NewGnetTCP 负责该函数对应的核心逻辑，详见实现细节。
-func NewGnetTCP(name, listen string, multicore bool, numEventLoop, readBufferCap int, framer Framer, gnetLogLevel string) *GnetTCP {
+func NewGnetTCP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, framer Framer, gnetLogLevel string) *GnetTCP {
 	return &GnetTCP{
-		name:          name,
-		listen:        listen,
-		multicore:     multicore,
-		numEventLoop:  numEventLoop,
-		readBufferCap: readBufferCap,
-		framer:        framer,
-		gnetLogLevel:  logx.ParseGnetLogLevel(gnetLogLevel),
+		name:             name,
+		listen:           listen,
+		multicore:        multicore,
+		numEventLoop:     numEventLoop,
+		readBufferCap:    readBufferCap,
+		socketRecvBuffer: socketRecvBuffer,
+		framer:           framer,
+		gnetLogLevel:     logx.ParseGnetLogLevel(gnetLogLevel),
 	}
 }
 
@@ -72,6 +74,7 @@ func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) erro
 		gnet.WithMulticore(r.multicore),
 		gnet.WithNumEventLoop(r.numEventLoop),
 		gnet.WithReadBufferCap(r.readBufferCap),
+		gnet.WithSocketRecvBuffer(r.socketRecvBuffer),
 		gnet.WithReusePort(true),
 		gnet.WithReuseAddr(true),
 		gnet.WithLogLevel(r.gnetLogLevel),

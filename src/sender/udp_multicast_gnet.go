@@ -19,12 +19,13 @@ import (
 // - 组播相关 socket option 使用 x/net 的 ipv4/ipv6 PacketConn 设置（跨平台）
 // - 设置 SO_REUSEADDR以允许多 sender 复用同一 local port
 type UDPMulticastSender struct {
-	name      string
-	group     *net.UDPAddr
-	local     *net.UDPAddr
-	ifaceName string
-	ttl       int
-	loop      bool
+	name             string
+	group            *net.UDPAddr
+	local            *net.UDPAddr
+	ifaceName        string
+	ttl              int
+	loop             bool
+	socketSendBuffer int
 
 	concurrency int
 	shardMask   int
@@ -34,7 +35,7 @@ type UDPMulticastSender struct {
 }
 
 // NewUDPMulticastSender 负责该函数对应的核心逻辑，详见实现细节。
-func NewUDPMulticastSender(name, localIP string, localPort int, group string, ifaceName string, ttl int, loop bool, concurrency int) (*UDPMulticastSender, error) {
+func NewUDPMulticastSender(name, localIP string, localPort int, group string, ifaceName string, ttl int, loop bool, socketSendBuffer, concurrency int) (*UDPMulticastSender, error) {
 	gaddr, err := net.ResolveUDPAddr("udp", group)
 	if err != nil {
 		return nil, err
@@ -51,16 +52,17 @@ func NewUDPMulticastSender(name, localIP string, localPort int, group string, if
 	laddr := &net.UDPAddr{IP: net.ParseIP(localIP), Port: localPort}
 
 	s := &UDPMulticastSender{
-		name:        name,
-		group:       gaddr,
-		local:       laddr,
-		ifaceName:   ifaceName,
-		ttl:         ttl,
-		loop:        loop,
-		concurrency: concurrency,
-		shardMask:   concurrency - 1,
-		locks:       make([]sync.Mutex, concurrency),
-		conns:       make([]atomic.Pointer[net.UDPConn], concurrency),
+		name:             name,
+		group:            gaddr,
+		local:            laddr,
+		ifaceName:        ifaceName,
+		ttl:              ttl,
+		loop:             loop,
+		socketSendBuffer: socketSendBuffer,
+		concurrency:      concurrency,
+		shardMask:        concurrency - 1,
+		locks:            make([]sync.Mutex, concurrency),
+		conns:            make([]atomic.Pointer[net.UDPConn], concurrency),
 	}
 	for i := 0; i < s.concurrency; i++ {
 		if err := s.ensureConn(i); err != nil {
@@ -135,7 +137,7 @@ func (s *UDPMulticastSender) ensureConnLocked(idx int) error {
 	if err != nil {
 		return err
 	}
-	_ = c.SetWriteBuffer(4 << 20)
+	_ = c.SetWriteBuffer(s.socketSendBuffer)
 
 	// Multicast options via x/net
 	if s.group.IP != nil && s.group.IP.To4() != nil {

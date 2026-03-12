@@ -29,3 +29,32 @@ func TestApplyDefaultsSetsReceiverMulticoreWhenUnset(t *testing.T) {
 		t.Fatalf("unexpected receiver multicore default: %+v", rc.Multicore)
 	}
 }
+func TestApplyDefaultsSetsSocketBufferDefaults(t *testing.T) {
+	cfg := Config{
+		Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000"}},
+		Senders:   map[string]SenderConfig{"s1": {Type: "udp_unicast", Remote: "127.0.0.1:9001", LocalPort: 9002}},
+	}
+	cfg.ApplyDefaults()
+
+	if got := cfg.Receivers["r1"].SocketRecvBuffer; got != DefaultReceiverSocketRecvBuffer {
+		t.Fatalf("unexpected receiver socket_recv_buffer default: %d", got)
+	}
+	if got := cfg.Senders["s1"].SocketSendBuffer; got != DefaultSenderSocketSendBuffer {
+		t.Fatalf("unexpected sender socket_send_buffer default: %d", got)
+	}
+}
+
+func TestApplyDefaultsPreservesExplicitSocketBufferValues(t *testing.T) {
+	cfg := Config{
+		Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000", SocketRecvBuffer: 2 << 20}},
+		Senders:   map[string]SenderConfig{"s1": {Type: "udp_unicast", Remote: "127.0.0.1:9001", LocalPort: 9002, SocketSendBuffer: 3 << 20}},
+	}
+	cfg.ApplyDefaults()
+
+	if got := cfg.Receivers["r1"].SocketRecvBuffer; got != 2<<20 {
+		t.Fatalf("receiver socket_recv_buffer should be preserved: %d", got)
+	}
+	if got := cfg.Senders["s1"].SocketSendBuffer; got != 3<<20 {
+		t.Fatalf("sender socket_send_buffer should be preserved: %d", got)
+	}
+}

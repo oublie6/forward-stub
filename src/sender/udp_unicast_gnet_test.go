@@ -31,13 +31,13 @@ func TestUDPUnicastSenderAllowsSameLocalPortAcrossDifferentRemotes(t *testing.T)
 	localPort := portLn.LocalAddr().(*net.UDPAddr).Port
 	_ = portLn.Close()
 
-	s1, err := NewUDPUnicastSender("s1", "127.0.0.1", localPort, r1, 1)
+	s1, err := NewUDPUnicastSender("s1", "127.0.0.1", localPort, r1, 4<<20, 1)
 	if err != nil {
 		t.Fatalf("new sender1: %v", err)
 	}
 	defer s1.Close(context.Background())
 
-	s2, err := NewUDPUnicastSender("s2", "127.0.0.1", localPort, r2, 1)
+	s2, err := NewUDPUnicastSender("s2", "127.0.0.1", localPort, r2, 4<<20, 1)
 	if err != nil {
 		t.Fatalf("new sender2 with same local port: %v", err)
 	}
