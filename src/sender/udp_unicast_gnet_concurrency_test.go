@@ -16,7 +16,7 @@ func TestUDPUnicastSenderWithConcurrencySendsPackets(t *testing.T) {
 	}
 	defer ln.Close()
 
-	s, err := NewUDPUnicastSender("s", "127.0.0.1", 0, ln.LocalAddr().String(), 4)
+	s, err := NewUDPUnicastSender("s", "127.0.0.1", 0, ln.LocalAddr().String(), 4<<20, 4)
 	if err != nil {
 		t.Fatalf("new sender: %v", err)
 	}

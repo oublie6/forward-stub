@@ -130,11 +130,17 @@ func (c *Config) ApplyDefaults() {
 		if rc.PayloadLogMaxBytes <= 0 {
 			rc.PayloadLogMaxBytes = c.Logging.PayloadLogMaxBytes
 		}
+		if rc.SocketRecvBuffer <= 0 {
+			rc.SocketRecvBuffer = DefaultReceiverSocketRecvBuffer
+		}
 		c.Receivers[name] = rc
 	}
 	for name, sc := range c.Senders {
 		if sc.Concurrency <= 0 {
 			sc.Concurrency = DefaultSenderConcurrency
+		}
+		if sc.SocketSendBuffer <= 0 {
+			sc.SocketSendBuffer = DefaultSenderSocketSendBuffer
 		}
 		c.Senders[name] = sc
 	}

@@ -16,11 +16,12 @@ import (
 )
 
 type GnetTCPSender struct {
-	name         string
-	remote       string
-	withU16BELen bool
-	concurrency  int
-	gnetLogLevel logging.Level
+	name             string
+	remote           string
+	withU16BELen     bool
+	concurrency      int
+	socketSendBuffer int
+	gnetLogLevel     logging.Level
 
 	cliMu sync.Mutex
 	cli   *gnet.Client
@@ -32,16 +33,17 @@ type GnetTCPSender struct {
 }
 
 // NewGnetTCPSender 负责该函数对应的核心逻辑，详见实现细节。
-func NewGnetTCPSender(name, remote string, withU16BELen bool, concurrency int, gnetLogLevel string) (*GnetTCPSender, error) {
+func NewGnetTCPSender(name, remote string, withU16BELen bool, concurrency, socketSendBuffer int, gnetLogLevel string) (*GnetTCPSender, error) {
 	if concurrency <= 0 {
 		concurrency = 1
 	}
 	s := &GnetTCPSender{
-		name:         name,
-		remote:       remote,
-		withU16BELen: withU16BELen,
-		concurrency:  concurrency,
-		gnetLogLevel: logx.ParseGnetLogLevel(gnetLogLevel),
+		name:             name,
+		remote:           remote,
+		withU16BELen:     withU16BELen,
+		concurrency:      concurrency,
+		socketSendBuffer: socketSendBuffer,
+		gnetLogLevel:     logx.ParseGnetLogLevel(gnetLogLevel),
 		framePool: sync.Pool{New: func() any {
 			b := make([]byte, 0, 2048)
 			return &b
@@ -143,6 +145,7 @@ func (s *GnetTCPSender) ensureClientAndDial() error {
 			gnet.WithMulticore(true),
 			gnet.WithReusePort(true),
 			gnet.WithReuseAddr(true),
+			gnet.WithSocketSendBuffer(s.socketSendBuffer),
 			gnet.WithLogLevel(s.gnetLogLevel),
 		)
 		if err != nil {

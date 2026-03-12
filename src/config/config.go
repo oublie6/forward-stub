@@ -15,7 +15,9 @@ const (
 	DefaultPayloadLogMaxBytes        = 256
 	DefaultReceiverMulticore         = true
 	DefaultReceiverNumEventLoop      = 8
+	DefaultReceiverSocketRecvBuffer  = 1 << 30
 	DefaultSenderConcurrency         = 8
+	DefaultSenderSocketSendBuffer    = 1 << 30
 	DefaultTaskPoolSize              = 4096
 	DefaultTaskQueueSize             = 8192
 	DefaultPayloadPoolMaxCachedBytes = int64(0)
@@ -163,6 +165,9 @@ type ReceiverConfig struct {
 	// ReadBufferCap 显式指定 gnet 每连接读缓冲上限（字节，<=0 表示使用 gnet 默认值）。
 	// 用法：仅对 gnet 协议有效；大包场景可适度调大以减少扩容与拷贝。
 	ReadBufferCap int `json:"read_buffer_cap,omitempty"`
+	// SocketRecvBuffer 显式指定 socket 内核接收缓冲区大小（字节，<=0 表示使用系统兜底默认值）。
+	// 用法：仅对 gnet 协议有效；高流量场景可调大降低内核丢包概率。
+	SocketRecvBuffer int `json:"socket_recv_buffer,omitempty"`
 	// Frame 是 TCP 粘包拆包规则（空或 u16be）。
 	// 用法：收发两端需一致；u16be 表示以 2 字节大端长度前缀分帧。
 	Frame string `json:"frame"` // "" | "u16be" (TCP)
@@ -239,6 +244,9 @@ type SenderConfig struct {
 	// Concurrency 控制发送并发度（按 sender 类型解释）。
 	// 用法：吞吐不足时可增大，但要关注下游承载能力。
 	Concurrency int `json:"concurrency"`
+	// SocketSendBuffer 显式指定 socket 内核发送缓冲区大小（字节，<=0 表示使用系统兜底默认值）。
+	// 用法：对 udp/tcp sender 生效；高吞吐场景建议调大以降低发送侧阻塞。
+	SocketSendBuffer int `json:"socket_send_buffer,omitempty"`
 	// Topic 是 Kafka 目标主题名。
 	// 用法：Type=kafka 时必填，指定消息投递目的主题。
 	Topic string `json:"topic"`

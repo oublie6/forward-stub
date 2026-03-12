@@ -1044,7 +1044,7 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 	}
 	switch rc.Type {
 	case "udp_gnet":
-		return receiver.NewGnetUDP(name, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, gnetLogLevel), nil
+		return receiver.NewGnetUDP(name, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, rc.SocketRecvBuffer, gnetLogLevel), nil
 	case "tcp_gnet":
 		var fr receiver.Framer
 		switch rc.Frame {
@@ -1055,7 +1055,7 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 		default:
 			return nil, fmt.Errorf("receiver %s unknown frame %s", name, rc.Frame)
 		}
-		return receiver.NewGnetTCP(name, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, fr, gnetLogLevel), nil
+		return receiver.NewGnetTCP(name, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, rc.SocketRecvBuffer, fr, gnetLogLevel), nil
 	case "kafka":
 		return receiver.NewKafkaReceiver(name, rc)
 	case "sftp":
@@ -1076,12 +1076,12 @@ func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (send
 		if sc.LocalPort <= 0 {
 			return nil, fmt.Errorf("sender %s udp_unicast requires local_port", name)
 		}
-		return sender.NewUDPUnicastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, conc)
+		return sender.NewUDPUnicastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.SocketSendBuffer, conc)
 	case "udp_multicast":
 		if sc.LocalPort <= 0 {
 			return nil, fmt.Errorf("sender %s udp_multicast requires local_port", name)
 		}
-		return sender.NewUDPMulticastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.Iface, sc.TTL, sc.Loop, conc)
+		return sender.NewUDPMulticastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.Iface, sc.TTL, sc.Loop, sc.SocketSendBuffer, conc)
 	case "tcp_gnet":
 		with := false
 		switch sc.Frame {
@@ -1092,7 +1092,7 @@ func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (send
 		default:
 			return nil, fmt.Errorf("sender %s unknown frame %s", name, sc.Frame)
 		}
-		return sender.NewGnetTCPSender(name, sc.Remote, with, conc, gnetLogLevel)
+		return sender.NewGnetTCPSender(name, sc.Remote, with, conc, sc.SocketSendBuffer, gnetLogLevel)
 	case "kafka":
 		return sender.NewKafkaSender(name, sc)
 	case "sftp":

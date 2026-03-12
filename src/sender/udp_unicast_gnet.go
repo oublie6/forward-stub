@@ -16,9 +16,10 @@ import (
 // - 设置 SO_REUSEADDR以允许多 sender 复用同一 local port
 // - 保证“同一个 sender = 同一个 socket”，天然满足“单 socket 内保序”
 type UDPUnicastSender struct {
-	name   string
-	remote *net.UDPAddr
-	local  *net.UDPAddr
+	name             string
+	remote           *net.UDPAddr
+	local            *net.UDPAddr
+	socketSendBuffer int
 
 	concurrency int
 	shardMask   int
@@ -28,7 +29,7 @@ type UDPUnicastSender struct {
 }
 
 // NewUDPUnicastSender 负责该函数对应的核心逻辑，详见实现细节。
-func NewUDPUnicastSender(name, localIP string, localPort int, remote string, concurrency int) (*UDPUnicastSender, error) {
+func NewUDPUnicastSender(name, localIP string, localPort int, remote string, socketSendBuffer, concurrency int) (*UDPUnicastSender, error) {
 	raddr, err := net.ResolveUDPAddr("udp", remote)
 	if err != nil {
 		return nil, err
@@ -46,13 +47,14 @@ func NewUDPUnicastSender(name, localIP string, localPort int, remote string, con
 	}
 
 	s := &UDPUnicastSender{
-		name:        name,
-		remote:      raddr,
-		local:       laddr,
-		concurrency: concurrency,
-		shardMask:   concurrency - 1,
-		locks:       make([]sync.Mutex, concurrency),
-		conns:       make([]atomic.Pointer[net.UDPConn], concurrency),
+		name:             name,
+		remote:           raddr,
+		local:            laddr,
+		socketSendBuffer: socketSendBuffer,
+		concurrency:      concurrency,
+		shardMask:        concurrency - 1,
+		locks:            make([]sync.Mutex, concurrency),
+		conns:            make([]atomic.Pointer[net.UDPConn], concurrency),
 	}
 	for i := 0; i < concurrency; i++ {
 		if err := s.ensureConn(i); err != nil {
@@ -127,7 +129,7 @@ func (s *UDPUnicastSender) ensureConnLocked(idx int) error {
 	if err != nil {
 		return err
 	}
-	_ = c.SetWriteBuffer(4 << 20)
+	_ = c.SetWriteBuffer(s.socketSendBuffer)
 	s.conns[idx].Store(c)
 	return nil
 }
