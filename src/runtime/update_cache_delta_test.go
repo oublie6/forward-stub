@@ -2,11 +2,68 @@ package runtime
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"forward-stub/src/config"
 	"forward-stub/src/pipeline"
 )
+
+func TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks(t *testing.T) {
+	oldTasks := map[string]config.TaskConfig{
+		"t1": {Senders: []string{"s1", "s2"}},
+		"t2": {Senders: []string{"s3"}},
+	}
+	newTasks := map[string]config.TaskConfig{
+		"t1": {Senders: []string{"s1", "s2"}},
+		"t2": {Senders: []string{"s3"}},
+	}
+
+	added, removed := expandTaskDeltaForSenderChanges(
+		oldTasks,
+		newTasks,
+		nil,
+		nil,
+		[]string{"s1"},
+		nil,
+	)
+
+	if !reflect.DeepEqual(added, []string{"t1"}) {
+		t.Fatalf("unexpected added tasks: %v", added)
+	}
+	if !reflect.DeepEqual(removed, []string{"t1"}) {
+		t.Fatalf("unexpected removed tasks: %v", removed)
+	}
+}
+
+func TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts(t *testing.T) {
+	oldTasks := map[string]config.TaskConfig{
+		"ta": {Senders: []string{"sx"}},
+		"tb": {Senders: []string{"sy"}},
+		"tc": {Senders: []string{"sz"}},
+	}
+	newTasks := map[string]config.TaskConfig{
+		"ta": {Senders: []string{"sx"}},
+		"tb": {Senders: []string{"sy"}},
+		"tc": {Senders: []string{"sz"}},
+	}
+
+	added, removed := expandTaskDeltaForSenderChanges(
+		oldTasks,
+		newTasks,
+		[]string{"tc"},
+		[]string{"tc"},
+		[]string{"sy", "sx"},
+		nil,
+	)
+
+	if !reflect.DeepEqual(added, []string{"ta", "tb", "tc"}) {
+		t.Fatalf("unexpected added tasks: %v", added)
+	}
+	if !reflect.DeepEqual(removed, []string{"ta", "tb", "tc"}) {
+		t.Fatalf("unexpected removed tasks: %v", removed)
+	}
+}
 
 func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	st := NewStore()

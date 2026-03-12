@@ -131,8 +131,5 @@ func (s *UDPUnicastSender) ensureConnLocked(idx int) error {
 }
 
 func (s *UDPUnicastSender) pickShard() int {
-	if s.concurrency <= 1 {
-		return 0
-	}
-	return int(s.nextIdx.Add(1)-1) % s.concurrency
+	return nextShardIndex(&s.nextIdx, s.concurrency)
 }

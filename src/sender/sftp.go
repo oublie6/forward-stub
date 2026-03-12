@@ -301,7 +301,7 @@ func (s *SFTPSender) pickShard(transferID string) int {
 	if idx, ok := s.transferShard[transferID]; ok {
 		return idx
 	}
-	idx := int(s.nextIdx.Add(1)-1) % s.concurrency
+	idx := nextShardIndex(&s.nextIdx, s.concurrency)
 	s.transferShard[transferID] = idx
 	return idx
 }

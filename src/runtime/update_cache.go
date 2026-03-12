@@ -284,6 +284,9 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	senderAdded, senderRemoved := splitDeltaWithReplace(oldSenders, cfg.Senders)
 	pipelineAdded, pipelineRemoved := splitDeltaWithReplace(oldPipelines, cfg.Pipelines)
 	taskAdded, taskRemoved := splitDeltaWithReplace(oldTasks, cfg.Tasks)
+	if len(senderAdded) > 0 || len(senderRemoved) > 0 {
+		taskAdded, taskRemoved = expandTaskDeltaForSenderChanges(oldTasks, cfg.Tasks, taskAdded, taskRemoved, senderAdded, senderRemoved)
+	}
 
 	receiverChanged := len(receiverAdded) > 0 || len(receiverRemoved) > 0
 	senderChanged := len(senderAdded) > 0 || len(senderRemoved) > 0
@@ -388,6 +391,66 @@ func splitDeltaWithReplace[T any](oldMap, newMap map[string]T) (added []string, 
 	sort.Strings(added)
 	sort.Strings(removed)
 	return added, removed
+}
+
+func expandTaskDeltaForSenderChanges(
+	oldTasks map[string]config.TaskConfig,
+	newTasks map[string]config.TaskConfig,
+	taskAdded []string,
+	taskRemoved []string,
+	senderAdded []string,
+	senderRemoved []string,
+) ([]string, []string) {
+	changedSenders := make(map[string]struct{}, len(senderAdded)+len(senderRemoved))
+	for _, name := range senderAdded {
+		changedSenders[name] = struct{}{}
+	}
+	for _, name := range senderRemoved {
+		changedSenders[name] = struct{}{}
+	}
+	if len(changedSenders) == 0 {
+		return taskAdded, taskRemoved
+	}
+
+	addedSet := make(map[string]struct{}, len(taskAdded))
+	for _, name := range taskAdded {
+		addedSet[name] = struct{}{}
+	}
+	removedSet := make(map[string]struct{}, len(taskRemoved))
+	for _, name := range taskRemoved {
+		removedSet[name] = struct{}{}
+	}
+
+	for taskName, oldTC := range oldTasks {
+		newTC, ok := newTasks[taskName]
+		if !ok {
+			continue
+		}
+		if !taskUsesChangedSender(oldTC, changedSenders) && !taskUsesChangedSender(newTC, changedSenders) {
+			continue
+		}
+		if _, ok := removedSet[taskName]; !ok {
+			taskRemoved = append(taskRemoved, taskName)
+			removedSet[taskName] = struct{}{}
+		}
+		if _, ok := addedSet[taskName]; !ok {
+			taskAdded = append(taskAdded, taskName)
+			addedSet[taskName] = struct{}{}
+		}
+	}
+
+	sort.Strings(taskAdded)
+	sort.Strings(taskRemoved)
+	return taskAdded, taskRemoved
+}
+
+func taskUsesChangedSender(tc config.TaskConfig, changed map[string]struct{}) bool {
+	for _, senderName := range tc.Senders {
+		if _, ok := changed[senderName]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // applySenderDelta 增量更新 sender 集合。
