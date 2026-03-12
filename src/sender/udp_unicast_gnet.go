@@ -21,6 +21,7 @@ type UDPUnicastSender struct {
 	local  *net.UDPAddr
 
 	concurrency int
+	shardMask   int
 	locks       []sync.Mutex
 	conns       []atomic.Pointer[net.UDPConn]
 	nextIdx     atomic.Uint64
@@ -49,6 +50,7 @@ func NewUDPUnicastSender(name, localIP string, localPort int, remote string, con
 		remote:      raddr,
 		local:       laddr,
 		concurrency: concurrency,
+		shardMask:   concurrency - 1,
 		locks:       make([]sync.Mutex, concurrency),
 		conns:       make([]atomic.Pointer[net.UDPConn], concurrency),
 	}
@@ -70,7 +72,7 @@ func (s *UDPUnicastSender) Key() string {
 
 // Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPUnicastSender) Send(ctx context.Context, p *packet.Packet) error {
-	idx := s.pickShard()
+	idx := nextShardIndex(&s.nextIdx, s.shardMask)
 	c := s.conns[idx].Load()
 	if c == nil {
 		var err error
@@ -128,8 +130,4 @@ func (s *UDPUnicastSender) ensureConnLocked(idx int) error {
 	_ = c.SetWriteBuffer(4 << 20)
 	s.conns[idx].Store(c)
 	return nil
-}
-
-func (s *UDPUnicastSender) pickShard() int {
-	return nextShardIndex(&s.nextIdx, s.concurrency)
 }

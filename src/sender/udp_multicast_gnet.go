@@ -27,6 +27,7 @@ type UDPMulticastSender struct {
 	loop      bool
 
 	concurrency int
+	shardMask   int
 	locks       []sync.Mutex
 	conns       []atomic.Pointer[net.UDPConn]
 	nextIdx     atomic.Uint64
@@ -57,6 +58,7 @@ func NewUDPMulticastSender(name, localIP string, localPort int, group string, if
 		ttl:         ttl,
 		loop:        loop,
 		concurrency: concurrency,
+		shardMask:   concurrency - 1,
 		locks:       make([]sync.Mutex, concurrency),
 		conns:       make([]atomic.Pointer[net.UDPConn], concurrency),
 	}
@@ -78,7 +80,7 @@ func (s *UDPMulticastSender) Key() string {
 
 // Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *UDPMulticastSender) Send(ctx context.Context, p *packet.Packet) error {
-	idx := s.pickShard()
+	idx := nextShardIndex(&s.nextIdx, s.shardMask)
 	c := s.conns[idx].Load()
 	if c == nil {
 		var err error
@@ -164,8 +166,4 @@ func (s *UDPMulticastSender) ensureConnLocked(idx int) error {
 
 	s.conns[idx].Store(c)
 	return nil
-}
-
-func (s *UDPMulticastSender) pickShard() int {
-	return nextShardIndex(&s.nextIdx, s.concurrency)
 }

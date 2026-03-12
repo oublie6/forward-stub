@@ -23,6 +23,7 @@ type KafkaSender struct {
 	brokers     []string
 	topic       string
 	concurrency int
+	shardMask   int
 
 	clients []atomic.Pointer[kgo.Client]
 	nextIdx atomic.Uint64
@@ -66,6 +67,7 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 		brokers:     brs,
 		topic:       sc.Topic,
 		concurrency: concurrency,
+		shardMask:   concurrency - 1,
 		clients:     make([]atomic.Pointer[kgo.Client], concurrency),
 	}
 	for i := 0; i < concurrency; i++ {
@@ -87,7 +89,7 @@ func (s *KafkaSender) Key() string { return "kafka|" + strings.Join(s.brokers, "
 
 // Send 负责该函数对应的核心逻辑，详见实现细节。
 func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
-	idx := s.pickShard()
+	idx := nextShardIndex(&s.nextIdx, s.shardMask)
 	cli := s.clients[idx].Load()
 	if cli == nil {
 		return errors.New("kafka sender closed")
@@ -110,10 +112,6 @@ func (s *KafkaSender) Close(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-func (s *KafkaSender) pickShard() int {
-	return nextShardIndex(&s.nextIdx, s.concurrency)
 }
 
 func splitCSV(v string) []string {
