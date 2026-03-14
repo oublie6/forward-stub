@@ -1,90 +1,115 @@
 {
-  "version": 5,
+  "version": 1001,
   "control": {
     "api": "",
     "timeout_sec": 5,
-    "config_watch_interval": "2s"
-  },
-  "receivers": {
-    "udp_in": {
-      "type": "udp_gnet",
-      "listen": "udp://0.0.0.0:9000",
-      "multicore": true,
-      "num_event_loop": 0,
-      "read_buffer_cap": 0,
-      "frame": "",
-      "log_payload_recv": true,
-      "payload_log_max_bytes": 128
-    },
-    "udp_in2": {
-      "type": "udp_gnet",
-      "listen": "udp://0.0.0.0:9001",
-      "multicore": true,
-      "frame": ""
-    }
-  },
-  "senders": {
-    "udp_uni_out": {
-      "type": "udp_unicast",
-      "remote": "127.0.0.1:9100",
-      "local_ip": "0.0.0.0",
-      "local_port": 50000,
-      "concurrency": 1
-    },
-    "udp_uni_out2": {
-      "type": "udp_unicast",
-      "remote": "127.0.0.1:9101",
-      "local_ip": "0.0.0.0",
-      "local_port": 50000,
-      "concurrency": 1
-    }
-  },
-  "pipelines": {
-    "p1": [
-      {
-        "type": "match_offset_bytes",
-        "offset": 0,
-        "hex": "AABB"
-      }
-    ]
-  },
-  "tasks": {
-    "udp_task_unicast": {
-      "pool_size": 64,
-      "queue_size": 256,
-      "fast_path": false,
-      "receivers": [
-        "udp_in"
-      ],
-      "pipelines": [],
-      "senders": [
-        "udp_uni_out"
-      ],
-      "log_payload_send": true,
-      "payload_log_max_bytes": 128
-    },
-    "udp_task_multicast": {
-      "pool_size": 64,
-      "queue_size": 256,
-      "fast_path": false,
-      "receivers": [
-        "udp_in2"
-      ],
-      "pipelines": [],
-      "senders": [
-        "udp_uni_out2"
-      ]
-    }
+    "config_watch_interval": "2s",
+    "pprof_port": 6060
   },
   "logging": {
     "level": "info",
     "file": "",
-    "traffic_stats_interval": "5s",
-    "traffic_stats_sample_every": 1,
-    "compress": true,
     "max_size_mb": 100,
     "max_backups": 5,
     "max_age_days": 30,
-    "payload_log_max_bytes": 128
+    "compress": true,
+    "traffic_stats_interval": "1s",
+    "traffic_stats_sample_every": 1,
+    "payload_log_max_bytes": 256,
+    "payload_pool_max_cached_bytes": 0
+  },
+  "receivers": {
+    "rx_udp": {
+      "type": "udp_gnet",
+      "listen": "0.0.0.0:19000",
+      "multicore": true,
+      "num_event_loop": 8,
+      "read_buffer_cap": 1048576,
+      "socket_recv_buffer": 1073741824
+    },
+    "rx_tcp": {
+      "type": "tcp_gnet",
+      "listen": "0.0.0.0:19001",
+      "frame": "u16be",
+      "multicore": true,
+      "num_event_loop": 4,
+      "socket_recv_buffer": 1073741824
+    },
+    "rx_kafka": {
+      "type": "kafka",
+      "listen": "127.0.0.1:9092",
+      "topic": "input-topic",
+      "group_id": "forward-stub-group",
+      "start_offset": "latest",
+      "fetch_min_bytes": 1,
+      "fetch_max_bytes": 1048576,
+      "fetch_max_wait_ms": 100,
+      "username": "kafka-user",
+      "password": "kafka-pass",
+      "sasl_mechanism": "PLAIN",
+      "tls": false
+    }
+  },
+  "senders": {
+    "tx_udp": {
+      "type": "udp_unicast",
+      "local_ip": "0.0.0.0",
+      "local_port": 20000,
+      "remote": "127.0.0.1:21000",
+      "concurrency": 8,
+      "socket_send_buffer": 1073741824
+    },
+    "tx_tcp": {
+      "type": "tcp_gnet",
+      "remote": "127.0.0.1:21002",
+      "frame": "u16be",
+      "concurrency": 4,
+      "socket_send_buffer": 1073741824
+    },
+    "tx_kafka": {
+      "type": "kafka",
+      "remote": "127.0.0.1:9092",
+      "topic": "output-topic",
+      "acks": -1,
+      "linger_ms": 5,
+      "batch_max_bytes": 1048576,
+      "compression": "lz4"
+    }
+  },
+  "pipelines": {
+    "pipe_route_sender": [
+      {
+        "type": "route_offset_bytes_sender",
+        "offset": 0,
+        "cases": {
+          "01": "tx_udp",
+          "02": "tx_tcp"
+        },
+        "default_sender": "tx_kafka"
+      }
+    ]
+  },
+  "tasks": {
+    "task_pool": {
+      "receivers": [
+        "rx_udp",
+        "rx_tcp",
+        "rx_kafka"
+      ],
+      "pipelines": [
+        "pipe_route_sender"
+      ],
+      "senders": [
+        "tx_udp",
+        "tx_tcp",
+        "tx_kafka"
+      ],
+      "execution_model": "pool",
+      "pool_size": 2048,
+      "queue_size": 4096,
+      "channel_queue_size": 4096,
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
+    }
   }
 }

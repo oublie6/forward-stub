@@ -1,5 +1,6 @@
 {
   "control": {
+    "api": "",
     "timeout_sec": 5,
     "config_watch_interval": "2s",
     "pprof_port": 6060
@@ -12,7 +13,9 @@
     "max_age_days": 30,
     "compress": true,
     "traffic_stats_interval": "1s",
-    "traffic_stats_sample_every": 1
+    "traffic_stats_sample_every": 1,
+    "payload_log_max_bytes": 256,
+    "payload_pool_max_cached_bytes": 0
   },
   "business_defaults": {
     "task": {
