@@ -17,6 +17,12 @@ dispatch 位于 receiver 回调之后，负责：
 - `dispatchSubs` 为只读快照，读路径无锁。
 - 单订阅复用原 packet，减少复制。
 
+对应实现位置：
+
+- `runtime.dispatch`
+- `Store.getDispatchTasks`
+- `Store.getRecvPayloadLogOption`
+
 ## 3. task 职责
 
 task 负责一条完整链路：
@@ -25,6 +31,13 @@ task 负责一条完整链路：
 - 顺序执行 pipeline。
 - fanout 到 sender 列表。
 - 维护 in-flight 计数与优雅停机。
+
+对应实现位置：
+
+- `Task.Start`
+- `Task.Handle`
+- `Task.processAndSend`
+- `Task.StopGraceful`
 
 ## 4. 实例化关系
 
@@ -55,6 +68,12 @@ flowchart LR
 
 当队列满时，task 会丢包并记录错误日志。
 
+关键参数来源：
+
+- task 显式配置字段。
+- system `business_defaults.task`。
+- `ApplyDefaults` 的内置默认值。
+
 ## 7. 快照与热更新
 
 更新时 runtime 会重建 dispatch 快照：
@@ -73,3 +92,9 @@ flowchart LR
 - 新增 task 时优先检查 receiver 和 sender 引用正确性。
 - route stage 场景需确保 sender 名称一致。
 - 长期堆积时优先检查下游 sender 性能和 task 队列参数。
+
+## 9. 调度问题快速判断
+
+1. 若单 receiver 绑定大量 task 且吞吐下降，优先检查 clone 成本与 sender 压力。
+2. 若仅 pool 模型报警，优先检查 `queue_size` 与 `pool_size` 配比。
+3. 若仅 channel 模型报警，优先检查顺序链路是否超出单 worker 承载上限。

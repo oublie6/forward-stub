@@ -21,6 +21,13 @@
 
 runtime 的核心在 `runtime.UpdateCache`。
 
+关键入口函数：
+
+- `app.Runtime.UpdateCache`
+- `runtime.UpdateCache`
+- `Store.replaceAll`
+- `Store.applyBusinessDelta`
+
 ### 3.1 构建顺序
 
 1. 编译 pipeline（含 stage cache）。
@@ -53,6 +60,12 @@ runtime 的核心在 `runtime.UpdateCache`。
 3. 仅当 system 稳定时更新 business 配置。
 4. runtime 尝试增量更新；无法增量时回退全量替换。
 
+说明：
+
+- system 配置基线由 `SeedSystemConfig` 记录。
+- reload 时由 `CheckSystemConfigStable` 拒绝 system 漂移。
+- business 更新仍会再次经过 `ApplyDefaults + Validate`。
+
 ## 5. 资源创建复用销毁路径
 
 ### 创建
@@ -66,6 +79,11 @@ runtime 的核心在 `runtime.UpdateCache`。
 - sender 可被多个 task 引用，`SenderState.Refs` 追踪引用数。
 - stage 通过 signature 在 `stageCache` 复用。
 - task 重建时可复用流量统计对象。
+
+复用判定的价值：
+
+- 降低热更新期间对象重建与连接抖动。
+- 缩短配置切换窗口。
 
 ### 销毁
 
@@ -102,3 +120,9 @@ flowchart TD
 - 配置校验失败、sender 构建失败会阻止新配置生效。
 - 旧实例在替换路径中会先完成停止，避免资源泄漏。
 - 待确认：control API 拉取失败时是否需要更细粒度重试策略文档化。
+
+## 9. 生命周期维护建议
+
+1. 生产变更优先更新 business 配置，避免触发 system 漂移拒绝。
+2. 变更后检查启动日志中 `runtime cache updated` 与 task 快照输出。
+3. 若频繁全量替换，应评估是否可通过配置结构降低重建范围。

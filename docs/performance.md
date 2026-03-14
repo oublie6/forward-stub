@@ -13,6 +13,13 @@
 5. stage cache 减少热更新时重复编译开销。
 6. sender 支持并发参数调优。
 
+对应模块：
+
+- 网络收发：`src/receiver/gnet_udp.go`、`src/receiver/gnet_tcp.go`、`src/sender/gnet_tcp.go`、`src/sender/udp_unicast_gnet.go`
+- 调度执行：`src/task/task.go`
+- 运行时分发：`src/runtime/update_cache.go`
+- payload 复用：`src/packet/pool.go`
+
 ## 3. 执行模型对性能影响
 
 - `fastpath`：更低延迟，受下游抖动影响更直接。
@@ -60,6 +67,12 @@ go run ./cmd/bench -config ./configs/bench.example.json
 - 不合理的并发和队列参数。
 - 多订阅场景 clone 成本上升。
 
+排查建议：
+
+1. 先判断是入站瓶颈还是出站瓶颈。
+2. 再判断是模型参数问题还是协议下游问题。
+3. 最后用 pprof 定位 CPU 或内存热点。
+
 ## 9. 优化路径
 
 1. 优先确认执行模型与链路目标匹配。
@@ -72,3 +85,7 @@ go run ./cmd/bench -config ./configs/bench.example.json
 - 增加更细粒度 task 运行时指标。
 - 建立基于 bench 的自动回归阈值。
 - 补充 route 命中率和 sender 延迟观测能力。
+
+待确认：
+
+- 是否规划统一指标导出接口以支撑自动化性能门禁。

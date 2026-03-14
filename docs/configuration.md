@@ -61,6 +61,12 @@ flowchart LR
 2. system `business_defaults`。
 3. 代码默认值。
 
+设计意图：
+
+- 业务配置尽量只描述差异，降低变更噪声。
+- system 层统一收敛组织级默认策略。
+- 代码默认值保证最小可运行配置不因字段缺失失败。
+
 ## 6. 关键校验规则
 
 - task 必须引用已存在 receiver/sender/pipeline。
@@ -84,11 +90,24 @@ flowchart LR
 - task 共享 sender。
 - pipeline 组合 match/replace/route/file 语义。
 
+扩展建议：
+
+1. 先新增 receiver 和 sender，再挂接 task。
+2. route stage 引入前先把 sender 名称固定，避免重构时路由失效。
+3. 复杂拓扑优先拆成多 task，避免单 task 过重。
+
 ## 8. 热更新影响范围
 
 - 可热更新：business 配置。
 - 不可在线漂移：system 配置。
 - reload 前会对比 system 基线，不一致直接拒绝。
+
+影响分析：
+
+- receiver 变化可能触发监听端口重建。
+- sender 变化可能触发连接重建。
+- pipeline 变化会触发 stage 重新编译或缓存复用。
+- task 变化会影响执行模型和队列参数。
 
 ## 9. 与 README 示例关系
 

@@ -64,6 +64,11 @@ nc -vz 127.0.0.1 9092
 3. sender 协议参数。
 4. task 是否 route 到错误 sender。
 
+建议同时检查：
+
+- sender `concurrency` 是否误配（非 2 的幂会被校验拒绝）。
+- Kafka 的 `topic` 与 broker ACL 是否匹配。
+
 ## 5. 队列堆积与回压
 
 ### 现象
@@ -93,6 +98,12 @@ go run ./cmd/bench -config ./configs/bench.example.json
 
 结合日志判断是 receiver、task 还是 sender 瓶颈。
 
+判断依据：
+
+- 入站稳定但出站下降，多数为 sender 或下游问题。
+- 入站下降，多数为 receiver 或上游问题。
+- 入站和出站都下降，优先检查资源限制与配置变更。
+
 ## 7. CPU 异常
 
 ```bash
@@ -114,6 +125,11 @@ go tool pprof http://127.0.0.1:6060/debug/pprof/heap
 - 队列是否过深。
 - 大 payload 是否异常增多。
 - 日志是否放大对象生命周期。
+
+如为持续增长，补充检查：
+
+- 是否反复触发大规模配置替换。
+- 是否存在异常大包持续输入。
 
 ## 9. 协议专项问题
 

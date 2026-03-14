@@ -125,6 +125,13 @@ go run ./cmd/bench -config ./configs/bench.example.json
 
 用途：高并发 UDP 接入。
 
+关键字段说明：
+
+- `listen`：UDP 监听地址。
+- `multicore` 与 `num_event_loop`：gnet 事件循环并发度。
+- `read_buffer_cap` 与 `socket_recv_buffer`：收包缓冲参数。
+- `log_payload_recv` 与 `payload_log_max_bytes`：输入 payload 观测开关和截断长度。
+
 ```json
 {
   "rx_udp": {
@@ -144,6 +151,12 @@ go run ./cmd/bench -config ./configs/bench.example.json
 
 用途：TCP 长连接接入，支持 framing。
 
+关键字段说明：
+
+- `frame`：TCP 封帧格式，需与对端一致。
+- `num_event_loop`：事件循环并发度。
+- `socket_recv_buffer`：内核接收缓冲区目标值。
+
 ```json
 {
   "rx_tcp": {
@@ -160,6 +173,14 @@ go run ./cmd/bench -config ./configs/bench.example.json
 ### 7.3 kafka
 
 用途：消费 Kafka topic 并转发。
+
+关键字段说明：
+
+- `listen`：broker 列表。
+- `topic` 与 `group_id`：消费目标和消费组。
+- `start_offset`：起始消费位点。
+- `fetch_*`：拉取批次与等待策略。
+- `username/password/sasl_mechanism/tls`：鉴权和链路安全配置。
 
 ```json
 {
@@ -185,6 +206,13 @@ go run ./cmd/bench -config ./configs/bench.example.json
 
 用途：轮询远端目录并按 chunk 读取文件。
 
+关键字段说明：
+
+- `remote_dir`：待轮询目录。
+- `poll_interval_sec`：轮询间隔。
+- `chunk_size`：文件读取分块大小。
+- `host_key_fingerprint`：SSH 主机指纹校验，缺失或错误会拒绝连接。
+
 ```json
 {
   "rx_sftp": {
@@ -206,6 +234,12 @@ go run ./cmd/bench -config ./configs/bench.example.json
 
 ### 8.1 udp_unicast
 
+关键字段说明：
+
+- `remote`：目标地址。
+- `local_ip/local_port`：本地出口绑定。
+- `concurrency`：发送并发 shard 数。
+
 ```json
 {
   "tx_udp": {
@@ -220,6 +254,12 @@ go run ./cmd/bench -config ./configs/bench.example.json
 ```
 
 ### 8.2 udp_multicast
+
+关键字段说明：
+
+- `remote`：组播地址。
+- `iface`：组播网卡。
+- `ttl/loop`：组播生存时间和回环策略。
 
 ```json
 {
@@ -239,6 +279,12 @@ go run ./cmd/bench -config ./configs/bench.example.json
 
 ### 8.3 tcp_gnet
 
+关键字段说明：
+
+- `remote`：目标 TCP 地址。
+- `frame`：发送封帧策略。
+- `concurrency`：内部发送并发。
+
 ```json
 {
   "tx_tcp": {
@@ -252,6 +298,12 @@ go run ./cmd/bench -config ./configs/bench.example.json
 ```
 
 ### 8.4 kafka
+
+关键字段说明：
+
+- `topic`：目标主题。
+- `acks`、`linger_ms`、`batch_max_bytes`：可靠性与吞吐平衡参数。
+- `compression`：压缩算法。
 
 ```json
 {
@@ -274,6 +326,12 @@ go run ./cmd/bench -config ./configs/bench.example.json
 
 ### 8.5 sftp
 
+关键字段说明：
+
+- `remote_dir`：写入目录。
+- `temp_suffix`：临时文件后缀，用于原子替换。
+- `host_key_fingerprint`：主机身份校验。
+
 ```json
 {
   "tx_sftp": {
@@ -294,6 +352,11 @@ go run ./cmd/bench -config ./configs/bench.example.json
 
 ### 9.1 match_offset_bytes
 
+关键字段说明：
+
+- `offset`：匹配起始偏移。
+- `hex`：目标字节序列（十六进制）。
+
 ```json
 {
   "pipe_match": [
@@ -307,6 +370,11 @@ go run ./cmd/bench -config ./configs/bench.example.json
 ```
 
 ### 9.2 replace_offset_bytes
+
+关键字段说明：
+
+- `offset`：替换起始偏移。
+- `hex`：替换字节序列。
 
 ```json
 {
@@ -322,6 +390,11 @@ go run ./cmd/bench -config ./configs/bench.example.json
 
 ### 9.3 mark_as_file_chunk
 
+关键字段说明：
+
+- `path`：默认文件路径。
+- `bool`：是否将该 chunk 视为 EOF。
+
 ```json
 {
   "pipe_mark_file": [
@@ -336,6 +409,10 @@ go run ./cmd/bench -config ./configs/bench.example.json
 
 ### 9.4 clear_file_meta
 
+关键字段说明：
+
+- 无额外字段；作用是清理文件元信息并恢复 stream 语义。
+
 ```json
 {
   "pipe_clear_file": [
@@ -347,6 +424,12 @@ go run ./cmd/bench -config ./configs/bench.example.json
 ```
 
 ### 9.5 route_offset_bytes_sender
+
+关键字段说明：
+
+- `offset`：路由键偏移。
+- `cases`：路由键到 sender 名字映射（hex key）。
+- `default_sender`：未命中时的回退 sender。
 
 ```json
 {
@@ -370,6 +453,11 @@ go run ./cmd/bench -config ./configs/bench.example.json
 
 ### 10.1 fastpath
 
+关键字段说明：
+
+- `execution_model=fastpath`：同步执行。
+- `receivers/pipelines/senders`：链路绑定。
+
 ```json
 {
   "task_fastpath": {
@@ -386,6 +474,12 @@ go run ./cmd/bench -config ./configs/bench.example.json
 ```
 
 ### 10.2 pool
+
+关键字段说明：
+
+- `execution_model=pool`：worker 池执行。
+- `pool_size`：worker 数。
+- `queue_size`：阻塞队列上限。
 
 ```json
 {
@@ -404,6 +498,11 @@ go run ./cmd/bench -config ./configs/bench.example.json
 ```
 
 ### 10.3 channel
+
+关键字段说明：
+
+- `execution_model=channel`：单 worker + 有界 channel。
+- `channel_queue_size`：排队上限。
 
 ```json
 {
