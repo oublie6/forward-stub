@@ -1,4 +1,19 @@
-// bench main 提供本地 UDP/TCP 转发链路的压测入口。
+// Package main provides a self-contained benchmark harness for forward-stub.
+//
+// 设计目标：
+//  1. 在单进程内构建“generator -> receiver -> dispatch -> task -> sender -> sink”最小闭环；
+//  2. 量化 UDP/TCP 路径的基础吞吐与丢包趋势；
+//  3. 对比 task 执行模型（fastpath/pool/channel）和关键参数的影响；
+//  4. 作为代码改动后的快速回归工具。
+//
+// 覆盖范围：
+//  - 覆盖 runtime.UpdateCache 构建路径、dispatch 分发、task 调度和 UDP/TCP sender 写出；
+//  - 默认 pipeline 为空，主要测调度与发送路径固定成本；
+//  - 不直接覆盖 Kafka/SFTP 外部依赖、跨主机网络抖动和生产部署拓扑。
+//
+// 结果解读：
+//  - 更适用于“同机同参数”的横向对比，不应直接等同生产容量承诺；
+//  - `both` 模式是顺序执行 udp 与 tcp 场景，不是并行混压。
 package main
 
 import (
@@ -34,6 +49,11 @@ type metrics struct {
 	seqAlloc    uint64
 }
 
+// result 是单轮 benchmark 的最终统计快照。
+//
+// 注意：
+//  - sent/recv 统计在 warmup 后采样，尽量避免启动抖动干扰；
+//  - pps 与 mbps 基于 recv 侧计算，反映有效输出吞吐。
 type result struct {
 	proto          string
 	duration       time.Duration
@@ -50,6 +70,11 @@ type result struct {
 	mbps           float64
 }
 
+// benchFileConfig 对应 -bench-config JSON 文件。
+//
+// 使用指引：
+//  - 所有字段均为可选，只有显式出现才覆盖命令行默认值；
+//  - 保持与 flag 名语义一致，降低“配置文件模式”和“命令行模式”之间的心智切换成本。
 type benchFileConfig struct {
 	Mode                 string `json:"mode,omitempty"`
 	Duration             string `json:"duration,omitempty"`
@@ -76,7 +101,13 @@ type benchFileConfig struct {
 	ValidateOrder        *bool  `json:"validate_order,omitempty"`
 }
 
-// main 负责该函数对应的核心逻辑，详见实现细节。
+// main 负责参数解析、场景展开、执行与结果输出。
+//
+// 关键流程：
+//  1. 解析命令行参数并可选加载 bench-config 覆盖；
+//  2. 做输入合法性校验（如 payload-size、validate-order）；
+//  3. 根据 pps-sweep 形成测试档位，按 mode 顺序运行；
+//  4. 每个场景调用 runForwardBenchmark 获取结果并打印。
 func main() {
 	benchConfigPath := flag.String("bench-config", "", "benchmark config json path (optional)")
 	mode := flag.String("mode", "both", "benchmark mode: udp|tcp|both")
@@ -105,6 +136,8 @@ func main() {
 	flag.Parse()
 
 	if *benchConfigPath != "" {
+		// bench-config 作为“参数模板”，用于批量复现实验。
+		// 覆盖策略是“配置文件优先于 flag 默认值”，但仍受后续校验约束。
 		if err := applyBenchConfigFile(*benchConfigPath, mode, duration, warmup, payloadSize, workers, ppsPerWorker, ppsSweep, multicore, udpSinkReaders, udpSinkReadBuf, taskFastPath, taskPoolSize, taskQueueSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort, logLevel, logFile, trafficStatsInterval, validateOrder); err != nil {
 			logx.L().Errorw("load bench config failed", "error", err)
 			os.Exit(2)
@@ -134,6 +167,7 @@ func main() {
 	ctx := context.Background()
 	rates := []int{*ppsPerWorker}
 	if strings.TrimSpace(*ppsSweep) != "" {
+		// sweep 模式用于“单次命令，多档位对比”，减少手工重复执行。
 		parsed, err := parseSweep(*ppsSweep)
 		if err != nil {
 			logx.L().Errorw("invalid pps-sweep", "error", err, "pps_sweep", *ppsSweep)
@@ -143,6 +177,7 @@ func main() {
 	}
 
 	benchRun := func(proto string) {
+		// 每个 proto 逐档位执行；任一档失败即终止，避免输出混合“成功/失败”数据误导对比。
 		for _, rate := range rates {
 			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf, *taskFastPath, *taskPoolSize, *taskQueueSize, *taskChannelQueueSize, *taskExecutionModel, *receiverEventLoops, *receiverReadBufferCap, *tcpSenderConcurrency, *basePort, *validateOrder)
 			if err != nil {
@@ -165,6 +200,11 @@ func main() {
 	}
 }
 
+// applyBenchConfigFile loads JSON config and overlays provided flag values.
+//
+// 维护提示：
+//  - 新增 flag 时要同步补齐 benchFileConfig 字段和此处覆盖逻辑；
+//  - 时长字段采用 ParseDuration，能统一支持 500ms/2s 等格式。
 func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Duration, payloadSize, workers, ppsPerWorker *int, ppsSweep *string, multicore *bool, udpSinkReaders, udpSinkReadBuf *int, taskFastPath *bool, taskPoolSize, taskQueueSize, taskChannelQueueSize *int, taskExecutionModel *string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort *int, logLevel, logFile *string, trafficStatsInterval *time.Duration, validateOrder *bool) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -259,7 +299,9 @@ func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Dura
 	return nil
 }
 
-// parseSweep 负责该函数对应的核心逻辑，详见实现细节。
+// parseSweep parses comma-separated non-negative pps values.
+//
+// 例如 "1000,2000,4000" -> [1000,2000,4000]。
 func parseSweep(in string) ([]int, error) {
 	parts := strings.Split(in, ",")
 	out := make([]int, 0, len(parts))
@@ -280,7 +322,18 @@ func parseSweep(in string) ([]int, error) {
 	return out, nil
 }
 
-// runForwardBenchmark 负责该函数对应的核心逻辑，详见实现细节。
+// runForwardBenchmark runs one complete benchmark round for a given proto.
+//
+// 该函数是 bench 的核心执行器，包含：
+//  1. 启动本地 sink；
+//  2. 构建最小 runtime 拓扑；
+//  3. 启动 generator 并执行 warmup + measure；
+//  4. 汇总 sent/recv/order/loss/pps/mbps；
+//  5. 关闭生成器、runtime 与 sink。
+//
+// 维护提示：
+//  - warmup 基线必须在测量前采样，否则结果会被启动抖动污染；
+//  - sink drain 等待用于降低“发送已停但接收还在入队”的尾部偏差。
 func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int, taskFastPath bool, taskPoolSize, taskQueueSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort int, validateOrder bool) (*result, error) {
 	m := &metrics{seqCheck: validateOrder}
 	if basePort == 0 {
@@ -308,6 +361,8 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	defer func() { _ = stopSink() }()
 
 	rt := app.NewRuntime()
+	// benchConfig 构造单 receiver/single task/single sender 的最小拓扑，
+	// 让不同场景之间的差异主要来自执行模型与参数，而不是业务编排差异。
 	cfg := benchConfig(proto, basePort, sinkAddr, multicore, taskFastPath, taskPoolSize, taskQueueSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, workers)
 	if err := rt.UpdateCache(ctx, cfg); err != nil {
 		return nil, fmt.Errorf("update cache: %w", err)
@@ -330,6 +385,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 		}(i)
 	}
 
+	// warmup 期间的数据不计入最终结果，用于避开启动瞬态。
 	time.Sleep(warmup)
 	baseSentPackets := atomic.LoadUint64(&m.sentPackets)
 	baseSentBytes := atomic.LoadUint64(&m.sentBytes)
@@ -337,6 +393,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	baseRecvBytes := atomic.LoadUint64(&m.recvBytes)
 	baseOrderErrors := atomic.LoadUint64(&m.orderErrors)
 
+	// measurement window：在固定时长内采样增量。
 	start := time.Now()
 	time.Sleep(duration)
 	elapsed := time.Since(start)
@@ -403,7 +460,11 @@ func waitForSinkDrain(m *metrics, maxWait, stableFor time.Duration) {
 	}
 }
 
-// benchConfig 负责该函数对应的核心逻辑，详见实现细节。
+// benchConfig builds runtime config used by benchmark scenarios.
+//
+// 设计意图：
+//  - 用最少配置元素保证链路真实可跑；
+//  - 将调参重点收敛到执行模型、并发和缓冲参数。
 func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize, taskQueueSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, workers int) config.Config {
 	rc := config.ReceiverConfig{Multicore: &multicore, NumEventLoop: receiverEventLoops, ReadBufferCap: receiverReadBufferCap}
 	sc := config.SenderConfig{Concurrency: 1}
@@ -456,7 +517,9 @@ func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFas
 	}
 }
 
-// startUDPSink 负责该函数对应的核心逻辑，详见实现细节。
+// startUDPSink starts local UDP sink readers and accumulates receive metrics.
+//
+// readers 参数用于模拟“接收端并发消费能力”，避免 sink 自身成为单点瓶颈。
 func startUDPSink(port int, m *metrics, readers, readBuf int) (string, func() error, error) {
 	pc, err := net.ListenPacket("udp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
@@ -500,7 +563,9 @@ func startUDPSink(port int, m *metrics, readers, readBuf int) (string, func() er
 	}, nil
 }
 
-// startTCPSink 负责该函数对应的核心逻辑，详见实现细节。
+// startTCPSink starts a local TCP sink and reads u16-be framed payloads.
+//
+// TCP sink 和 sender 默认都使用 u16be framing，确保测试链路边界一致。
 func startTCPSink(port int, m *metrics) (string, func() error, error) {
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
@@ -532,7 +597,7 @@ func startTCPSink(port int, m *metrics) (string, func() error, error) {
 	}, nil
 }
 
-// readU16Framed 负责该函数对应的核心逻辑，详见实现细节。
+// readU16Framed reads length-prefixed payload stream and updates metrics.
 func readU16Framed(conn net.Conn, m *metrics) {
 	defer conn.Close()
 	hdr := make([]byte, 2)
@@ -558,7 +623,9 @@ func readU16Framed(conn net.Conn, m *metrics) {
 	}
 }
 
-// udpGenerate 负责该函数对应的核心逻辑，详见实现细节。
+// udpGenerate continuously sends fixed-size UDP payloads to benchmark receiver.
+//
+// withSeq=true 时会把自增序号写入前 8 字节，用于严格顺序校验。
 func udpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan struct{}, withSeq bool) {
 	conn, err := net.Dial("udp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
@@ -591,7 +658,9 @@ func udpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan st
 	}
 }
 
-// tcpGenerate 负责该函数对应的核心逻辑，详见实现细节。
+// tcpGenerate continuously sends u16-framed TCP payloads to benchmark receiver.
+//
+// 当连接写失败时会自动重连，避免短暂连接抖动直接终止整个 worker。
 func tcpGenerate(port, payloadSize, ppsPerWorker int, m *metrics, stop <-chan struct{}, withSeq bool) {
 	dial := func() net.Conn {
 		for {
@@ -650,10 +719,14 @@ type ppsLimiter struct {
 	refillEvery time.Duration
 }
 
+// newPPSLimiter creates token-bucket like limiter.
+// pps<=0 means unlimited send rate.
 func newPPSLimiter(pps int) *ppsLimiter {
 	return &ppsLimiter{pps: pps, lastRefill: time.Now(), refillEvery: 2 * time.Millisecond}
 }
 
+// Wait blocks until one send token is available.
+// 该实现强调“简单稳定”而非纳秒级精度，适合 benchmark 速率分档。
 func (l *ppsLimiter) Wait() {
 	if l == nil || l.pps <= 0 {
 		return
@@ -676,7 +749,9 @@ func (l *ppsLimiter) Wait() {
 	}
 }
 
-// printResult 负责该函数对应的核心逻辑，详见实现细节。
+// printResult logs one benchmark round in structured form.
+//
+// 日志字段设计为可直接用于后处理（例如 jq/脚本筛选 top 场景）。
 func printResult(r *result) {
 	if r == nil {
 		return
@@ -724,7 +799,7 @@ func validateSequence(payload []byte, m *metrics) bool {
 	}
 }
 
-// max 负责该函数对应的核心逻辑，详见实现细节。
+// max returns larger value between a and b.
 func max(a, b int) int {
 	if a > b {
 		return a
