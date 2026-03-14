@@ -27,11 +27,11 @@ flowchart LR
 
   subgraph DataPlane[数据面]
     Runtime[runtime.Store / UpdateCache]
-    Receivers[Receivers\nudp_gnet tcp_gnet kafka sftp]
+    Receivers[Receivers<br/>udp_gnet tcp_gnet kafka sftp]
     Dispatch[dispatch snapshot]
-    Tasks[Task\nfastpath|pool|channel]
+    Tasks[Task<br/>fastpath pool channel]
     Pipelines[Pipelines / Stages]
-    Senders[Senders\nudp tcp kafka sftp]
+    Senders[Senders<br/>udp tcp kafka sftp]
   end
 
   SysCfg --> Bootstrap
