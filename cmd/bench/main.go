@@ -99,6 +99,7 @@ type benchFileConfig struct {
 	LogFile              string `json:"log_file,omitempty"`
 	TrafficStatsInterval string `json:"traffic_stats_interval,omitempty"`
 	ValidateOrder        *bool  `json:"validate_order,omitempty"`
+	PipelineProfile      string `json:"pipeline_profile,omitempty"`
 }
 
 // main 负责参数解析、场景展开、执行与结果输出。
@@ -133,12 +134,13 @@ func main() {
 	logFile := flag.String("log-file", "", "optional benchmark runtime log file")
 	trafficStatsInterval := flag.Duration("traffic-stats-interval", time.Second, "aggregated traffic stats log interval (e.g. 5s, 10s)")
 	validateOrder := flag.Bool("validate-order", false, "enable strict in-order verification by sequence number (requires payload-size>=8)")
+	pipelineProfile := flag.String("pipeline-profile", "empty", "pipeline profile for benchmark task: empty|basic|complex")
 	flag.Parse()
 
 	if *benchConfigPath != "" {
 		// bench-config 作为“参数模板”，用于批量复现实验。
 		// 覆盖策略是“配置文件优先于 flag 默认值”，但仍受后续校验约束。
-		if err := applyBenchConfigFile(*benchConfigPath, mode, duration, warmup, payloadSize, workers, ppsPerWorker, ppsSweep, multicore, udpSinkReaders, udpSinkReadBuf, taskFastPath, taskPoolSize, taskQueueSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort, logLevel, logFile, trafficStatsInterval, validateOrder); err != nil {
+		if err := applyBenchConfigFile(*benchConfigPath, mode, duration, warmup, payloadSize, workers, ppsPerWorker, ppsSweep, multicore, udpSinkReaders, udpSinkReadBuf, taskFastPath, taskPoolSize, taskQueueSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort, logLevel, logFile, trafficStatsInterval, validateOrder, pipelineProfile); err != nil {
 			logx.L().Errorw("load bench config failed", "error", err)
 			os.Exit(2)
 		}
@@ -179,7 +181,7 @@ func main() {
 	benchRun := func(proto string) {
 		// 每个 proto 逐档位执行；任一档失败即终止，避免输出混合“成功/失败”数据误导对比。
 		for _, rate := range rates {
-			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf, *taskFastPath, *taskPoolSize, *taskQueueSize, *taskChannelQueueSize, *taskExecutionModel, *receiverEventLoops, *receiverReadBufferCap, *tcpSenderConcurrency, *basePort, *validateOrder)
+			res, err := runForwardBenchmark(ctx, proto, *duration, *warmup, *payloadSize, *workers, rate, *multicore, *udpSinkReaders, *udpSinkReadBuf, *taskFastPath, *taskPoolSize, *taskQueueSize, *taskChannelQueueSize, *taskExecutionModel, *receiverEventLoops, *receiverReadBufferCap, *tcpSenderConcurrency, *basePort, *validateOrder, *pipelineProfile)
 			if err != nil {
 				logx.L().Errorw("benchmark failed", "proto", proto, "error", err)
 				os.Exit(1)
@@ -205,7 +207,7 @@ func main() {
 // 维护提示：
 //  - 新增 flag 时要同步补齐 benchFileConfig 字段和此处覆盖逻辑；
 //  - 时长字段采用 ParseDuration，能统一支持 500ms/2s 等格式。
-func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Duration, payloadSize, workers, ppsPerWorker *int, ppsSweep *string, multicore *bool, udpSinkReaders, udpSinkReadBuf *int, taskFastPath *bool, taskPoolSize, taskQueueSize, taskChannelQueueSize *int, taskExecutionModel *string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort *int, logLevel, logFile *string, trafficStatsInterval *time.Duration, validateOrder *bool) error {
+func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Duration, payloadSize, workers, ppsPerWorker *int, ppsSweep *string, multicore *bool, udpSinkReaders, udpSinkReadBuf *int, taskFastPath *bool, taskPoolSize, taskQueueSize, taskChannelQueueSize *int, taskExecutionModel *string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort *int, logLevel, logFile *string, trafficStatsInterval *time.Duration, validateOrder *bool, pipelineProfile *string) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -296,6 +298,9 @@ func applyBenchConfigFile(path string, mode *string, duration, warmup *time.Dura
 	if cfg.ValidateOrder != nil {
 		*validateOrder = *cfg.ValidateOrder
 	}
+	if cfg.PipelineProfile != "" {
+		*pipelineProfile = cfg.PipelineProfile
+	}
 	return nil
 }
 
@@ -334,7 +339,7 @@ func parseSweep(in string) ([]int, error) {
 // 维护提示：
 //  - warmup 基线必须在测量前采样，否则结果会被启动抖动污染；
 //  - sink drain 等待用于降低“发送已停但接收还在入队”的尾部偏差。
-func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int, taskFastPath bool, taskPoolSize, taskQueueSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort int, validateOrder bool) (*result, error) {
+func runForwardBenchmark(ctx context.Context, proto string, duration, warmup time.Duration, payloadSize, workers, ppsPerWorker int, multicore bool, udpSinkReaders, udpSinkReadBuf int, taskFastPath bool, taskPoolSize, taskQueueSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, basePort int, validateOrder bool, pipelineProfile string) (*result, error) {
 	m := &metrics{seqCheck: validateOrder}
 	if basePort == 0 {
 		basePort = map[string]int{"udp": 19100, "tcp": 19200}[proto]
@@ -363,7 +368,7 @@ func runForwardBenchmark(ctx context.Context, proto string, duration, warmup tim
 	rt := app.NewRuntime()
 	// benchConfig 构造单 receiver/single task/single sender 的最小拓扑，
 	// 让不同场景之间的差异主要来自执行模型与参数，而不是业务编排差异。
-	cfg := benchConfig(proto, basePort, sinkAddr, multicore, taskFastPath, taskPoolSize, taskQueueSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, workers)
+	cfg := benchConfig(proto, basePort, sinkAddr, multicore, taskFastPath, taskPoolSize, taskQueueSize, taskChannelQueueSize, taskExecutionModel, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, workers, pipelineProfile)
 	if err := rt.UpdateCache(ctx, cfg); err != nil {
 		return nil, fmt.Errorf("update cache: %w", err)
 	}
@@ -465,7 +470,7 @@ func waitForSinkDrain(m *metrics, maxWait, stableFor time.Duration) {
 // 设计意图：
 //  - 用最少配置元素保证链路真实可跑；
 //  - 将调参重点收敛到执行模型、并发和缓冲参数。
-func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize, taskQueueSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, workers int) config.Config {
+func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFastPath bool, taskPoolSize, taskQueueSize, taskChannelQueueSize int, taskExecutionModel string, receiverEventLoops, receiverReadBufferCap, tcpSenderConcurrency, workers int, pipelineProfile string) config.Config {
 	rc := config.ReceiverConfig{Multicore: &multicore, NumEventLoop: receiverEventLoops, ReadBufferCap: receiverReadBufferCap}
 	sc := config.SenderConfig{Concurrency: 1}
 	switch proto {
@@ -488,6 +493,23 @@ func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFas
 		sc.Frame = "u16be"
 		sc.Concurrency = tcpSenderConcurrency
 	}
+	stages := []config.StageConfig{}
+	switch strings.ToLower(strings.TrimSpace(pipelineProfile)) {
+	case "", "empty":
+		stages = []config.StageConfig{}
+	case "basic":
+		stages = []config.StageConfig{{Type: "replace_offset_bytes", Offset: 0, Hex: "aabbccdd"}}
+	case "complex":
+		flag := true
+		stages = []config.StageConfig{
+			{Type: "replace_offset_bytes", Offset: 0, Hex: "aabbccdd"},
+			{Type: "mark_as_file_chunk", Path: "/bench/out.bin", Bool: &flag},
+			{Type: "clear_file_meta"},
+		}
+	default:
+		stages = []config.StageConfig{}
+	}
+
 	return config.Config{
 		Version: 1,
 		Logging: config.LoggingConfig{
@@ -500,7 +522,7 @@ func benchConfig(proto string, basePort int, sinkAddr string, multicore, taskFas
 			"out": sc,
 		},
 		Pipelines: map[string][]config.StageConfig{
-			"p": {},
+			"p": stages,
 		},
 		Tasks: map[string]config.TaskConfig{
 			"t": {

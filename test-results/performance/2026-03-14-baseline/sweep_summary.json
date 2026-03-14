@@ -1,0 +1,38 @@
+[
+  {
+    "proto": "udp",
+    "model": "fastpath",
+    "zero_loss_pps": 16007.474935847911,
+    "zero_loss_mbps": 65.56661733723304
+  },
+  {
+    "proto": "udp",
+    "model": "pool",
+    "zero_loss_pps": 16009.061175624114,
+    "zero_loss_mbps": 65.57311457535637
+  },
+  {
+    "proto": "udp",
+    "model": "channel",
+    "zero_loss_pps": 24017.504428670672,
+    "zero_loss_mbps": 98.37569813983508
+  },
+  {
+    "proto": "tcp",
+    "model": "fastpath",
+    "zero_loss_pps": 24003.880460675307,
+    "zero_loss_mbps": 196.63978873385213
+  },
+  {
+    "proto": "tcp",
+    "model": "pool",
+    "zero_loss_pps": 24033.556989444016,
+    "zero_loss_mbps": 196.8828988575254
+  },
+  {
+    "proto": "tcp",
+    "model": "channel",
+    "zero_loss_pps": 24004.607497384575,
+    "zero_loss_mbps": 196.64574461857444
+  }
+]

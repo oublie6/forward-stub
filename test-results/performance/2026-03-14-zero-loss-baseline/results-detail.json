@@ -1,0 +1,3652 @@
+[
+  {
+    "scenario": "udp_fastpath_empty_p512_w2",
+    "type": "key",
+    "proto": "udp",
+    "model": "fastpath",
+    "pipeline": "empty",
+    "payload": 512,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 1000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 1000 -base-port 41100 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 4002,
+          "sent_bytes": 2049024,
+          "recv_packets": 4002,
+          "recv_bytes": 2049024,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 2000.9898479780065,
+          "mbps": 8.196054417317916
+        }
+      },
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 2000 -base-port 41101 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 7996,
+          "sent_bytes": 4093952,
+          "recv_packets": 8006,
+          "recv_bytes": 4099072,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 4002.068884656399,
+          "mbps": 16.39247415155261
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 4000 -base-port 41102 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 15994,
+          "sent_bytes": 8188928,
+          "recv_packets": 16013,
+          "recv_bytes": 8198656,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 8005.6920975762805,
+          "mbps": 32.791314831672445
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 8000 -base-port 41103 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 32033,
+          "sent_bytes": 16400896,
+          "recv_packets": 32033,
+          "recv_bytes": 16400896,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 16009.256179791535,
+          "mbps": 65.57391331242613
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 12000 -base-port 41104 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 48299,
+          "sent_bytes": 24729088,
+          "recv_packets": 48135,
+          "recv_bytes": 24645120,
+          "loss_rate": 0.003395515435102176,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 24064.127099753317,
+          "mbps": 98.56666460058959
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 8000,
+        "summary": {
+          "status": "zero_loss",
+          "avg_pps": 16000.134287720037,
+          "avg_mbps": 65.53655004250128,
+          "runs_pps": [
+            16000.343737260218,
+            16000.03471763443,
+            16000.024408265466
+          ],
+          "runs_mbps": [
+            65.53740794781785,
+            65.53614220343063,
+            65.53609997625534
+          ]
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 8000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 8000 -base-port 59200 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 480005,
+              "sent_bytes": 245762560,
+              "recv_packets": 480016,
+              "recv_bytes": 245768192,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 16000.343737260218,
+              "mbps": 65.53740794781785
+            }
+          },
+          {
+            "run": 2,
+            "pps_per_worker": 8000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 8000 -base-port 59210 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 480019,
+              "sent_bytes": 245769728,
+              "recv_packets": 480019,
+              "recv_bytes": 245769728,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 16000.03471763443,
+              "mbps": 65.53614220343063
+            }
+          },
+          {
+            "run": 3,
+            "pps_per_worker": 8000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 8000 -base-port 59220 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 480006,
+              "sent_bytes": 245763072,
+              "recv_packets": 480006,
+              "recv_bytes": 245763072,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 16000.024408265466,
+              "mbps": 65.53609997625534
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": 8000,
+    "zero_loss_total_pps_avg": 16000.134287720037,
+    "zero_loss_total_mbps_avg": 65.53655004250128,
+    "zero_loss_run_pps": [
+      16000.343737260218,
+      16000.03471763443,
+      16000.024408265466
+    ],
+    "zero_loss_run_mbps": [
+      65.53740794781785,
+      65.53614220343063,
+      65.53609997625534
+    ],
+    "zero_loss_judgement": "all formal runs loss_rate == 0"
+  },
+  {
+    "scenario": "udp_pool_empty_p512_w2",
+    "type": "key",
+    "proto": "udp",
+    "model": "pool",
+    "pipeline": "empty",
+    "payload": 512,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 1000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 1000 -base-port 41200 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 4001,
+          "sent_bytes": 2048512,
+          "recv_packets": 4001,
+          "recv_bytes": 2048512,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 1999.590647161186,
+          "mbps": 8.190323290772218
+        }
+      },
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 2000 -base-port 41201 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 8010,
+          "sent_bytes": 4101120,
+          "recv_packets": 8010,
+          "recv_bytes": 4101120,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 4003.172643761094,
+          "mbps": 16.39699514884544
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 41202 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 16006,
+          "sent_bytes": 8195072,
+          "recv_packets": 16006,
+          "recv_bytes": 8195072,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 7999.177309152027,
+          "mbps": 32.7646302582867
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 41203 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 32027,
+          "sent_bytes": 16397824,
+          "recv_packets": 32027,
+          "recv_bytes": 16397824,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 16007.523335042488,
+          "mbps": 65.56681558033404
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 41204 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 48025,
+          "sent_bytes": 24588800,
+          "recv_packets": 47821,
+          "recv_bytes": 24484352,
+          "loss_rate": 0.004247787610619469,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 23898.164006721374,
+          "mbps": 97.88687977153074
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 8000,
+        "summary": {
+          "status": "loss",
+          "avg_loss": 1.8749133434962897e-05
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 8000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 59400 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 480006,
+              "sent_bytes": 245763072,
+              "recv_packets": 480002,
+              "recv_bytes": 245761024,
+              "loss_rate": 8.333229167968734e-06,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 15999.942156716797,
+              "mbps": 65.53576307391201
+            }
+          },
+          {
+            "run": 2,
+            "pps_per_worker": 8000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 59410 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 480025,
+              "sent_bytes": 245772800,
+              "recv_packets": 480002,
+              "recv_bytes": 245761024,
+              "loss_rate": 4.791417113691995e-05,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 15999.878896354574,
+              "mbps": 65.53550395946833
+            }
+          },
+          {
+            "run": 3,
+            "pps_per_worker": 8000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 59420 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 480001,
+              "sent_bytes": 245760512,
+              "recv_packets": 480001,
+              "recv_bytes": 245760512,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 15999.96641080716,
+              "mbps": 65.53586241866613
+            }
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 4000,
+        "summary": {
+          "status": "zero_loss",
+          "avg_pps": 8001.286418161377,
+          "avg_mbps": 32.773269168789,
+          "runs_pps": [
+            8003.385153858564,
+            8000.249809013577,
+            8000.224291611988
+          ],
+          "runs_mbps": [
+            32.78186559020468,
+            32.769023217719614,
+            32.768918698442704
+          ]
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 4000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 55400 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 240106,
+              "sent_bytes": 122934272,
+              "recv_packets": 240106,
+              "recv_bytes": 122934272,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 8003.385153858564,
+              "mbps": 32.78186559020468
+            }
+          },
+          {
+            "run": 2,
+            "pps_per_worker": 4000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 55410 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 240007,
+              "sent_bytes": 122883584,
+              "recv_packets": 240016,
+              "recv_bytes": 122888192,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 8000.249809013577,
+              "mbps": 32.769023217719614
+            }
+          },
+          {
+            "run": 3,
+            "pps_per_worker": 4000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 55420 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 240004,
+              "sent_bytes": 122881536,
+              "recv_packets": 240008,
+              "recv_bytes": 122884096,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 8000.224291611988,
+              "mbps": 32.768918698442704
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": 4000,
+    "zero_loss_total_pps_avg": 8001.286418161377,
+    "zero_loss_total_mbps_avg": 32.773269168789,
+    "zero_loss_run_pps": [
+      8003.385153858564,
+      8000.249809013577,
+      8000.224291611988
+    ],
+    "zero_loss_run_mbps": [
+      32.78186559020468,
+      32.769023217719614,
+      32.768918698442704
+    ],
+    "zero_loss_judgement": "all formal runs loss_rate == 0"
+  },
+  {
+    "scenario": "udp_channel_empty_p512_w2",
+    "type": "key",
+    "proto": "udp",
+    "model": "channel",
+    "pipeline": "empty",
+    "payload": 512,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 1000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 1000 -base-port 41300 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 4001,
+          "sent_bytes": 2048512,
+          "recv_packets": 4001,
+          "recv_bytes": 2048512,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 1999.8591601310795,
+          "mbps": 8.191423119896902
+        }
+      },
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 2000 -base-port 41301 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 8006,
+          "sent_bytes": 4099072,
+          "recv_packets": 8006,
+          "recv_bytes": 4099072,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 4002.322334786919,
+          "mbps": 16.39351228328722
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 4000 -base-port 41302 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 16014,
+          "sent_bytes": 8199168,
+          "recv_packets": 16014,
+          "recv_bytes": 8199168,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 8005.705861636055,
+          "mbps": 32.79137120926128
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 8000 -base-port 41303 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 32003,
+          "sent_bytes": 16385536,
+          "recv_packets": 32003,
+          "recv_bytes": 16385536,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 15999.792822105883,
+          "mbps": 65.5351513993457
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 12000 -base-port 41304 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 48020,
+          "sent_bytes": 24586240,
+          "recv_packets": 48020,
+          "recv_bytes": 24586240,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 23999.692348133707,
+          "mbps": 98.30273985795566
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 12000,
+        "summary": {
+          "status": "loss",
+          "avg_loss": 0.00041989160115440765
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 12000 -base-port 63600 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 719993,
+              "sent_bytes": 368636416,
+              "recv_packets": 719488,
+              "recv_bytes": 368377856,
+              "loss_rate": 0.000701395708013828,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 23982.418849693546,
+              "mbps": 98.23198760834477
+            }
+          },
+          {
+            "run": 2,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 12000 -base-port 63610 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 720022,
+              "sent_bytes": 368651264,
+              "recv_packets": 719936,
+              "recv_bytes": 368607232,
+              "loss_rate": 0.00011944079486460135,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 23997.147129807887,
+              "mbps": 98.2923146436931
+            }
+          },
+          {
+            "run": 3,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 12000 -base-port 63620 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 720083,
+              "sent_bytes": 368682496,
+              "recv_packets": 719767,
+              "recv_bytes": 368520704,
+              "loss_rate": 0.0004388383005847937,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 23991.333487189382,
+              "mbps": 98.26850196352771
+            }
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 8000,
+        "summary": {
+          "status": "zero_loss",
+          "avg_pps": 16000.480375003579,
+          "avg_mbps": 65.53796761601465,
+          "runs_pps": [
+            16000.973791651983,
+            16000.069090795329,
+            16000.398242563428
+          ],
+          "runs_mbps": [
+            65.53998865060652,
+            65.53628299589766,
+            65.5376312015398
+          ]
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 8000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 8000 -base-port 59600 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 480018,
+              "sent_bytes": 245768704,
+              "recv_packets": 480047,
+              "recv_bytes": 245784064,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 16000.973791651983,
+              "mbps": 65.53998865060652
+            }
+          },
+          {
+            "run": 2,
+            "pps_per_worker": 8000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 8000 -base-port 59610 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 480016,
+              "sent_bytes": 245768192,
+              "recv_packets": 480016,
+              "recv_bytes": 245768192,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 16000.069090795329,
+              "mbps": 65.53628299589766
+            }
+          },
+          {
+            "run": 3,
+            "pps_per_worker": 8000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 8000 -base-port 59620 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 480023,
+              "sent_bytes": 245771776,
+              "recv_packets": 480023,
+              "recv_bytes": 245771776,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 16000.398242563428,
+              "mbps": 65.5376312015398
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": 8000,
+    "zero_loss_total_pps_avg": 16000.480375003579,
+    "zero_loss_total_mbps_avg": 65.53796761601465,
+    "zero_loss_run_pps": [
+      16000.973791651983,
+      16000.069090795329,
+      16000.398242563428
+    ],
+    "zero_loss_run_mbps": [
+      65.53998865060652,
+      65.53628299589766,
+      65.5376312015398
+    ],
+    "zero_loss_judgement": "all formal runs loss_rate == 0"
+  },
+  {
+    "scenario": "tcp_fastpath_empty_p512_w2",
+    "type": "key",
+    "proto": "tcp",
+    "model": "fastpath",
+    "pipeline": "empty",
+    "payload": 512,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 2000 -base-port 41400 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 7996,
+          "sent_bytes": 4093952,
+          "recv_packets": 8006,
+          "recv_bytes": 4099072,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 4002.0691427298157,
+          "mbps": 16.392475208621324
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 4000 -base-port 41401 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 16002,
+          "sent_bytes": 8193024,
+          "recv_packets": 16002,
+          "recv_bytes": 8193024,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 7996.957953596271,
+          "mbps": 32.75553977793032
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 8000 -base-port 41402 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 32002,
+          "sent_bytes": 16385024,
+          "recv_packets": 32002,
+          "recv_bytes": 16385024,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 16000.668410148202,
+          "mbps": 65.53873780796704
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 12000 -base-port 41403 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 48038,
+          "sent_bytes": 24595456,
+          "recv_packets": 48038,
+          "recv_bytes": 24595456,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 24018.333022901123,
+          "mbps": 98.379092061803
+        }
+      },
+      {
+        "pps_per_worker": 16000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 16000 -base-port 41404 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 63943,
+          "sent_bytes": 32738816,
+          "recv_packets": 64011,
+          "recv_bytes": 32773632,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 32003.37942407598,
+          "mbps": 131.08584212101522
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 16000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 16000 -base-port 67800 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          },
+          {
+            "run": 2,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 16000 -base-port 67810 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          },
+          {
+            "run": 3,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 16000 -base-port 67820 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 12000,
+        "summary": {
+          "status": "zero_loss",
+          "avg_pps": 23999.896945138596,
+          "avg_mbps": 98.3035778872877,
+          "runs_pps": [
+            23999.32430510577,
+            24000.941833321976,
+            23999.42469698805
+          ],
+          "runs_mbps": [
+            98.30123235371323,
+            98.30785774928681,
+            98.30164355886306
+          ]
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 12000 -base-port 63800 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "tcp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 719990,
+              "sent_bytes": 368634880,
+              "recv_packets": 719990,
+              "recv_bytes": 368634880,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 23999.32430510577,
+              "mbps": 98.30123235371323
+            }
+          },
+          {
+            "run": 2,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 12000 -base-port 63810 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "tcp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 720046,
+              "sent_bytes": 368663552,
+              "recv_packets": 720046,
+              "recv_bytes": 368663552,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 24000.941833321976,
+              "mbps": 98.30785774928681
+            }
+          },
+          {
+            "run": 3,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model fastpath -pipeline-profile empty -pps-per-worker 12000 -base-port 63820 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "tcp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 720002,
+              "sent_bytes": 368641024,
+              "recv_packets": 720003,
+              "recv_bytes": 368641536,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 23999.42469698805,
+              "mbps": 98.30164355886306
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": 12000,
+    "zero_loss_total_pps_avg": 23999.896945138596,
+    "zero_loss_total_mbps_avg": 98.3035778872877,
+    "zero_loss_run_pps": [
+      23999.32430510577,
+      24000.941833321976,
+      23999.42469698805
+    ],
+    "zero_loss_run_mbps": [
+      98.30123235371323,
+      98.30785774928681,
+      98.30164355886306
+    ],
+    "zero_loss_judgement": "all formal runs loss_rate == 0"
+  },
+  {
+    "scenario": "tcp_pool_empty_p512_w2",
+    "type": "key",
+    "proto": "tcp",
+    "model": "pool",
+    "pipeline": "empty",
+    "payload": 512,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 2000 -base-port 41500 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 8004,
+          "sent_bytes": 4098048,
+          "recv_packets": 8004,
+          "recv_bytes": 4098048,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 4000.067535373121,
+          "mbps": 16.384276624888304
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 41501 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 15991,
+          "sent_bytes": 8187392,
+          "recv_packets": 15991,
+          "recv_bytes": 8187392,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 7995.013263592513,
+          "mbps": 32.74757432767493
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 41502 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 31992,
+          "sent_bytes": 16379904,
+          "recv_packets": 31992,
+          "recv_bytes": 16379904,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 15992.902454670324,
+          "mbps": 65.50692845432965
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 41503 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 47965,
+          "sent_bytes": 24558080,
+          "recv_packets": 48033,
+          "recv_bytes": 24592896,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 24014.26843808399,
+          "mbps": 98.36244352239201
+        }
+      },
+      {
+        "pps_per_worker": 16000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 16000 -base-port 41504 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 64083,
+          "sent_bytes": 32810496,
+          "recv_packets": 64083,
+          "recv_bytes": 32810496,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 32023.341148390136,
+          "mbps": 131.167605343806
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 16000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 16000 -base-port 68000 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          },
+          {
+            "run": 2,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 16000 -base-port 68010 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          },
+          {
+            "run": 3,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 16000 -base-port 68020 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 12000,
+        "summary": {
+          "status": "zero_loss",
+          "avg_pps": 24000.945900851308,
+          "avg_mbps": 98.30787440988695,
+          "runs_pps": [
+            24000.865146734366,
+            24000.86704417988,
+            24001.10551163967
+          ],
+          "runs_mbps": [
+            98.30754364102397,
+            98.30755141296078,
+            98.30852817567609
+          ]
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 64000 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "tcp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 720009,
+              "sent_bytes": 368644608,
+              "recv_packets": 720033,
+              "recv_bytes": 368656896,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 24000.865146734366,
+              "mbps": 98.30754364102397
+            }
+          },
+          {
+            "run": 2,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 64010 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "tcp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 720050,
+              "sent_bytes": 368665600,
+              "recv_packets": 720050,
+              "recv_bytes": 368665600,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 24000.86704417988,
+              "mbps": 98.30755141296078
+            }
+          },
+          {
+            "run": 3,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 64020 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "tcp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 719969,
+              "sent_bytes": 368624128,
+              "recv_packets": 720040,
+              "recv_bytes": 368660480,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 24001.10551163967,
+              "mbps": 98.30852817567609
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": 12000,
+    "zero_loss_total_pps_avg": 24000.945900851308,
+    "zero_loss_total_mbps_avg": 98.30787440988695,
+    "zero_loss_run_pps": [
+      24000.865146734366,
+      24000.86704417988,
+      24001.10551163967
+    ],
+    "zero_loss_run_mbps": [
+      98.30754364102397,
+      98.30755141296078,
+      98.30852817567609
+    ],
+    "zero_loss_judgement": "all formal runs loss_rate == 0"
+  },
+  {
+    "scenario": "tcp_channel_empty_p512_w2",
+    "type": "key",
+    "proto": "tcp",
+    "model": "channel",
+    "pipeline": "empty",
+    "payload": 512,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 2000 -base-port 41600 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 7999,
+          "sent_bytes": 4095488,
+          "recv_packets": 8009,
+          "recv_bytes": 4100608,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 4004.4801197584457,
+          "mbps": 16.402350570530594
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 4000 -base-port 41601 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 16001,
+          "sent_bytes": 8192512,
+          "recv_packets": 16001,
+          "recv_bytes": 8192512,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 8000.417079677178,
+          "mbps": 32.76970835835772
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 8000 -base-port 41602 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 31977,
+          "sent_bytes": 16372224,
+          "recv_packets": 32021,
+          "recv_bytes": 16394752,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 16003.09612756884,
+          "mbps": 65.54868173852196
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 12000 -base-port 41603 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 48040,
+          "sent_bytes": 24596480,
+          "recv_packets": 48040,
+          "recv_bytes": 24596480,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 24008.872175852957,
+          "mbps": 98.34034043229371
+        }
+      },
+      {
+        "pps_per_worker": 16000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 16000 -base-port 41604 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 63998,
+          "sent_bytes": 32766976,
+          "recv_packets": 64069,
+          "recv_bytes": 32803328,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 32017.065587190482,
+          "mbps": 131.1419006451322
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 16000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 16000 -base-port 68200 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          },
+          {
+            "run": 2,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 16000 -base-port 68210 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          },
+          {
+            "run": 3,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 16000 -base-port 68220 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 12000,
+        "summary": {
+          "status": "zero_loss",
+          "avg_pps": 24000.77984826309,
+          "avg_mbps": 98.30719425848561,
+          "runs_pps": [
+            24000.111182030094,
+            24000.899080850224,
+            24001.32928190895
+          ],
+          "runs_mbps": [
+            98.30445540159526,
+            98.30768263516252,
+            98.30944473869906
+          ]
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 12000 -base-port 64200 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "tcp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 720023,
+              "sent_bytes": 368651776,
+              "recv_packets": 720023,
+              "recv_bytes": 368651776,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 24000.111182030094,
+              "mbps": 98.30445540159526
+            }
+          },
+          {
+            "run": 2,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 12000 -base-port 64210 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "tcp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 720028,
+              "sent_bytes": 368654336,
+              "recv_packets": 720028,
+              "recv_bytes": 368654336,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 24000.899080850224,
+              "mbps": 98.30768263516252
+            }
+          },
+          {
+            "run": 3,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model channel -pipeline-profile empty -pps-per-worker 12000 -base-port 64220 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "tcp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 720028,
+              "sent_bytes": 368654336,
+              "recv_packets": 720040,
+              "recv_bytes": 368660480,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 24001.32928190895,
+              "mbps": 98.30944473869906
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": 12000,
+    "zero_loss_total_pps_avg": 24000.77984826309,
+    "zero_loss_total_mbps_avg": 98.30719425848561,
+    "zero_loss_run_pps": [
+      24000.111182030094,
+      24000.899080850224,
+      24001.32928190895
+    ],
+    "zero_loss_run_mbps": [
+      98.30445540159526,
+      98.30768263516252,
+      98.30944473869906
+    ],
+    "zero_loss_judgement": "all formal runs loss_rate == 0"
+  },
+  {
+    "scenario": "udp_pool_basic_p512_w2",
+    "type": "pipeline",
+    "proto": "udp",
+    "model": "pool",
+    "pipeline": "basic",
+    "payload": 512,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 1000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile basic -pps-per-worker 1000 -base-port 41700 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 4000,
+          "sent_bytes": 2048000,
+          "recv_packets": 4000,
+          "recv_bytes": 2048000,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 1999.5693577463455,
+          "mbps": 8.190236089329032
+        }
+      },
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile basic -pps-per-worker 2000 -base-port 41701 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 8000,
+          "sent_bytes": 4096000,
+          "recv_packets": 8000,
+          "recv_bytes": 4096000,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 3999.954892508677,
+          "mbps": 16.383815239715542
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile basic -pps-per-worker 4000 -base-port 41702 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 16002,
+          "sent_bytes": 8193024,
+          "recv_packets": 16002,
+          "recv_bytes": 8193024,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 7999.93815620862,
+          "mbps": 32.76774668783051
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile basic -pps-per-worker 8000 -base-port 41703 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 31987,
+          "sent_bytes": 16377344,
+          "recv_packets": 31987,
+          "recv_bytes": 16377344,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 15991.943016431947,
+          "mbps": 65.50299859530526
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile basic -pps-per-worker 12000 -base-port 41704 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 48011,
+          "sent_bytes": 24581632,
+          "recv_packets": 47762,
+          "recv_bytes": 24454144,
+          "loss_rate": 0.005186311470288059,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 23875.89846065181,
+          "mbps": 97.79568009482982
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 8000,
+        "summary": {
+          "status": "zero_loss",
+          "avg_pps": 16000.129560180894,
+          "avg_mbps": 65.53653067850094,
+          "runs_pps": [
+            16000.129560180894
+          ],
+          "runs_mbps": [
+            65.53653067850094
+          ]
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 8000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile basic -pps-per-worker 8000 -base-port 60400 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 480021,
+              "sent_bytes": 245770752,
+              "recv_packets": 480021,
+              "recv_bytes": 245770752,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 16000.129560180894,
+              "mbps": 65.53653067850094
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": 8000,
+    "zero_loss_total_pps_avg": 16000.129560180894,
+    "zero_loss_total_mbps_avg": 65.53653067850094,
+    "zero_loss_run_pps": [
+      16000.129560180894
+    ],
+    "zero_loss_run_mbps": [
+      65.53653067850094
+    ],
+    "zero_loss_judgement": "all formal runs loss_rate == 0"
+  },
+  {
+    "scenario": "tcp_pool_basic_p512_w2",
+    "type": "pipeline",
+    "proto": "tcp",
+    "model": "pool",
+    "pipeline": "basic",
+    "payload": 512,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile basic -pps-per-worker 2000 -base-port 41800 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 7995,
+          "sent_bytes": 4093440,
+          "recv_packets": 8006,
+          "recv_bytes": 4099072,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 4002.0336489449573,
+          "mbps": 16.392329826078544
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile basic -pps-per-worker 4000 -base-port 41801 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 16002,
+          "sent_bytes": 8193024,
+          "recv_packets": 16009,
+          "recv_bytes": 8196608,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 8004.1030124987865,
+          "mbps": 32.78480593919503
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile basic -pps-per-worker 8000 -base-port 41802 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 32051,
+          "sent_bytes": 16410112,
+          "recv_packets": 32055,
+          "recv_bytes": 16412160,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 16018.037512528868,
+          "mbps": 65.60988165131825
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile basic -pps-per-worker 12000 -base-port 41803 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 48025,
+          "sent_bytes": 24588800,
+          "recv_packets": 48070,
+          "recv_bytes": 24611840,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 24023.148768122395,
+          "mbps": 98.39881735422934
+        }
+      },
+      {
+        "pps_per_worker": 16000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile basic -pps-per-worker 16000 -base-port 41804 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 63992,
+          "sent_bytes": 32763904,
+          "recv_packets": 64010,
+          "recv_bytes": 32773120,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 32001.798268085975,
+          "mbps": 131.07936570608015
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 16000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile basic -pps-per-worker 16000 -base-port 68600 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 12000,
+        "summary": {
+          "status": "zero_loss",
+          "avg_pps": 24000.7572920603,
+          "avg_mbps": 98.30710186827899,
+          "runs_pps": [
+            24000.7572920603
+          ],
+          "runs_mbps": [
+            98.30710186827899
+          ]
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile basic -pps-per-worker 12000 -base-port 64600 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "tcp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 719954,
+              "sent_bytes": 368616448,
+              "recv_packets": 720029,
+              "recv_bytes": 368654848,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 24000.7572920603,
+              "mbps": 98.30710186827899
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": 12000,
+    "zero_loss_total_pps_avg": 24000.7572920603,
+    "zero_loss_total_mbps_avg": 98.30710186827899,
+    "zero_loss_run_pps": [
+      24000.7572920603
+    ],
+    "zero_loss_run_mbps": [
+      98.30710186827899
+    ],
+    "zero_loss_judgement": "all formal runs loss_rate == 0"
+  },
+  {
+    "scenario": "udp_pool_complex_p512_w2",
+    "type": "pipeline",
+    "proto": "udp",
+    "model": "pool",
+    "pipeline": "complex",
+    "payload": 512,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 1000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile complex -pps-per-worker 1000 -base-port 41900 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 4002,
+          "sent_bytes": 2049024,
+          "recv_packets": 4002,
+          "recv_bytes": 2049024,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 2000.301356745431,
+          "mbps": 8.193234357229285
+        }
+      },
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile complex -pps-per-worker 2000 -base-port 41901 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 8004,
+          "sent_bytes": 4098048,
+          "recv_packets": 8008,
+          "recv_bytes": 4100096,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 4003.8556269718742,
+          "mbps": 16.399792648076797
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile complex -pps-per-worker 4000 -base-port 41902 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 16018,
+          "sent_bytes": 8201216,
+          "recv_packets": 16018,
+          "recv_bytes": 8201216,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 8004.765703076513,
+          "mbps": 32.787520319801395
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile complex -pps-per-worker 8000 -base-port 41903 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 32005,
+          "sent_bytes": 16386560,
+          "recv_packets": 32024,
+          "recv_bytes": 16396288,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 16009.374950794007,
+          "mbps": 65.57439979845225
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile complex -pps-per-worker 12000 -base-port 41904 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 48187,
+          "sent_bytes": 24671744,
+          "recv_packets": 48037,
+          "recv_bytes": 24594944,
+          "loss_rate": 0.00311287276651379,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 24012.620545878275,
+          "mbps": 98.35569375591741
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 8000,
+        "summary": {
+          "status": "zero_loss",
+          "avg_pps": 15999.940869101145,
+          "avg_mbps": 65.5357577998383,
+          "runs_pps": [
+            15999.940869101145
+          ],
+          "runs_mbps": [
+            65.5357577998383
+          ]
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 8000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile complex -pps-per-worker 8000 -base-port 60800 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 480005,
+              "sent_bytes": 245762560,
+              "recv_packets": 480005,
+              "recv_bytes": 245762560,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 15999.940869101145,
+              "mbps": 65.5357577998383
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": 8000,
+    "zero_loss_total_pps_avg": 15999.940869101145,
+    "zero_loss_total_mbps_avg": 65.5357577998383,
+    "zero_loss_run_pps": [
+      15999.940869101145
+    ],
+    "zero_loss_run_mbps": [
+      65.5357577998383
+    ],
+    "zero_loss_judgement": "all formal runs loss_rate == 0"
+  },
+  {
+    "scenario": "tcp_pool_complex_p512_w2",
+    "type": "pipeline",
+    "proto": "tcp",
+    "model": "pool",
+    "pipeline": "complex",
+    "payload": 512,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile complex -pps-per-worker 2000 -base-port 42000 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 8000,
+          "sent_bytes": 4096000,
+          "recv_packets": 8000,
+          "recv_bytes": 4096000,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 3999.078948132982,
+          "mbps": 16.380227371552696
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile complex -pps-per-worker 4000 -base-port 42001 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 15993,
+          "sent_bytes": 8188416,
+          "recv_packets": 16006,
+          "recv_bytes": 8195072,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 8000.31208714621,
+          "mbps": 32.769278308950874
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile complex -pps-per-worker 8000 -base-port 42002 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 32022,
+          "sent_bytes": 16395264,
+          "recv_packets": 32044,
+          "recv_bytes": 16406528,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 16021.554688898199,
+          "mbps": 65.62428800572702
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile complex -pps-per-worker 12000 -base-port 42003 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 48000,
+          "sent_bytes": 24576000,
+          "recv_packets": 48044,
+          "recv_bytes": 24598528,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 24015.880297398497,
+          "mbps": 98.36904569814425
+        }
+      },
+      {
+        "pps_per_worker": 16000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile complex -pps-per-worker 16000 -base-port 42004 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 2,
+          "sent_packets": 64036,
+          "sent_bytes": 32786432,
+          "recv_packets": 64036,
+          "recv_bytes": 32786432,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 32016.54095820372,
+          "mbps": 131.13975176480244
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 16000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile complex -pps-per-worker 16000 -base-port 69000 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 12000,
+        "summary": {
+          "status": "zero_loss",
+          "avg_pps": 23999.001350825405,
+          "avg_mbps": 98.29990953298086,
+          "runs_pps": [
+            23999.001350825405
+          ],
+          "runs_mbps": [
+            98.29990953298086
+          ]
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 2 -task-execution-model pool -pipeline-profile complex -pps-per-worker 12000 -base-port 65000 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "tcp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 2,
+              "sent_packets": 719974,
+              "sent_bytes": 368626688,
+              "recv_packets": 719974,
+              "recv_bytes": 368626688,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 23999.001350825405,
+              "mbps": 98.29990953298086
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": 12000,
+    "zero_loss_total_pps_avg": 23999.001350825405,
+    "zero_loss_total_mbps_avg": 98.29990953298086,
+    "zero_loss_run_pps": [
+      23999.001350825405
+    ],
+    "zero_loss_run_mbps": [
+      98.29990953298086
+    ],
+    "zero_loss_judgement": "all formal runs loss_rate == 0"
+  },
+  {
+    "scenario": "udp_pool_empty_p256_w2",
+    "type": "payload",
+    "proto": "udp",
+    "model": "pool",
+    "pipeline": "empty",
+    "payload": 256,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 1000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 1000 -base-port 42100 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 256,
+          "workers": 2,
+          "sent_packets": 3998,
+          "sent_bytes": 1023488,
+          "recv_packets": 4004,
+          "recv_bytes": 1025024,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 2001.336062765186,
+          "mbps": 4.098736256543101
+        }
+      },
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 2000 -base-port 42101 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 256,
+          "workers": 2,
+          "sent_packets": 8002,
+          "sent_bytes": 2048512,
+          "recv_packets": 8002,
+          "recv_bytes": 2048512,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 3999.9741666252276,
+          "mbps": 8.191947093248466
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 42102 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 256,
+          "workers": 2,
+          "sent_packets": 16017,
+          "sent_bytes": 4100352,
+          "recv_packets": 16017,
+          "recv_bytes": 4100352,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 8004.610819752535,
+          "mbps": 16.39344295885319
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 42103 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 256,
+          "workers": 2,
+          "sent_packets": 32010,
+          "sent_bytes": 8194560,
+          "recv_packets": 32010,
+          "recv_bytes": 8194560,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 16000.775179322816,
+          "mbps": 32.769587567253126
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 42104 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 256,
+          "workers": 2,
+          "sent_packets": 48018,
+          "sent_bytes": 12292608,
+          "recv_packets": 48047,
+          "recv_bytes": 12300032,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 24014.20401757508,
+          "mbps": 49.181089827993766
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 12000,
+        "summary": {
+          "status": "loss",
+          "avg_loss": 0.004053491084819197
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 12000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 65200 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30s",
+              "payload_size": 256,
+              "workers": 2,
+              "sent_packets": 720120,
+              "sent_bytes": 184350720,
+              "recv_packets": 717201,
+              "recv_bytes": 183603456,
+              "loss_rate": 0.004053491084819197,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 23906.523792185086,
+              "mbps": 48.96056072639506
+            }
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 8000,
+        "summary": {
+          "status": "loss",
+          "avg_loss": 4.583132821272403e-05
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 8000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 61200 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30s",
+              "payload_size": 256,
+              "workers": 2,
+              "sent_packets": 480021,
+              "sent_bytes": 122885376,
+              "recv_packets": 479999,
+              "recv_bytes": 122879744,
+              "loss_rate": 4.583132821272403e-05,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 15999.965319469587,
+              "mbps": 32.767928974273715
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": null,
+    "zero_loss_total_pps_avg": null,
+    "zero_loss_total_mbps_avg": null,
+    "zero_loss_run_pps": [],
+    "zero_loss_run_mbps": [],
+    "zero_loss_judgement": "not_reached"
+  },
+  {
+    "scenario": "udp_pool_empty_p4096_w2",
+    "type": "payload",
+    "proto": "udp",
+    "model": "pool",
+    "pipeline": "empty",
+    "payload": 4096,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 1000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 1000 -base-port 42200 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 4096,
+          "workers": 2,
+          "sent_packets": 4002,
+          "sent_bytes": 16392192,
+          "recv_packets": 4002,
+          "recv_bytes": 16392192,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 2000.4821621891836,
+          "mbps": 65.55179949061517
+        }
+      },
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 2000 -base-port 42201 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 4096,
+          "workers": 2,
+          "sent_packets": 8002,
+          "sent_bytes": 32776192,
+          "recv_packets": 8002,
+          "recv_bytes": 32776192,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 3999.968688073154,
+          "mbps": 131.07097397078113
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 42202 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 4096,
+          "workers": 2,
+          "sent_packets": 15998,
+          "sent_bytes": 65527808,
+          "recv_packets": 15963,
+          "recv_bytes": 65384448,
+          "loss_rate": 0.0021877734716839606,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 7977.527614057163,
+          "mbps": 261.4076248574251
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 42203 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 4096,
+          "workers": 2,
+          "sent_packets": 32010,
+          "sent_bytes": 131112960,
+          "recv_packets": 29708,
+          "recv_bytes": 121683968,
+          "loss_rate": 0.07191502655420182,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 14853.6361898888,
+          "mbps": 486.7239506702762
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 42204 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 4096,
+          "workers": 2,
+          "sent_packets": 47987,
+          "sent_bytes": 196554752,
+          "recv_packets": 41146,
+          "recv_bytes": 168534016,
+          "loss_rate": 0.1425594431825286,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 20566.560393991756,
+          "mbps": 673.9250509903219
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 2000,
+        "summary": {
+          "status": "loss",
+          "avg_loss": 0.0004916748612476874
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 2000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 2000 -base-port 55400 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 4096,
+              "workers": 2,
+              "sent_packets": 119998,
+              "sent_bytes": 491511808,
+              "recv_packets": 119939,
+              "recv_bytes": 491270144,
+              "loss_rate": 0.0004916748612476874,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 3997.890937417163,
+              "mbps": 131.0028902372856
+            }
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 1000,
+        "summary": {
+          "status": "zero_loss",
+          "avg_pps": 2000.0098235208013,
+          "avg_mbps": 65.53632189712961,
+          "runs_pps": [
+            2000.0098235208013
+          ],
+          "runs_mbps": [
+            65.53632189712961
+          ]
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 1000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 1000 -base-port 54400 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 4096,
+              "workers": 2,
+              "sent_packets": 60002,
+              "sent_bytes": 245768192,
+              "recv_packets": 60002,
+              "recv_bytes": 245768192,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 2000.0098235208013,
+              "mbps": 65.53632189712961
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": 1000,
+    "zero_loss_total_pps_avg": 2000.0098235208013,
+    "zero_loss_total_mbps_avg": 65.53632189712961,
+    "zero_loss_run_pps": [
+      2000.0098235208013
+    ],
+    "zero_loss_run_mbps": [
+      65.53632189712961
+    ],
+    "zero_loss_judgement": "all formal runs loss_rate == 0"
+  },
+  {
+    "scenario": "tcp_pool_empty_p256_w2",
+    "type": "payload",
+    "proto": "tcp",
+    "model": "pool",
+    "pipeline": "empty",
+    "payload": 256,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 2000 -base-port 42300 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 256,
+          "workers": 2,
+          "sent_packets": 7998,
+          "sent_bytes": 2047488,
+          "recv_packets": 8008,
+          "recv_bytes": 2050048,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 4002.997211170128,
+          "mbps": 8.198138288476422
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 42301 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 256,
+          "workers": 2,
+          "sent_packets": 15991,
+          "sent_bytes": 4093696,
+          "recv_packets": 16012,
+          "recv_bytes": 4099072,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 8004.464427546452,
+          "mbps": 16.393143147615135
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 42302 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 256,
+          "workers": 2,
+          "sent_packets": 31970,
+          "sent_bytes": 8184320,
+          "recv_packets": 32109,
+          "recv_bytes": 8219904,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 16049.21819426766,
+          "mbps": 32.86879886186017
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 42303 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 256,
+          "workers": 2,
+          "sent_packets": 48028,
+          "sent_bytes": 12295168,
+          "recv_packets": 48052,
+          "recv_bytes": 12301312,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 24025.067418957995,
+          "mbps": 49.20333807402597
+        }
+      },
+      {
+        "pps_per_worker": 16000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 16000 -base-port 42304 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 256,
+          "workers": 2,
+          "sent_packets": 63944,
+          "sent_bytes": 16369664,
+          "recv_packets": 64006,
+          "recv_bytes": 16385536,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 31994.820044333363,
+          "mbps": 65.52539145079473
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 16000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 16000 -base-port 69600 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 12000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 12000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 256 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 65600 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": null,
+    "zero_loss_total_pps_avg": null,
+    "zero_loss_total_mbps_avg": null,
+    "zero_loss_run_pps": [],
+    "zero_loss_run_mbps": [],
+    "zero_loss_judgement": "not_reached"
+  },
+  {
+    "scenario": "tcp_pool_empty_p4096_w2",
+    "type": "payload",
+    "proto": "tcp",
+    "model": "pool",
+    "pipeline": "empty",
+    "payload": 4096,
+    "workers": 2,
+    "presearch": [
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 2000 -base-port 42400 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 4096,
+          "workers": 2,
+          "sent_packets": 8002,
+          "sent_bytes": 32776192,
+          "recv_packets": 8002,
+          "recv_bytes": 32776192,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 4000.268010958015,
+          "mbps": 131.08078218307224
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 42401 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 4096,
+          "workers": 2,
+          "sent_packets": 16002,
+          "sent_bytes": 65544192,
+          "recv_packets": 16002,
+          "recv_bytes": 65544192,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 8000.424709460205,
+          "mbps": 262.157916879592
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 42402 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 4096,
+          "workers": 2,
+          "sent_packets": 31999,
+          "sent_bytes": 131067904,
+          "recv_packets": 31999,
+          "recv_bytes": 131067904,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 15998.827665266193,
+          "mbps": 524.2495849354426
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 42403 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 4096,
+          "workers": 2,
+          "sent_packets": 47982,
+          "sent_bytes": 196534272,
+          "recv_packets": 47982,
+          "recv_bytes": 196534272,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 23985.740406843586,
+          "mbps": 785.9647416514506
+        }
+      },
+      {
+        "pps_per_worker": 16000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 16000 -base-port 42404 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 4096,
+          "workers": 2,
+          "sent_packets": 64058,
+          "sent_bytes": 262381568,
+          "recv_packets": 64058,
+          "recv_bytes": 262381568,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 32012.352232320398,
+          "mbps": 1048.9807579486749
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 16000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 16000 -base-port 69800 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 12000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 12000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 4096 -workers 2 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 65800 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": null,
+    "zero_loss_total_pps_avg": null,
+    "zero_loss_total_mbps_avg": null,
+    "zero_loss_run_pps": [],
+    "zero_loss_run_mbps": [],
+    "zero_loss_judgement": "not_reached"
+  },
+  {
+    "scenario": "udp_pool_empty_p512_w1",
+    "type": "workers",
+    "proto": "udp",
+    "model": "pool",
+    "pipeline": "empty",
+    "payload": 512,
+    "workers": 1,
+    "presearch": [
+      {
+        "pps_per_worker": 1000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 1000 -base-port 42500 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 1,
+          "sent_packets": 1999,
+          "sent_bytes": 1023488,
+          "recv_packets": 1999,
+          "recv_bytes": 1023488,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 999.4114236646378,
+          "mbps": 4.093589191330357
+        }
+      },
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 2000 -base-port 42501 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 1,
+          "sent_packets": 4001,
+          "sent_bytes": 2048512,
+          "recv_packets": 4001,
+          "recv_bytes": 2048512,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 2000.3492996848097,
+          "mbps": 8.19343073150898
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 42502 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 1,
+          "sent_packets": 8006,
+          "sent_bytes": 4099072,
+          "recv_packets": 8006,
+          "recv_bytes": 4099072,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 4002.0811441807427,
+          "mbps": 16.392524366564324
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 42503 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 1,
+          "sent_packets": 16012,
+          "sent_bytes": 8198144,
+          "recv_packets": 16012,
+          "recv_bytes": 8198144,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 8004.197878860167,
+          "mbps": 32.78519451181125
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 42504 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 1,
+          "sent_packets": 24014,
+          "sent_bytes": 12295168,
+          "recv_packets": 24014,
+          "recv_bytes": 12295168,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 12006.711046491955,
+          "mbps": 49.17948844643105
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 12000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 12000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 66000 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 8000,
+        "summary": {
+          "status": "zero_loss",
+          "avg_pps": 8000.265278388893,
+          "avg_mbps": 32.769086580280906,
+          "runs_pps": [
+            8000.265278388893
+          ],
+          "runs_mbps": [
+            32.769086580280906
+          ]
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 8000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 62000 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 1,
+              "sent_packets": 239996,
+              "sent_bytes": 122877952,
+              "recv_packets": 240014,
+              "recv_bytes": 122887168,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 8000.265278388893,
+              "mbps": 32.769086580280906
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": 8000,
+    "zero_loss_total_pps_avg": 8000.265278388893,
+    "zero_loss_total_mbps_avg": 32.769086580280906,
+    "zero_loss_run_pps": [
+      8000.265278388893
+    ],
+    "zero_loss_run_mbps": [
+      32.769086580280906
+    ],
+    "zero_loss_judgement": "all formal runs loss_rate == 0"
+  },
+  {
+    "scenario": "udp_pool_empty_p512_w4",
+    "type": "workers",
+    "proto": "udp",
+    "model": "pool",
+    "pipeline": "empty",
+    "payload": 512,
+    "workers": 4,
+    "presearch": [
+      {
+        "pps_per_worker": 1000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 1000 -base-port 42600 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 4,
+          "sent_packets": 8005,
+          "sent_bytes": 4098560,
+          "recv_packets": 8008,
+          "recv_bytes": 4100096,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 4003.278461100007,
+          "mbps": 16.39742857666563
+        }
+      },
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 2000 -base-port 42601 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 4,
+          "sent_packets": 16008,
+          "sent_bytes": 8196096,
+          "recv_packets": 16019,
+          "recv_bytes": 8201728,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 8008.97865153019,
+          "mbps": 32.80477655666766
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 42602 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 4,
+          "sent_packets": 31992,
+          "sent_bytes": 16379904,
+          "recv_packets": 32031,
+          "recv_bytes": 16399872,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 16008.021316573248,
+          "mbps": 65.56885531268402
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 42603 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 4,
+          "sent_packets": 64005,
+          "sent_bytes": 32770560,
+          "recv_packets": 63898,
+          "recv_bytes": 32715776,
+          "loss_rate": 0.001671744394969143,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 31943.738083716027,
+          "mbps": 130.84155119090084
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 42604 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "udp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 4,
+          "sent_packets": 96073,
+          "sent_bytes": 49189376,
+          "recv_packets": 94262,
+          "recv_bytes": 48262144,
+          "loss_rate": 0.0188502492896027,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 47130.936137581535,
+          "mbps": 193.04831441953397
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 4000,
+        "summary": {
+          "status": "loss",
+          "avg_loss": 0.0002041556082378871
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 4000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 58200 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30.001s",
+              "payload_size": 512,
+              "workers": 4,
+              "sent_packets": 480026,
+              "sent_bytes": 245773312,
+              "recv_packets": 479928,
+              "recv_bytes": 245723136,
+              "loss_rate": 0.0002041556082378871,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 15997.067593061665,
+              "mbps": 65.52398886118058
+            }
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 2000,
+        "summary": {
+          "status": "zero_loss",
+          "avg_pps": 8000.294652814378,
+          "avg_mbps": 32.769206897927695,
+          "runs_pps": [
+            8000.294652814378
+          ],
+          "runs_mbps": [
+            32.769206897927695
+          ]
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 2000,
+            "ok": true,
+            "cmd": "go run ./cmd/bench -mode udp -duration 30s -warmup 5s -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 2000 -base-port 56200 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 0,
+            "result": {
+              "proto": "udp",
+              "duration": "30s",
+              "payload_size": 512,
+              "workers": 4,
+              "sent_packets": 240011,
+              "sent_bytes": 122885632,
+              "recv_packets": 240011,
+              "recv_bytes": 122885632,
+              "loss_rate": 0,
+              "order_errors": 0,
+              "strict_order_ok": true,
+              "pps": 8000.294652814378,
+              "mbps": 32.769206897927695
+            }
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": 2000,
+    "zero_loss_total_pps_avg": 8000.294652814378,
+    "zero_loss_total_mbps_avg": 32.769206897927695,
+    "zero_loss_run_pps": [
+      8000.294652814378
+    ],
+    "zero_loss_run_mbps": [
+      32.769206897927695
+    ],
+    "zero_loss_judgement": "all formal runs loss_rate == 0"
+  },
+  {
+    "scenario": "tcp_pool_empty_p512_w1",
+    "type": "workers",
+    "proto": "tcp",
+    "model": "pool",
+    "pipeline": "empty",
+    "payload": 512,
+    "workers": 1,
+    "presearch": [
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 2000 -base-port 42700 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 1,
+          "sent_packets": 4002,
+          "sent_bytes": 2049024,
+          "recv_packets": 4007,
+          "recv_bytes": 2051584,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 2002.8130451395823,
+          "mbps": 8.203522232891729
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 42701 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 1,
+          "sent_packets": 8000,
+          "sent_bytes": 4096000,
+          "recv_packets": 8001,
+          "recv_bytes": 4096512,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 4000.449380313766,
+          "mbps": 16.385840661765187
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 42702 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 1,
+          "sent_packets": 15997,
+          "sent_bytes": 8190464,
+          "recv_packets": 15997,
+          "recv_bytes": 8190464,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 7995.779012414739,
+          "mbps": 32.75071083485077
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 42703 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 1,
+          "sent_packets": 24015,
+          "sent_bytes": 12295680,
+          "recv_packets": 24015,
+          "recv_bytes": 12295680,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 12004.302641987004,
+          "mbps": 49.169623621578765
+        }
+      },
+      {
+        "pps_per_worker": 16000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 16000 -base-port 42704 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 1,
+          "sent_packets": 32041,
+          "sent_bytes": 16404992,
+          "recv_packets": 32041,
+          "recv_bytes": 16404992,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 16019.72559044523,
+          "mbps": 65.61679601846366
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 16000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 16000 -base-port 70400 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 12000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 12000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 1 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 66400 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": null,
+    "zero_loss_total_pps_avg": null,
+    "zero_loss_total_mbps_avg": null,
+    "zero_loss_run_pps": [],
+    "zero_loss_run_mbps": [],
+    "zero_loss_judgement": "not_reached"
+  },
+  {
+    "scenario": "tcp_pool_empty_p512_w4",
+    "type": "workers",
+    "proto": "tcp",
+    "model": "pool",
+    "pipeline": "empty",
+    "payload": 512,
+    "workers": 4,
+    "presearch": [
+      {
+        "pps_per_worker": 2000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 2000 -base-port 42800 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 4,
+          "sent_packets": 15997,
+          "sent_bytes": 8190464,
+          "recv_packets": 15997,
+          "recv_bytes": 8190464,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 7998.3860669896685,
+          "mbps": 32.76138933038968
+        }
+      },
+      {
+        "pps_per_worker": 4000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 4000 -base-port 42801 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 4,
+          "sent_packets": 32001,
+          "sent_bytes": 16384512,
+          "recv_packets": 32001,
+          "recv_bytes": 16384512,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 16000.420645913806,
+          "mbps": 65.53772296566295
+        }
+      },
+      {
+        "pps_per_worker": 8000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 8000 -base-port 42802 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2.001s",
+          "payload_size": 512,
+          "workers": 4,
+          "sent_packets": 64031,
+          "sent_bytes": 32783872,
+          "recv_packets": 64079,
+          "recv_bytes": 32808448,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 32023.327227027203,
+          "mbps": 131.1675483219034
+        }
+      },
+      {
+        "pps_per_worker": 12000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 42803 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 4,
+          "sent_packets": 96054,
+          "sent_bytes": 49179648,
+          "recv_packets": 96054,
+          "recv_bytes": 49179648,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 48026.069783054365,
+          "mbps": 196.71478183139067
+        }
+      },
+      {
+        "pps_per_worker": 16000,
+        "ok": true,
+        "cmd": "go run ./cmd/bench -mode tcp -duration 2s -warmup 500ms -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 16000 -base-port 42804 -log-level info -traffic-stats-interval 60s",
+        "exit_code": 0,
+        "result": {
+          "proto": "tcp",
+          "duration": "2s",
+          "payload_size": 512,
+          "workers": 4,
+          "sent_packets": 127956,
+          "sent_bytes": 65513472,
+          "recv_packets": 128113,
+          "recv_bytes": 65593856,
+          "loss_rate": 0,
+          "order_errors": 0,
+          "strict_order_ok": true,
+          "pps": 64049.73183281236,
+          "mbps": 262.3477015871994
+        }
+      }
+    ],
+    "formal_trials": [
+      {
+        "pps_per_worker": 16000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 16000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 16000 -base-port 70600 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      },
+      {
+        "pps_per_worker": 12000,
+        "summary": {
+          "status": "failed",
+          "reason": "some_runs_failed"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "pps_per_worker": 12000,
+            "ok": false,
+            "cmd": "go run ./cmd/bench -mode tcp -duration 30s -warmup 5s -payload-size 512 -workers 4 -task-execution-model pool -pipeline-profile empty -pps-per-worker 12000 -base-port 66600 -log-level info -traffic-stats-interval 60s",
+            "exit_code": 1,
+            "error": "result_not_found"
+          }
+        ]
+      }
+    ],
+    "zero_loss_pps_per_worker": null,
+    "zero_loss_total_pps_avg": null,
+    "zero_loss_total_mbps_avg": null,
+    "zero_loss_run_pps": [],
+    "zero_loss_run_mbps": [],
+    "zero_loss_judgement": "not_reached"
+  }
+]

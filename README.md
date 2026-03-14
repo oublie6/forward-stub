@@ -647,5 +647,6 @@ bench 输出 `forward benchmark result` 结构化字段，重点关注：
 - `docs/observability.md`：日志、流量统计、pprof、bench 观测方法。
 - `docs/bench.md`：bench 设计目的、参数、输出解释、推荐测试方法。
 - `docs/performance.md`：性能设计点、压测方法、优化路径。
+- `docs/performance-baseline.md`：最新版本性能基线、测试矩阵与结果归档索引。
 - `docs/troubleshooting.md`：故障类型与可操作排查路径。
 - `docs/roadmap.md`：局限、演进方向、文档维护计划。
