@@ -127,8 +127,8 @@
 
 ## 8. 性能测试资产
 
-- 72 场景极限吞吐扫参结果：`docs/perf_extreme_sweep_2026-03-10_72.md`
-- 原始数据：`docs/perf_extreme_sweep_raw_2026-03-10_72.json`
+- 最新性能基线文档：`docs/performance-baseline.md`
+- 结构化结果目录：`test-results/performance/2026-03-14-baseline/`
 
 ---
 
