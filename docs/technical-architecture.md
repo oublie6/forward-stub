@@ -127,8 +127,8 @@
 
 ## 8. 性能测试资产
 
-- 最新性能基线文档：`docs/performance-baseline.md`
-- 结构化结果目录：`test-results/performance/2026-03-14-baseline/`
+- Benchmark 设计文档：`docs/benchmark.md`
+- benchmark 通过 `go test -bench` 直接输出，不再维护本地闭环结果归档。
 
 ---
 

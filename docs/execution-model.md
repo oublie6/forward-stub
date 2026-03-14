@@ -100,4 +100,4 @@ flowchart TD
 1. 首选 `pool` 作为默认模型。
 2. 极低延迟链路评估 `fastpath`。
 3. 顺序敏感链路选 `channel`。
-4. 所有模型都应配合 bench 做场景验证。
+4. 所有模型都应配合 `go test -bench` 的场景化 benchmark 做验证。

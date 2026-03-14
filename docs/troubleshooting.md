@@ -87,13 +87,13 @@ nc -vz 127.0.0.1 9092
 
 ### 判断依据
 
-- bench 结果低于历史基线。
+- benchmark 结果出现显著回退。
 - 流量统计持续下降。
 
 ### 排查命令
 
 ```bash
-go run ./cmd/bench -config ./configs/bench.example.json
+go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
 ```
 
 结合日志判断是 receiver、task 还是 sender 瓶颈。
@@ -142,7 +142,7 @@ go tool pprof http://127.0.0.1:6060/debug/pprof/heap
 
 1. 看流量统计确认问题范围。
 2. 看 error 日志定位组件。
-3. 用 bench 复现并量化。
+3. 用场景化 benchmark 复现并量化。
 4. 必要时抓 pprof 定位热点。
 
 ## 11. 待确认

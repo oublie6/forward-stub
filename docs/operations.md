@@ -70,9 +70,9 @@ journalctl -u forward-stub -n 200 --no-pager
 - 流量统计是否偏离基线。
 - 下游链路可达性是否稳定。
 
-## 7. bench 入口与运维意义
+## 7. benchmark 入口与运维意义
 
-`cmd/bench` 可用于：
+场景化 benchmark 可用于：
 
 - 上线前容量评估。
 - 版本升级回归。
@@ -81,10 +81,10 @@ journalctl -u forward-stub -n 200 --no-pager
 示例：
 
 ```bash
-go run ./cmd/bench -config ./configs/bench.example.json
+go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
 ```
 
-若需要做模型对比、扫频或顺序校验，请优先参考 `docs/bench.md` 的标准流程，避免不同批次使用不同参数导致结果不可比。
+如需做模型或参数对比，请固定同一机器、同一命令模板，参考 `docs/benchmark.md`。
 
 ## 8. pprof 与运行诊断
 

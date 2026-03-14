@@ -8,7 +8,7 @@
 - 流量聚合统计日志。
 - payload 摘要日志。
 - pprof HTTP 端点。
-- `cmd/bench` 压测输出。
+- `go test -bench` benchmark 输出。
 
 ## 2. 日志
 
@@ -54,15 +54,15 @@ receiver/task 支持 payload 摘要输出：
 - `/debug/pprof/heap`
 - `/debug/pprof/goroutine`
 
-## 6. bench
+## 6. benchmark
 
-bench 提供可重复性能观测：
+benchmark 提供可重复内部链路性能观测：
 
 - 无丢包吞吐区间。
 - 执行模型对比。
 - payload 大小、workers、队列参数对比。
 
-建议把 bench 结果与运行日志一起归档，便于回归对比。参数规范与结果解读详见 `docs/bench.md`。
+建议将 benchmark 命令、commit 与 profile 文件一起归档。参数规范与边界解读详见 `docs/benchmark.md`。
 
 ## 7. 关键观测指标建议
 

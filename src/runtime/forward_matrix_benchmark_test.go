@@ -35,15 +35,15 @@ func BenchmarkDispatchMatrix(b *testing.B) {
 		for _, out := range protos {
 			for _, payloadSize := range payloadSizes {
 				b.Run(fmt.Sprintf("%s_to_%s_%dB", in, out, payloadSize), func(b *testing.B) {
-					cap := &benchCounterSender{name: out}
-					tk := &task.Task{Name: "bench-task", FastPath: true, Senders: []sender.Sender{cap}}
+					sinkSender := &benchCounterSender{name: out}
+					tk := &task.Task{Name: "bench-task", FastPath: true, Senders: []sender.Sender{sinkSender}}
 					if err := tk.Start(); err != nil {
 						b.Fatalf("task start: %v", err)
 					}
 					defer tk.StopGraceful()
 
 					st := NewStore()
-					st.setDispatchSubs(map[string][]*TaskState{in: []*TaskState{{Name: "bench-task", T: tk}}})
+					st.setDispatchSubs(map[string][]*TaskState{in: {&TaskState{Name: "bench-task", T: tk}}})
 					payload := make([]byte, payloadSize)
 					ctx := context.Background()
 
@@ -67,13 +67,13 @@ func BenchmarkDispatchMatrixPoolSizesNoPayloadLog(b *testing.B) {
 	for _, proto := range protos {
 		for _, poolSize := range poolSizes {
 			b.Run(fmt.Sprintf("%s_pool_%d_%dB", proto, poolSize, payloadSize), func(b *testing.B) {
-				cap := &benchCounterSender{name: proto}
+				sinkSender := &benchCounterSender{name: proto}
 				tk := &task.Task{
 					Name:           "bench-task-pool",
 					ExecutionModel: task.ExecutionModelPool,
 					PoolSize:       poolSize,
 					QueueSize:      poolSize,
-					Senders:        []sender.Sender{cap},
+					Senders:        []sender.Sender{sinkSender},
 				}
 				if err := tk.Start(); err != nil {
 					b.Fatalf("task start: %v", err)
@@ -81,7 +81,7 @@ func BenchmarkDispatchMatrixPoolSizesNoPayloadLog(b *testing.B) {
 				defer tk.StopGraceful()
 
 				st := NewStore()
-				st.setDispatchSubs(map[string][]*TaskState{proto: []*TaskState{{Name: "bench-task-pool", T: tk}}})
+				st.setDispatchSubs(map[string][]*TaskState{proto: {&TaskState{Name: "bench-task-pool", T: tk}}})
 				payload := make([]byte, payloadSize)
 				ctx := context.Background()
 

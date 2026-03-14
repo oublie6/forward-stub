@@ -27,11 +27,11 @@ func BenchmarkPayloadLogSwitchThroughput(b *testing.B) {
 			for _, payloadLogEnabled := range []bool{false, true} {
 				caseName := fmt.Sprintf("%s_payloadlog_%t_%dB", proto, payloadLogEnabled, payloadSize)
 				b.Run(caseName, func(b *testing.B) {
-					cap := &benchCounterSender{name: proto + "-sink"}
+					sinkSender := &benchCounterSender{name: proto + "-sink"}
 					tk := &task.Task{
 						Name:           "bench-" + proto,
 						FastPath:       true,
-						Senders:        []sender.Sender{cap},
+						Senders:        []sender.Sender{sinkSender},
 						LogPayloadSend: payloadLogEnabled,
 						PayloadLogMax:  128,
 					}
@@ -41,7 +41,7 @@ func BenchmarkPayloadLogSwitchThroughput(b *testing.B) {
 					defer tk.StopGraceful()
 
 					st := NewStore()
-					st.setDispatchSubs(map[string][]*TaskState{proto: []*TaskState{{Name: tk.Name, T: tk}}})
+					st.setDispatchSubs(map[string][]*TaskState{proto: {&TaskState{Name: tk.Name, T: tk}}})
 
 					ctx := context.Background()
 					payload := make([]byte, payloadSize)
@@ -54,8 +54,8 @@ func BenchmarkPayloadLogSwitchThroughput(b *testing.B) {
 					}
 					b.StopTimer()
 
-					if cap.pkts != int64(b.N) {
-						b.Fatalf("packet loss detected: sent=%d received=%d", b.N, cap.pkts)
+					if sinkSender.pkts != int64(b.N) {
+						b.Fatalf("packet loss detected: sent=%d received=%d", b.N, sinkSender.pkts)
 					}
 				})
 			}
