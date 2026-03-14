@@ -1,26 +1,188 @@
 {
-  "version": 1,
+  "version": 1001,
   "receivers": {
-    "recv_udp": {
+    "rx_udp": {
       "type": "udp_gnet",
-      "listen": "0.0.0.0:9000"
+      "listen": "0.0.0.0:19000",
+      "multicore": true,
+      "num_event_loop": 8,
+      "read_buffer_cap": 1048576,
+      "socket_recv_buffer": 1073741824,
+      "log_payload_recv": false,
+      "payload_log_max_bytes": 256
+    },
+    "rx_tcp": {
+      "type": "tcp_gnet",
+      "listen": "0.0.0.0:19001",
+      "frame": "u16be",
+      "multicore": true,
+      "num_event_loop": 4,
+      "socket_recv_buffer": 1073741824
+    },
+    "rx_kafka": {
+      "type": "kafka",
+      "listen": "127.0.0.1:9092",
+      "topic": "input-topic",
+      "group_id": "forward-stub-group",
+      "start_offset": "latest",
+      "fetch_min_bytes": 1,
+      "fetch_max_bytes": 1048576,
+      "fetch_max_wait_ms": 100,
+      "username": "kafka-user",
+      "password": "kafka-pass",
+      "sasl_mechanism": "PLAIN",
+      "tls": false,
+      "tls_skip_verify": false
+    },
+    "rx_sftp": {
+      "type": "sftp",
+      "listen": "127.0.0.1:22",
+      "username": "demo",
+      "password": "demo",
+      "remote_dir": "/input",
+      "poll_interval_sec": 3,
+      "chunk_size": 65536,
+      "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"
     }
   },
   "senders": {
-    "send_tcp": {
+    "tx_udp": {
+      "type": "udp_unicast",
+      "local_ip": "0.0.0.0",
+      "local_port": 20000,
+      "remote": "127.0.0.1:21000",
+      "concurrency": 8,
+      "socket_send_buffer": 1073741824
+    },
+    "tx_mcast": {
+      "type": "udp_multicast",
+      "local_ip": "0.0.0.0",
+      "local_port": 20001,
+      "remote": "239.0.0.10:21001",
+      "iface": "eth0",
+      "ttl": 16,
+      "loop": false,
+      "concurrency": 8,
+      "socket_send_buffer": 1073741824
+    },
+    "tx_tcp": {
       "type": "tcp_gnet",
-      "remote": "127.0.0.1:9100"
+      "remote": "127.0.0.1:21002",
+      "frame": "u16be",
+      "concurrency": 4,
+      "socket_send_buffer": 1073741824
+    },
+    "tx_kafka": {
+      "type": "kafka",
+      "remote": "127.0.0.1:9092",
+      "topic": "output-topic",
+      "acks": -1,
+      "linger_ms": 5,
+      "batch_max_bytes": 1048576,
+      "compression": "lz4",
+      "username": "kafka-user",
+      "password": "kafka-pass",
+      "sasl_mechanism": "PLAIN",
+      "tls": false,
+      "tls_skip_verify": false
+    },
+    "tx_sftp": {
+      "type": "sftp",
+      "remote": "127.0.0.1:22",
+      "username": "demo",
+      "password": "demo",
+      "remote_dir": "/output",
+      "temp_suffix": ".tmp",
+      "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"
     }
   },
   "pipelines": {
-    "noop": []
+    "pipe_match_replace": [
+      {
+        "type": "match_offset_bytes",
+        "offset": 0,
+        "hex": "aabb"
+      },
+      {
+        "type": "replace_offset_bytes",
+        "offset": 2,
+        "hex": "ccdd"
+      }
+    ],
+    "pipe_mark_file": [
+      {
+        "type": "mark_as_file_chunk",
+        "path": "/auto/out.bin",
+        "bool": true
+      }
+    ],
+    "pipe_clear_file": [
+      {
+        "type": "clear_file_meta"
+      }
+    ],
+    "pipe_route_sender": [
+      {
+        "type": "route_offset_bytes_sender",
+        "offset": 0,
+        "cases": {
+          "01": "tx_udp",
+          "02": "tx_tcp"
+        },
+        "default_sender": "tx_kafka"
+      }
+    ]
   },
   "tasks": {
-    "task_demo": {
+    "task_fastpath": {
+      "receivers": [
+        "rx_udp"
+      ],
+      "pipelines": [
+        "pipe_match_replace"
+      ],
+      "senders": [
+        "tx_udp"
+      ],
+      "execution_model": "fastpath",
+      "queue_size": 2048,
+      "channel_queue_size": 2048,
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
+    },
+    "task_pool": {
+      "receivers": [
+        "rx_tcp"
+      ],
+      "pipelines": [
+        "pipe_route_sender"
+      ],
+      "senders": [
+        "tx_udp",
+        "tx_tcp",
+        "tx_kafka"
+      ],
       "execution_model": "pool",
-      "receivers": ["recv_udp"],
-      "pipelines": ["noop"],
-      "senders": ["send_tcp"]
+      "pool_size": 2048,
+      "queue_size": 4096,
+      "channel_queue_size": 4096,
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
+    },
+    "task_channel": {
+      "receivers": [
+        "rx_kafka"
+      ],
+      "pipelines": [
+        "pipe_mark_file"
+      ],
+      "senders": [
+        "tx_sftp"
+      ],
+      "execution_model": "channel",
+      "channel_queue_size": 1024,
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
     }
   }
 }
