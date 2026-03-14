@@ -84,6 +84,8 @@ journalctl -u forward-stub -n 200 --no-pager
 go run ./cmd/bench -config ./configs/bench.example.json
 ```
 
+若需要做模型对比、扫频或顺序校验，请优先参考 `docs/bench.md` 的标准流程，避免不同批次使用不同参数导致结果不可比。
+
 ## 8. pprof 与运行诊断
 
 若 `control.pprof_port` 开启，可执行：

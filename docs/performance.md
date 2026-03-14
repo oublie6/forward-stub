@@ -46,6 +46,8 @@
 go run ./cmd/bench -config ./configs/bench.example.json
 ```
 
+详细参数、执行流程和结果解释请见 `docs/bench.md`。
+
 ## 6. 推荐压测方法
 
 1. 固定基线参数。
