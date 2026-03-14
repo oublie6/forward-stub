@@ -15,13 +15,13 @@
 ```mermaid
 flowchart TD
   D[dispatch] --> M{execution_model}
-  M -->|fastpath| F[当前 goroutine 直接执行]
-  M -->|pool| P[Submit 到 ants pool]
-  M -->|channel| C[投递到有界 channel]
+  M --> F[FastPath]
+  M --> P[Pool]
+  M --> C[Channel]
 
-  F --> X[processAndSend]
+  F --> X[处理发送]
   P --> X
-  C --> W[channelWorker] --> X
+  C --> W[ChannelWorker] --> X
 
   X --> Y[pipeline stages]
   Y --> Z[sender fan-out]

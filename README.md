@@ -44,13 +44,13 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  R[Receiver 收包] --> D[dispatch(receiver -> tasks 快照)]
+  R[Receiver 收包] --> D[Dispatch 快照]
   D --> T1[Task A]
   D --> T2[Task B]
   T1 --> M1{execution_model}
-  M1 -->|fastpath| P1[同步执行 pipeline]
-  M1 -->|pool| P2[ants 池异步执行]
-  M1 -->|channel| P3[单协程有界队列]
+  M1 --> P1[FastPath 执行]
+  M1 --> P2[Pool 执行]
+  M1 --> P3[Channel 执行]
   P1 --> S1[Sender fan-out]
   P2 --> S1
   P3 --> S1
