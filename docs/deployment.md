@@ -1,54 +1,53 @@
 # Deployment
 
-## 1. 本地部署
+## 1. 部署方式总览
 
-### 1.1 构建
+仓库提供三类部署路径：
 
-```bash
-make build
-```
+- 本地二进制运行。
+- Docker 镜像运行。
+- Kubernetes 清单部署。
 
-输出：`bin/forward-stub`。
+## 2. 本地部署
 
-### 1.2 启动
+### 步骤
 
-推荐双配置：
-
-```bash
-./bin/forward-stub \
-  -system-config ./configs/system.example.json \
-  -business-config ./configs/business.example.json
-```
-
-legacy：
+1. `make build`
+2. 准备 `system.example.json` 与 `business.example.json`
+3. 启动二进制
 
 ```bash
-./bin/forward-stub -config ./configs/example.json
+./bin/forward-stub -system-config ./configs/system.example.json -business-config ./configs/business.example.json
 ```
 
-## 2. Docker 部署
+### 适用场景
 
-### 2.1 构建镜像
+- 开发调试。
+- 单机联调。
+- 配置验证。
+
+## 3. Docker 部署
+
+### 构建
 
 ```bash
 make docker-build VERSION=$(git rev-parse --short HEAD)
 ```
 
-### 2.2 本地运行容器
+### 运行
 
 ```bash
 make docker-run SERVICE_ARGS='-system-config /app/config/system.json -business-config /app/config/business.json'
 ```
 
-> 说明：`docker-run` 默认 host 网络模式，适合本地转发测试。
+### 相关文件
 
-### 2.3 相关脚本
+- `Dockerfile`：基于 `golang:1.25-alpine` 构建可执行文件。
+- `scripts/docker-local-test.sh`：受限环境的镜像构建验证脚本。
 
-- `scripts/docker-local-test.sh`：受限环境下的本地镜像构建验证辅助脚本。
+## 4. Kubernetes 部署
 
-## 3. Kubernetes 部署
-
-`deploy/k8s/` 目录包含：
+目录：`deploy/k8s/`
 
 - `namespace.yaml`
 - `configmap.yaml`
@@ -56,7 +55,7 @@ make docker-run SERVICE_ARGS='-system-config /app/config/system.json -business-c
 - `service.yaml`
 - `kustomization.yaml`
 
-快速操作：
+脚本入口：
 
 ```bash
 ./scripts/k8s-deploy.sh apply
@@ -64,27 +63,38 @@ make docker-run SERVICE_ARGS='-system-config /app/config/system.json -business-c
 ./scripts/k8s-deploy.sh delete
 ```
 
-## 4. deploy/k8s 说明与注意事项
+## 5. Makefile 与 scripts 角色
 
-- 当前清单示例使用 `-config /app/config/config.json`（legacy 单文件模式）。
-- 若切换双文件模式，需要同步修改 `args` 与 ConfigMap 内容。
-- 默认暴露 UDP `19000` 端口（Service `ClusterIP`）。
+- Makefile：统一 build/test/vet/perf/package/docker 入口。
+- `scripts/build-linux.sh`：linux 制品构建。
+- `scripts/package.sh`：多平台归档。
+- `scripts/k8s-deploy.sh`：k8s 生命周期操作。
 
-## 5. 配置挂载方式
+## 6. 配置挂载与端口
 
-- K8s 示例通过 ConfigMap 挂载到 `/app/config`。
-- 日志目录挂载到 `/var/log/forward-stub`（`emptyDir`）。
-- 容器采用 `readOnlyRootFilesystem: true`，临时目录用 `/tmp` 卷。
+- 本地模式：直接读取主机文件。
+- Docker 模式：建议挂载配置目录到容器。
+- K8s 示例：ConfigMap 挂载到 `/app/config`。
+- 默认示例端口：UDP 19000（按 receiver 配置调整）。
 
-## 6. 资源建议（起步）
+## 7. 资源建议
 
-- CPU：`500m~2`（按协议和包长压测调整）。
-- 内存：`256Mi~1Gi`（与队列深度、并发、日志策略相关）。
-- 若启用 Kafka/SFTP 或大批量文件场景，建议上调内存与网络 buffer。
+起步建议：
 
-## 7. 常见部署问题
+- CPU：500m 到 2 核。
+- Memory：256Mi 到 1Gi。
 
-1. **端口无流量**：检查 Service 协议是否为 UDP/TCP 且与 receiver 类型一致。
-2. **配置未生效**：确认挂载路径和启动参数一致。
-3. **容器无法写日志**：检查日志路径权限和只读根文件系统策略。
-4. **热更新不生效**：检查 `control.config_watch_interval` 与文件更新时间。
+实际值需根据协议类型、payload 大小、并发与 sender 下游能力压测确定。
+
+## 8. 环境差异建议
+
+- 开发环境：优先本地运行，快速迭代配置。
+- 测试环境：Docker 或 K8s，验证部署脚本与资源边界。
+- 生产环境：建议双配置模式，分离 system 与 business 变更。
+
+## 9. 常见部署错误
+
+- 参数模式混用（单文件与双文件参数冲突）。
+- 配置挂载路径与启动参数不一致。
+- 协议端口未开放或 Service 协议类型错误。
+- 指纹配置错误导致 SFTP 启动失败。

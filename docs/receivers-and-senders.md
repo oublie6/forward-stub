@@ -2,78 +2,81 @@
 
 ## 1. 抽象职责
 
-### Receiver
+### Receiver 抽象
 
-接口：`src/receiver/receiver.go`
+接口：`Name/Key/Start/Stop`。
 
-- `Start(ctx, onPacket)`：启动接收循环并把数据回调为 `packet.Packet`。
-- `Stop(ctx)`：停止接收。
+职责：
 
-职责：协议解包、必要元信息填充、进入 dispatch。
+- 协议读取。
+- 必要解帧。
+- 填充 `packet.Packet`。
+- 调用回调进入 dispatch。
 
-### Sender
+### Sender 抽象
 
-接口：`src/sender/sender.go`
+接口：`Name/Key/Send/Close`。
 
-- `Send(ctx, *packet.Packet)`：发送 packet。
-- `Close(ctx)`：释放连接和资源。
+职责：
 
-职责：协议编码与目标投递。
+- 协议编码与连接管理。
+- 按 sender 类型发送 payload。
+- 在关闭阶段释放资源。
 
-## 2. 当前支持的 receiver 类型
+## 2. Receiver 类型差异
 
-- `udp_gnet`
-- `tcp_gnet`
-- `kafka`
-- `sftp`
+- `udp_gnet`：事件驱动 UDP 收包，适合高 PPS。
+- `tcp_gnet`：TCP 收包并可做 framing。
+- `kafka`：消费 topic，适合总线型接入。
+- `sftp`：轮询目录读取文件块。
 
-## 3. 当前支持的 sender 类型
+## 3. Sender 类型差异
 
-- `udp_unicast`
-- `udp_multicast`
-- `tcp_gnet`
-- `kafka`
-- `sftp`
+- `udp_unicast`：点对点 UDP 发送。
+- `udp_multicast`：组播分发。
+- `tcp_gnet`：TCP 发送，可配置并发连接。
+- `kafka`：生产到 topic，支持 batch/compression。
+- `sftp`：写文件到远端目录。
 
-## 4. 协议使用要点（摘要）
-
-| 类型 | 配置要点 | 备注 |
-|---|---|---|
-| `udp_gnet` | `listen`、`multicore`、`num_event_loop`、`socket_recv_buffer` | 适合高并发短报文。 |
-| `tcp_gnet` | `listen/remote`、`frame`、缓冲配置 | 需要关注 framing 对齐。 |
-| `kafka` | broker、topic、auth、tls、fetch/producer 参数 | 适合总线解耦。 |
-| `sftp` | 账号、目录、chunk、`host_key_fingerprint` | 强制主机指纹校验。 |
-
-## 5. 与 task/pipeline 的关系
+## 4. 协议流程图
 
 ```mermaid
 flowchart LR
-  Rx[Receiver] --> Dispatch[dispatch]
-  Dispatch --> Task[Task]
-  Task --> Pipeline[Pipeline stages]
-  Pipeline --> Tx1[Sender A]
-  Pipeline --> Tx2[Sender B]
+  Source[Source System] --> Recv[Receiver]
+  Recv --> Task[Task]
+  Task --> Send[Sender]
+  Send --> Target[Target System]
 ```
 
-- receiver 只负责输入，不做复杂业务编排。
-- sender 只负责输出，不参与上游调度。
-- 任务编排（receiver 订阅、pipeline 链、sender fan-out）由 `tasks` 配置定义。
+## 5. 与 task 和 pipeline 的协作
 
-## 6. 典型协议转换组合
+- receiver 不做业务编排，只负责输入。
+- task 负责模型选择和 sender fanout。
+- pipeline 负责字段匹配替换、文件语义标记、路由 sender。
+- sender 只关注输出协议，不处理上游路由策略。
 
-- UDP -> TCP（实时流网关）
-- UDP -> Kafka（实时流入总线）
-- Kafka -> SFTP（流转文件落地）
-- SFTP -> Kafka（文件导入消息流）
+## 6. 常见组合
 
-## 7. route stage 与 sender 选择
+1. UDP receiver + Kafka sender：网络流入总线。
+2. Kafka receiver + TCP sender：消息流出服务。
+3. SFTP receiver + Kafka sender：文件导入消息系统。
+4. UDP receiver + SFTP sender：流转文件落盘。
 
-当 pipeline 使用 `route_offset_bytes_sender` 时：
+## 7. 可靠性性能复杂度对比
 
-- route stage 会写入 `pkt.Meta.RouteSender`。
-- task 优先按 route 指定 sender 发送。
-- route 目标必须是 task 已绑定 sender（配置校验已覆盖）。
+| 类型 | 可靠性特征 | 性能特征 | 配置复杂度 |
+|---|---|---|---|
+| UDP | 依赖上层重试 | 低开销高吞吐 | 低 |
+| TCP | 连接可靠传输 | 吞吐稳定 | 中 |
+| Kafka | broker 持久化能力 | 批量高吞吐 | 中到高 |
+| SFTP | 文件语义与 SSH 安全 | 吞吐受远端 IO 影响 | 高 |
 
-## 8. 待确认项
+## 8. 配置注意事项
 
-- SFTP receiver 对远端文件“已消费标记/重试幂等策略”在仓库内未见统一设计文档（待确认）。
+- Kafka/SFTP 建议使用安全配置并通过密钥系统注入凭据。
+- SFTP 指纹必须准确，否则连接会被拒绝。
+- UDP/TCP 建议结合 socket buffer 与并发设置联调。
+
+## 9. 待确认
+
+- SFTP receiver 对重复消费文件的幂等策略，需要补充专题设计说明。

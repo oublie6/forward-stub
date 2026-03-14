@@ -1,6 +1,10 @@
 # Operations
 
-## 1. 服务启动与停止
+## 1. 运维目标
+
+本文面向值班和维护人员，提供日常操作、巡检、变更和风险控制建议。
+
+## 2. 启动与停止
 
 ### 启动
 
@@ -10,78 +14,87 @@
 
 ### 停止
 
-- 前台：`Ctrl+C`。
-- 后台：发送终止信号（如 `kill -TERM <pid>`）。
+- 前台运行直接 `Ctrl+C`。
+- 后台运行发送停止信号（TERM/INT）。
 
-runtime 在停止阶段会：
+停止时 runtime 会执行优雅下线，等待 task in-flight 完成。
 
-1. 停止 receiver。
-2. 等待 task in-flight 请求完成。
-3. 关闭 sender 连接。
+## 3. 配置变更操作
 
-## 2. 日志与流量统计
+- 修改 business 配置后，等待文件监听触发或发送重载信号。
+- 若误改 system 配置，reload 会被拒绝，需重启生效。
 
-- 日志由 `src/logx` 统一管理，支持 stdout/stderr 或文件落盘。
-- 关键配置：`logging.level`、`logging.file`、`traffic_stats_interval`。
-- payload 日志默认关闭，可在 receiver/task 层按需打开。
+建议流程：
 
-## 3. 配置更新方式
+1. 备份当前 business 文件。
+2. 预检查 JSON 格式。
+3. 应用并观察日志。
+4. 验证吞吐与错误率。
 
-- 文件监听：按 `control.config_watch_interval` 检测 business 文件变更。
-- 信号触发：`HUP/USR1`（平台差异见 `src/bootstrap/signal_*.go`）。
-- 约束：若 system 配置变化，reload 会被拒绝并提示需重启。
+## 4. 日志使用方式
 
-## 4. 日常巡检建议
+关键日志类别：
 
-1. 检查进程存活与启动参数。
-2. 检查 error/warn 日志突增。
-3. 检查流量统计是否符合预期（收发速率、异常波动）。
-4. 检查下游可达性（尤其 Kafka/SFTP）。
-5. 定期抓取 pprof（若开启）。
+- 启动与配置加载日志。
+- task 队列满丢包日志。
+- sender 发送异常日志。
+- 流量聚合统计日志。
 
-## 5. bench 使用入口
+建议：
+
+- 生产默认 `info` 或 `warn`。
+- 排障窗口短时启用更高日志级别。
+
+## 5. 常用运维命令
+
+```bash
+# 版本
+./bin/forward-stub -version
+
+# 监听端口
+ss -lntup | rg forward-stub
+
+# 触发重载
+kill -HUP <pid>
+
+# 查看最近日志
+journalctl -u forward-stub -n 200 --no-pager
+```
+
+## 6. 巡检建议
+
+每个巡检周期建议确认：
+
+- 进程存活和端口状态。
+- 错误日志是否突增。
+- 流量统计是否偏离基线。
+- 下游链路可达性是否稳定。
+
+## 7. bench 入口与运维意义
+
+`cmd/bench` 可用于：
+
+- 上线前容量评估。
+- 版本升级回归。
+- 参数调优对比。
+
+示例：
 
 ```bash
 go run ./cmd/bench -config ./configs/bench.example.json
 ```
 
-或手工参数：
+## 8. pprof 与运行诊断
 
-```bash
-go run ./cmd/bench -mode both -duration 4s -warmup 1s -payload-size 512 -workers 2 -pps-sweep 2000,4000,8000
-```
-
-## 6. pprof 使用入口
-
-开启：`control.pprof_port > 0`（默认 6060）。
-
-常用命令：
+若 `control.pprof_port` 开启，可执行：
 
 ```bash
 go tool pprof http://127.0.0.1:6060/debug/pprof/profile?seconds=30
 go tool pprof http://127.0.0.1:6060/debug/pprof/heap
-curl -s http://127.0.0.1:6060/debug/pprof/goroutine?debug=1 | head
 ```
 
-## 7. 运行中建议观测项
+## 9. 常见操作风险
 
-- Receiver 入站速率、异常日志。
-- Task 丢包告警（队列满、上下文取消）。
-- Sender 发送错误率与超时。
-- CPU、内存、GC、goroutine 数。
-
-## 8. 常用运维命令
-
-```bash
-# 查看版本
-./bin/forward-stub -version
-
-# 触发业务配置重载（Unix）
-kill -HUP <pid>
-
-# 查看端口监听
-ss -lntup | rg forward-stub
-
-# 快速查看最近日志
-journalctl -u forward-stub -n 200 --no-pager
-```
+- 长期开启 payload 日志会影响吞吐并放大日志体积。
+- 队列参数盲目调大可能造成内存压力。
+- 未验证的 route sender 配置会导致转发丢失。

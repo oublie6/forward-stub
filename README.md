@@ -1,77 +1,72 @@
 # forward-stub
 
-`forward-stub` 是一个基于 Go 的协议转发引擎，面向高吞吐、低延迟、可热更新的在线转发场景。系统将数据处理统一抽象为 **receiver -> task(pipeline + sender)**，通过可配置编排完成多协议接入、处理和分发。
+`forward-stub` 是一个面向高吞吐、低延迟、可热更新场景的 Go 转发引擎。系统把协议接入、处理、分发统一抽象为 `receiver -> task(pipeline + sender)`，通过配置把 UDP/TCP/Kafka/SFTP 组合成可运行的数据转发链路。
 
-## 核心能力
+## 1. 项目简介
 
-- 基于 `receiver -> pipeline -> sender` 的任务编排模型，支持 1:N / N:M 拓扑。
-- 支持 `UDP/TCP/Kafka/SFTP` 收发与协议转换。
-- 提供 `fastpath / pool / channel` 三种执行模型，按吞吐、延迟、顺序性需求切换。
-- 支持业务配置热更新（文件变更监听 + 信号触发），系统配置保持稳定基线。
-- runtime 使用 dispatch 快照（`receiver -> tasks`）降低热路径锁竞争。
-- 内置 payload 内存复用与有界队列，控制 GC 与回压行为。
-- 支持结构化日志、流量聚合统计、payload 摘要日志。
-- 可选开启 pprof 诊断接口，支持运行时性能分析。
-- 提供 `cmd/bench` 压测工具与 sweep 配置，便于持续性能回归。
+本项目解决的核心问题：
 
-## 系统总体架构
+- 将多协议输入统一收敛为内部 `packet.Packet` 数据模型。
+- 通过可编排 `task` 把处理逻辑和下游分发策略配置化。
+- 在不停机前提下更新业务拓扑（receiver/sender/pipeline/task）。
+- 提供可观测入口（日志、流量统计、pprof、bench）支持运维与性能回归。
+
+## 2. 核心能力
+
+- 支持 `udp_gnet`、`tcp_gnet`、`kafka`、`sftp` 四类 receiver。
+- 支持 `udp_unicast`、`udp_multicast`、`tcp_gnet`、`kafka`、`sftp` 五类 sender。
+- 内置 `match_offset_bytes`、`replace_offset_bytes`、`mark_as_file_chunk`、`clear_file_meta`、`route_offset_bytes_sender` stage。
+- `task` 支持 `fastpath`、`pool`、`channel` 三种执行模型。
+- runtime 支持 dispatch 快照分发，降低热路径锁竞争。
+- 支持 system/business 双配置模式，兼容 legacy 单文件模式。
+- 支持 business 配置热更新（文件监听 + 信号触发）。
+- 支持 payload 复用、队列边界和回压控制。
+
+## 3. 系统总体架构图
 
 ```mermaid
 flowchart LR
-  subgraph ControlPlane[控制面]
-    SysCfg[system-config]
-    BizCfg[business-config/API]
-    Bootstrap[bootstrap.Run]
-    Validator[config.ApplyDefaults + Validate]
-  end
+  SysCfg[System Config] --> Boot[Bootstrap]
+  BizCfg[Business Config] --> Boot
+  Boot --> Validate[Load Validate Defaults]
+  Validate --> Runtime[Runtime Store]
 
-  subgraph DataPlane[数据面]
-    Runtime[runtime.Store / UpdateCache]
-    Receivers[Receivers<br/>udp_gnet tcp_gnet kafka sftp]
-    Dispatch[dispatch snapshot]
-    Tasks[Task<br/>fastpath pool channel]
-    Pipelines[Pipelines / Stages]
-    Senders[Senders<br/>udp tcp kafka sftp]
-  end
+  Runtime --> Receiver[Receiver Set]
+  Receiver --> Dispatch[Dispatch Snapshot]
+  Dispatch --> Task[Task Set]
+  Task --> Pipeline[Pipeline Set]
+  Pipeline --> Sender[Sender Set]
 
-  SysCfg --> Bootstrap
-  BizCfg --> Bootstrap
-  Bootstrap --> Validator --> Runtime
-  Runtime --> Receivers --> Dispatch --> Tasks --> Pipelines --> Senders
+  Api[Control API] --> Boot
+  Signal[Signal Reload] --> Boot
+  Watch[File Watch Reload] --> Boot
 ```
 
-## 核心处理流程
+## 4. 核心处理流程图
 
 ```mermaid
 flowchart TD
-  R[Receiver 收包] --> D[Dispatch 快照]
-  D --> T1[Task A]
-  D --> T2[Task B]
-  T1 --> M1{execution_model}
-  M1 --> P1[FastPath 执行]
-  M1 --> P2[Pool 执行]
-  M1 --> P3[Channel 执行]
-  P1 --> S1[Sender fan-out]
-  P2 --> S1
-  P3 --> S1
-  T2 --> M2{同上}
-  M2 --> S2[Sender fan-out]
+  In[Receiver Packet] --> Fanout[Dispatch by Receiver]
+  Fanout --> TaskA[Task A]
+  Fanout --> TaskB[Task B]
+
+  TaskA --> ModelA[Execution Model]
+  ModelA --> FastA[FastPath Run]
+  ModelA --> PoolA[Pool Run]
+  ModelA --> ChanA[Channel Run]
+
+  FastA --> PipeA[Pipeline Process]
+  PoolA --> PipeA
+  ChanA --> PipeA
+  PipeA --> SendA[Sender Fanout]
+
+  TaskB --> PipeB[Pipeline Process]
+  PipeB --> SendB[Sender Fanout]
 ```
 
-## 支持协议与典型场景
+## 5. 快速开始
 
-| 方向 | 类型 | 典型用途 |
-|---|---|---|
-| Receiver | `udp_gnet` / `tcp_gnet` | 高并发网络入口（设备流、网关流）。 |
-| Receiver | `kafka` | 从消息总线消费并转发。 |
-| Receiver | `sftp` | 文件目录轮询读取，转为分块流。 |
-| Sender | `udp_unicast` / `udp_multicast` / `tcp_gnet` | 实时网络分发到下游服务。 |
-| Sender | `kafka` | 转发到主题做解耦与削峰。 |
-| Sender | `sftp` | 流转文件落地与交换。 |
-
-## Quick Start
-
-### 1) 编译
+### 5.1 编译
 
 ```bash
 make build
@@ -83,7 +78,7 @@ make build
 go build -mod=vendor -o bin/forward-stub .
 ```
 
-### 2) 启动（推荐双配置文件）
+### 5.2 运行（双配置模式）
 
 ```bash
 ./bin/forward-stub \
@@ -91,78 +86,388 @@ go build -mod=vendor -o bin/forward-stub .
   -business-config ./configs/business.example.json
 ```
 
-### 3) 启动（兼容 legacy 单文件）
+### 5.3 运行（legacy 单文件模式）
 
 ```bash
-go run . -config ./configs/example.json
+./bin/forward-stub -config ./configs/example.json
 ```
 
-### 4) 快速压测入口
+### 5.4 压测入口
 
 ```bash
 go run ./cmd/bench -config ./configs/bench.example.json
 ```
 
-## 配置入口说明（简要）
+## 6. 配置体系说明
 
-- 推荐双文件：
-  - `system-config`：`control`、`logging`、`business_defaults`（系统级基线）。
-  - `business-config`：`version`、`receivers`、`senders`、`pipelines`、`tasks`（业务拓扑，可热更新）。
-- 启动参数：`-system-config` + `-business-config`（或 legacy `-config`）。
-- 当 `control.api` 非空时，进程会从远端拉取 `business-config`。
+### 6.1 双配置模式
 
-详细字段与默认值请见 [docs/configuration.md](docs/configuration.md)。
+- `system-config`：系统级配置，包含 `control`、`logging`、`business_defaults`。
+- `business-config`：业务拓扑配置，包含 `version`、`receivers`、`senders`、`pipelines`、`tasks`。
 
-## 部署入口说明（简要）
+### 6.2 单文件模式
 
-- **本地运行**：`make build` 后直接执行二进制。
-- **Docker**：使用项目 `Dockerfile` 构建镜像，`make docker-build` / `make docker-run`。
-- **Kubernetes**：使用 `deploy/k8s/` 的 kustomize 清单，或 `scripts/k8s-deploy.sh apply`。
+- `example.json` 为兼容模式，system 与 business 合并在同一文件。
 
-详见 [docs/deployment.md](docs/deployment.md)。
+### 6.3 配置加载顺序
 
-## 监控与调试入口
+1. `config.ResolveConfigPaths` 解析参数组合。
+2. `config.LoadLocalPair` 加载本地 JSON。
+3. `SystemConfig.Merge(BusinessConfig)` 合并为运行态 `Config`。
+4. `ApplyBusinessDefaults` 与 `ApplyDefaults` 补齐默认值。
+5. `Validate` 校验引用关系和协议字段。
 
-- 日志：`src/logx` 支持结构化日志 + 滚动文件 + 流量聚合统计。
-- payload 观测：receiver/task 支持可控 payload 摘要日志。
-- pprof：`control.pprof_port` 开启后提供 `/debug/pprof/*`。
-- 压测：`cmd/bench` 支持 UDP/TCP 基准与参数 sweep。
+## 7. Receiver 配置示例总览
 
-详见 [docs/operations.md](docs/operations.md) 与 [docs/performance.md](docs/performance.md)。
+> 每个示例均为可复制 JSON 片段，放入 `business-config.receivers` 下。
 
-## 项目结构概览
+### 7.1 udp_gnet
 
-```text
-cmd/bench/         压测与性能回归工具
-configs/           system/business/bench 示例配置
-deploy/k8s/        Kubernetes 清单（kustomize）
-docs/              架构、配置、部署、运维、性能与排障文档
-scripts/           构建、打包、部署辅助脚本
-src/bootstrap/     启动参数、信号处理、配置监听、pprof 启停
-src/config/        配置模型、默认值、校验、双文件合并
-src/runtime/       pipeline 编译、热更新、dispatch 快照
-src/task/          任务执行模型（fastpath/pool/channel）
-src/receiver/      接收端实现（UDP/TCP/Kafka/SFTP）
-src/sender/        发送端实现（UDP/TCP/Kafka/SFTP）
-src/pipeline/      stage 实现与处理链
-src/logx/          日志与流量统计
+用途：高并发 UDP 接入。
+
+```json
+{
+  "rx_udp": {
+    "type": "udp_gnet",
+    "listen": "0.0.0.0:19000",
+    "multicore": true,
+    "num_event_loop": 8,
+    "read_buffer_cap": 1048576,
+    "socket_recv_buffer": 1073741824,
+    "log_payload_recv": false,
+    "payload_log_max_bytes": 256
+  }
+}
 ```
 
-## 文档索引
+### 7.2 tcp_gnet
 
-- [docs/architecture.md](docs/architecture.md)：系统定位、模块关系、控制面/数据面划分。
-- [docs/execution-model.md](docs/execution-model.md)：三种执行模型与调度/回压分析。
-- [docs/configuration.md](docs/configuration.md)：配置体系、默认值、校验、热更新边界。
-- [docs/receivers-and-senders.md](docs/receivers-and-senders.md)：协议收发抽象与组合模式。
-- [docs/pipeline.md](docs/pipeline.md)：stage 模型、类型、执行语义与路由 stage。
-- [docs/deployment.md](docs/deployment.md)：本地 / Docker / Kubernetes 部署入口。
-- [docs/operations.md](docs/operations.md)：启动停止、巡检、日志、pprof 与常用命令。
-- [docs/performance.md](docs/performance.md)：性能设计点、bench 用法、指标建议。
-- [docs/troubleshooting.md](docs/troubleshooting.md)：典型故障定位路径与命令示例。
-- [docs/roadmap.md](docs/roadmap.md)：架构局限、演进建议与文档维护计划。
+用途：TCP 长连接接入，支持 framing。
 
-历史实验与评审记录：
+```json
+{
+  "rx_tcp": {
+    "type": "tcp_gnet",
+    "listen": "0.0.0.0:19001",
+    "frame": "u16be",
+    "multicore": true,
+    "num_event_loop": 4,
+    "socket_recv_buffer": 1073741824
+  }
+}
+```
 
-- `docs/perf_extreme_sweep_*.md` / `*.json`
-- `docs/code_review_2026-03-11.md`
-- `docs/udp_optimization_review_2026-03-11.md`
+### 7.3 kafka
+
+用途：消费 Kafka topic 并转发。
+
+```json
+{
+  "rx_kafka": {
+    "type": "kafka",
+    "listen": "127.0.0.1:9092",
+    "topic": "input-topic",
+    "group_id": "forward-stub-group",
+    "start_offset": "latest",
+    "fetch_min_bytes": 1,
+    "fetch_max_bytes": 1048576,
+    "fetch_max_wait_ms": 100,
+    "username": "kafka-user",
+    "password": "kafka-pass",
+    "sasl_mechanism": "PLAIN",
+    "tls": false,
+    "tls_skip_verify": false
+  }
+}
+```
+
+### 7.4 sftp
+
+用途：轮询远端目录并按 chunk 读取文件。
+
+```json
+{
+  "rx_sftp": {
+    "type": "sftp",
+    "listen": "127.0.0.1:22",
+    "username": "demo",
+    "password": "demo",
+    "remote_dir": "/input",
+    "poll_interval_sec": 3,
+    "chunk_size": 65536,
+    "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"
+  }
+}
+```
+
+## 8. Sender 配置示例总览
+
+> 每个示例均为可复制 JSON 片段，放入 `business-config.senders` 下。
+
+### 8.1 udp_unicast
+
+```json
+{
+  "tx_udp": {
+    "type": "udp_unicast",
+    "local_ip": "0.0.0.0",
+    "local_port": 20000,
+    "remote": "127.0.0.1:21000",
+    "concurrency": 8,
+    "socket_send_buffer": 1073741824
+  }
+}
+```
+
+### 8.2 udp_multicast
+
+```json
+{
+  "tx_mcast": {
+    "type": "udp_multicast",
+    "local_ip": "0.0.0.0",
+    "local_port": 20001,
+    "remote": "239.0.0.10:21001",
+    "iface": "eth0",
+    "ttl": 16,
+    "loop": false,
+    "concurrency": 8,
+    "socket_send_buffer": 1073741824
+  }
+}
+```
+
+### 8.3 tcp_gnet
+
+```json
+{
+  "tx_tcp": {
+    "type": "tcp_gnet",
+    "remote": "127.0.0.1:21002",
+    "frame": "u16be",
+    "concurrency": 4,
+    "socket_send_buffer": 1073741824
+  }
+}
+```
+
+### 8.4 kafka
+
+```json
+{
+  "tx_kafka": {
+    "type": "kafka",
+    "remote": "127.0.0.1:9092",
+    "topic": "output-topic",
+    "acks": -1,
+    "linger_ms": 5,
+    "batch_max_bytes": 1048576,
+    "compression": "lz4",
+    "username": "kafka-user",
+    "password": "kafka-pass",
+    "sasl_mechanism": "PLAIN",
+    "tls": false,
+    "tls_skip_verify": false
+  }
+}
+```
+
+### 8.5 sftp
+
+```json
+{
+  "tx_sftp": {
+    "type": "sftp",
+    "remote": "127.0.0.1:22",
+    "username": "demo",
+    "password": "demo",
+    "remote_dir": "/output",
+    "temp_suffix": ".tmp",
+    "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"
+  }
+}
+```
+
+## 9. Pipeline Stage 配置示例总览
+
+> 每个示例均为可复制 JSON 片段，放入 `business-config.pipelines` 下。
+
+### 9.1 match_offset_bytes
+
+```json
+{
+  "pipe_match": [
+    {
+      "type": "match_offset_bytes",
+      "offset": 0,
+      "hex": "aabb"
+    }
+  ]
+}
+```
+
+### 9.2 replace_offset_bytes
+
+```json
+{
+  "pipe_replace": [
+    {
+      "type": "replace_offset_bytes",
+      "offset": 2,
+      "hex": "ccdd"
+    }
+  ]
+}
+```
+
+### 9.3 mark_as_file_chunk
+
+```json
+{
+  "pipe_mark_file": [
+    {
+      "type": "mark_as_file_chunk",
+      "path": "/auto/out.bin",
+      "bool": true
+    }
+  ]
+}
+```
+
+### 9.4 clear_file_meta
+
+```json
+{
+  "pipe_clear_file": [
+    {
+      "type": "clear_file_meta"
+    }
+  ]
+}
+```
+
+### 9.5 route_offset_bytes_sender
+
+```json
+{
+  "pipe_route_sender": [
+    {
+      "type": "route_offset_bytes_sender",
+      "offset": 0,
+      "cases": {
+        "01": "tx_udp",
+        "02": "tx_tcp"
+      },
+      "default_sender": "tx_kafka"
+    }
+  ]
+}
+```
+
+## 10. Task 执行模型配置示例总览
+
+> 每个示例均为可复制 JSON 片段，放入 `business-config.tasks` 下。
+
+### 10.1 fastpath
+
+```json
+{
+  "task_fastpath": {
+    "receivers": ["rx_udp"],
+    "pipelines": ["pipe_match"],
+    "senders": ["tx_udp"],
+    "execution_model": "fastpath",
+    "queue_size": 2048,
+    "channel_queue_size": 2048,
+    "log_payload_send": false,
+    "payload_log_max_bytes": 256
+  }
+}
+```
+
+### 10.2 pool
+
+```json
+{
+  "task_pool": {
+    "receivers": ["rx_tcp"],
+    "pipelines": ["pipe_replace"],
+    "senders": ["tx_tcp", "tx_kafka"],
+    "execution_model": "pool",
+    "pool_size": 2048,
+    "queue_size": 4096,
+    "channel_queue_size": 4096,
+    "log_payload_send": false,
+    "payload_log_max_bytes": 256
+  }
+}
+```
+
+### 10.3 channel
+
+```json
+{
+  "task_channel": {
+    "receivers": ["rx_kafka"],
+    "pipelines": ["pipe_mark_file"],
+    "senders": ["tx_sftp"],
+    "execution_model": "channel",
+    "pool_size": 1024,
+    "queue_size": 1024,
+    "channel_queue_size": 1024,
+    "log_payload_send": false,
+    "payload_log_max_bytes": 256
+  }
+}
+```
+
+## 11. 配置组合方式说明
+
+### 11.1 典型组合一：UDP 输入到 TCP 输出
+
+- receiver：`rx_udp`
+- pipeline：`pipe_match + pipe_replace`
+- sender：`tx_tcp`
+- task：`execution_model=pool`
+
+### 11.2 典型组合二：Kafka 输入到 SFTP 输出
+
+- receiver：`rx_kafka`
+- pipeline：`pipe_mark_file`
+- sender：`tx_sftp`
+- task：`execution_model=channel`
+
+### 11.3 典型组合三：路由分发
+
+- pipeline 使用 `route_offset_bytes_sender`
+- task 的 sender 列表必须包含 route 命中的 sender 名称
+- route 未命中时使用 `default_sender`
+
+## 12. configs 示例文件说明
+
+`configs/` 保留三份标准配置：
+
+- `configs/system.example.json`：双配置模式中的 system 文件。
+- `configs/business.example.json`：双配置模式中的 business 文件。
+- `configs/example.json`：legacy 单文件模式示例。
+
+关系说明：
+
+- `system.example.json + business.example.json` 合并后语义等价于 `example.json` 的核心字段组合。
+- 新部署建议优先双配置模式，便于控制 system 与 business 的变更边界。
+
+## 13. docs 文档索引
+
+- `docs/architecture.md`：总体架构、模块边界、设计目标。
+- `docs/runtime-and-lifecycle.md`：启动、构建、热更新、关闭流程。
+- `docs/execution-model.md`：fastpath/pool/channel 深度对比。
+- `docs/configuration.md`：配置机制、默认值、校验策略、影响范围。
+- `docs/receivers-and-senders.md`：收发抽象、协议差异、组合模式。
+- `docs/pipeline.md`：stage 语义、组合策略、路由行为。
+- `docs/task-and-dispatch.md`：dispatch 快照、task 实例化与调度路径。
+- `docs/deployment.md`：本地、Docker、Kubernetes 部署。
+- `docs/operations.md`：运维操作手册与巡检建议。
+- `docs/observability.md`：日志、流量统计、pprof、bench 观测方法。
+- `docs/performance.md`：性能设计点、压测方法、优化路径。
+- `docs/troubleshooting.md`：故障类型与可操作排查路径。
+- `docs/roadmap.md`：局限、演进方向、文档维护计划。

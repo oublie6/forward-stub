@@ -1,66 +1,103 @@
 # Execution Model
 
-`src/task/task.go` 提供三种执行模型：`fastpath`、`pool`、`channel`。三者共享相同的业务语义（pipeline -> sender），差异在调度方式和回压行为。
+## 1. 设计目的
 
-## 1. 三种模型对比
+`Task` 负责把 packet 变成下游发送动作。为兼顾不同链路目标，系统提供三种执行模型：
 
-| 模型 | 实现方式 | 优势 | 风险 | 适用场景 |
-|---|---|---|---|---|
-| `fastpath` | `dispatch` 线程同步执行 `processAndSend` | 路径最短、延迟最低、无额外排队 | 下游慢会直接阻塞上游入口 | 处理轻、下游稳定、低时延优先 |
-| `pool` | ants worker pool + 有界阻塞队列 | 并发能力强，吞吐上限高 | 队列积压时尾延迟增大 | 通用高吞吐场景 |
-| `channel` | 单 goroutine + 有界 channel | 顺序语义最明确、行为简单 | 单消费者上限明显 | 强顺序或串行处理场景 |
+- `fastpath`
+- `pool`
+- `channel`
 
-## 2. 调度路径差异
+模型由 `task.execution_model` 决定，默认值可来自 `business_defaults.task.execution_model`。
+
+## 2. 三种模型执行路径
 
 ```mermaid
 flowchart TD
-  D[dispatch] --> M{execution_model}
-  M --> F[FastPath]
-  M --> P[Pool]
-  M --> C[Channel]
+  Disp[Dispatch] --> Task[Task Handle]
+  Task --> Mode{Model}
 
-  F --> X[处理发送]
-  P --> X
-  C --> W[ChannelWorker] --> X
+  Mode --> Fast[FastPath]
+  Mode --> Pool[Pool]
+  Mode --> Chan[Channel]
 
-  X --> Y[pipeline stages]
-  Y --> Z[sender fan-out]
+  Fast --> Proc[Process Pipeline]
+  Pool --> Proc
+  Chan --> Proc
+  Proc --> Send[Send Fanout]
 ```
 
-## 3. 任务调度与隔离方式
+## 3. fastpath
 
-- 任务级隔离：每个 task 持有自己的执行配置（pool 大小、队列大小、channel 队列）。
-- 包生命周期隔离：dispatch 对多订阅任务会 `Clone()` packet，避免共享释放冲突。
-- 停机隔离：`accepting + inflight.WaitGroup` 保证拒绝新包后等待在途处理完成。
+### 机制
 
-## 4. 对吞吐、延迟、顺序性、回压的影响
+- 当前 goroutine 直接执行 `processAndSend`。
+- 不经过额外队列和 worker。
 
-### 吞吐
+### 影响
 
-- `pool` 通常最稳健，适合 CPU/IO 混合负载。
-- `fastpath` 在轻处理和稳定下游时可获得更低固定开销。
-- `channel` 上限受单消费者影响。
+- 固定开销低，延迟路径最短。
+- 下游慢会直接反压上游 receiver。
 
-### 延迟
+### 场景
 
-- `fastpath` 最低。
-- `pool` 取决于 worker 和队列压力。
-- `channel` 在低负载下可控，但高负载会形成排队延迟。
+- 处理逻辑很轻。
+- 对延迟敏感，且下游稳定。
 
-### 顺序性
+## 4. pool
 
-- `channel` 最容易保证单 task 内输入顺序。
-- `pool`/`fastpath` 在多并发源或多订阅场景下不保证全局顺序。
+### 机制
 
-### 回压
+- 使用 ants 池提交任务。
+- `pool_size` 控制 worker，`queue_size` 控制最大阻塞任务。
 
-- `pool`：`ants.WithMaxBlockingTasks(queue_size)` 提供有界回压，满队列会丢包并记录日志。
-- `channel`：有界 channel 满时会阻塞到 ctx 取消，随后丢包并告警。
-- `fastpath`：回压直接传递到调用栈（常体现为 receiver 处理变慢）。
+### 影响
 
-## 5. 选型建议
+- 吞吐更稳健，易横向放大并发。
+- 队列积压时尾延迟可能上升。
+- 队列满会丢包并记录告警日志。
 
-1. 默认优先 `pool`，结合 `pool_size/queue_size` 调优。
-2. 对极低延迟链路，且 sender 稳定时选择 `fastpath`。
-3. 需要强顺序时使用 `channel`，并控制单 task 负载。
-4. 生产环境建议结合 `cmd/bench` 对三种模型做场景压测后确定。
+### 场景
+
+- 通用生产场景。
+- 需要平衡吞吐与隔离。
+
+## 5. channel
+
+### 机制
+
+- 单 worker goroutine 读取有界 channel。
+- `channel_queue_size` 控制排队深度。
+
+### 影响
+
+- 单 task 内顺序语义清晰。
+- 峰值吞吐受单 worker 限制。
+
+### 场景
+
+- 顺序敏感链路。
+- 处理逻辑中等，流量可控。
+
+## 6. 模型对比
+
+| 维度 | fastpath | pool | channel |
+|---|---|---|---|
+| 吞吐上限 | 中到高 | 高 | 中 |
+| 延迟 | 最低 | 中 | 中到高 |
+| 顺序性 | 取决于并发 | 弱 | 强 |
+| 隔离性 | 低 | 高 | 中 |
+| 回压位置 | 直接到上游 | 队列边界 | channel 边界 |
+
+## 7. 与 task/pipeline/sender 的关系
+
+- 模型只改变“如何执行”，不改变 pipeline/sender 业务语义。
+- 三种模型最终都走同一条 `pipeline -> sender` 逻辑。
+- route stage、生效 sender 列表、日志策略在三种模型下保持一致。
+
+## 8. 选型建议
+
+1. 首选 `pool` 作为默认模型。
+2. 极低延迟链路评估 `fastpath`。
+3. 顺序敏感链路选 `channel`。
+4. 所有模型都应配合 bench 做场景验证。

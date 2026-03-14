@@ -2,85 +2,94 @@
 
 ## 1. 系统定位
 
-`forward-stub` 是一个面向在线转发链路的可编排引擎，目标是把多协议收发、轻量处理和多下游分发统一到同一运行时框架中。核心抽象是：
+`forward-stub` 是一个配置驱动的转发引擎。核心目标不是提供复杂业务计算，而是稳定地完成多协议接入、轻量数据处理和多下游分发。
 
-- `receiver`：把外部输入转成内部 `packet.Packet`。
-- `task`：调度执行 `pipeline + sender`。
-- `pipeline`：按 stage 顺序处理数据和元信息。
-- `sender`：把处理结果发送到目标协议。
+系统的基础抽象由四个对象组成：
 
-## 2. 架构设计目标
+- `receiver`：协议输入端，负责把外部数据转成 `packet.Packet`。
+- `task`：执行单元，负责调度 pipeline 和 sender。
+- `pipeline`：处理链，负责 stage 顺序处理和路由信息写入。
+- `sender`：协议输出端，负责将 packet 发送到下游。
 
-1. **高吞吐**：使用 gnet 事件驱动网络收发、dispatch 快照、payload 复用降低热路径成本。
-2. **低延迟**：提供 fastpath 同步模型减少调度跳转。
-3. **可热更新**：业务配置可增量替换，系统配置保持稳定基线。
-4. **可维护**：模块边界清晰（config/runtime/task/receiver/sender/pipeline）。
+## 2. 核心设计目标
 
-## 3. 总体架构与外部系统关系
+1. **吞吐优先**：热路径减少锁竞争与对象分配。
+2. **延迟可控**：支持 fastpath 同步执行和 pool/channel 异步执行。
+3. **热更新可运维**：业务拓扑支持在线更新，系统配置保持边界。
+4. **模块可演进**：receiver/sender/stage 均可通过接口扩展。
+
+## 3. 架构分层
+
+- **入口与控制层**：`src/bootstrap`、`src/app`、`src/control`
+- **配置层**：`src/config`
+- **运行时编排层**：`src/runtime`、`src/task`
+- **协议接入层**：`src/receiver`
+- **处理层**：`src/pipeline`
+- **协议发送层**：`src/sender`
+- **观测层**：`src/logx`
+
+## 4. 关键抽象关系
+
+`task` 是承上启下的核心对象：
+
+- 上游通过 dispatch 将 packet 投递给 task。
+- task 内部按执行模型运行 pipeline。
+- pipeline 可修改 payload 和 metadata。
+- task 最终调用 sender fanout 发送。
+
+这使得 receiver 与 sender 解耦，新增协议实现时不会侵入核心调度路径。
+
+## 5. 架构图
 
 ```mermaid
 flowchart LR
-  subgraph External[外部系统]
-    Upstream[UDP/TCP/Kafka/SFTP 上游]
-    ConfigCenter[配置中心 API]
-    Downstream[UDP/TCP/Kafka/SFTP 下游]
-  end
+  Boot[Bootstrap] --> Conf[Config]
+  Conf --> Runtime[Runtime Store]
 
-  subgraph FS[forward-stub]
-    Boot[bootstrap]
-    Conf[config]
-    RT[runtime.Store]
-    Rx[receiver]
-    Tk[task]
-    Pl[pipeline]
-    Tx[sender]
-    Obs[logx + pprof]
-  end
+  Runtime --> Recv[Receiver]
+  Recv --> Disp[Dispatch]
+  Disp --> Task[Task]
+  Task --> Pipe[Pipeline]
+  Pipe --> Send[Sender]
 
-  ConfigCenter -->|business config| Boot
-  Boot --> Conf --> RT
-  Upstream --> Rx --> Tk --> Pl --> Tx --> Downstream
-  RT --> Rx
-  RT --> Tk
-  RT --> Tx
-  RT --> Obs
+  CfgApi[Control API] --> Conf
+  Logs[Logx] --> Runtime
 ```
 
-## 4. 模块划分（按源码目录）
+## 6. 数据流与控制流
 
-- `src/bootstrap`：命令行参数、配置加载、文件监听、信号处理、pprof 服务生命周期。
-- `src/config`：`SystemConfig/BusinessConfig/Config` 模型、`ApplyDefaults`、`Validate`、双文件合并。
-- `src/runtime`：pipeline 编译、组件构建、dispatch 快照、全量/增量更新。
-- `src/task`：执行模型（`fastpath/pool/channel`）、in-flight 计数、优雅停止。
-- `src/receiver`：`Receiver` 接口及 UDP/TCP/Kafka/SFTP 实现。
-- `src/sender`：`Sender` 接口及 UDP/TCP/Kafka/SFTP 实现。
-- `src/pipeline`：stage 函数定义与处理链执行。
-- `src/logx`：zap 日志包装、流量统计聚合。
+### 数据流
 
-## 5. 控制面与数据面
+1. receiver 收包并构造 `packet.Packet`。
+2. runtime.dispatch 按 receiver 名字查快照，找到订阅 task。
+3. task 执行 pipeline stage。
+4. sender 将处理结果写出。
 
-### 控制面
+### 控制流
 
-- 配置来源：本地 `system-config/business-config` 或 `control.api` 拉取 business 配置。
-- 配置路径：`load -> defaults -> validate -> runtime.UpdateCache`。
-- 变更触发：文件指纹监听、`HUP/USR1` 信号触发 reload。
+1. bootstrap 解析参数并加载配置。
+2. config 应用默认值并校验。
+3. runtime 按配置构建 sender/task/receiver。
+4. 热更新触发后重走编译与替换流程。
 
-### 数据面
+## 7. 适配高吞吐低延迟热更新的原因
 
-- 入口：receiver 收包。
-- 分发：dispatch 根据 `receiver -> tasks` 快照 fan-out。
-- 处理：task 按执行模型跑 pipeline。
-- 出口：sender 发送到下游。
+- `dispatchSubs` 使用 `atomic.Value` 保存只读快照，减少分发路径锁。
+- 多订阅场景 clone packet，避免任务间共享释放竞争。
+- `task` 提供三种执行模型，允许按链路特征优化。
+- runtime 构建顺序先 sender 后 task 再 receiver，缩小切换窗口。
+- business 配置可以增量更新，系统配置通过基线比对避免漂移。
 
-## 6. 运行时更新路径与编译路径
+## 8. 当前优势与局限
 
-1. `runtime.compilePipelinesWithStageCache` 将 stage 配置编译为 `pipeline.StageFunc`。
-2. 先构建 sender，再构建 task（绑定 pipeline + sender），最后启动 receiver。
-3. 启动 receiver 前生成 dispatch 快照，降低切换窗口漏分发风险。
-4. 若已存在运行态对象，优先尝试业务增量更新；否则走全量替换。
+### 优势
 
-## 7. 为何适合高吞吐/低延迟/热更新
+- 拓扑可配置且模块边界清晰。
+- 协议覆盖已包含网络流、消息总线和文件通道。
+- 运维入口完整，具备日志、pprof、bench。
 
-- **高吞吐**：gnet + ants + dispatch 原子快照 + payload 复用。
-- **低延迟**：fastpath 模型下在同 goroutine 内直接处理发送。
-- **热更新**：业务配置增量编译与切换，系统配置变更时显式拒绝热更新，避免不一致。
+### 局限
+
+- 待确认：缺少内建 Prometheus 指标导出端点。
+- route stage 仅支持固定偏移字节匹配，不支持复杂表达式。
+- 更复杂的可靠性策略主要依赖下游协议能力与外部编排。

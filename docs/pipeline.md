@@ -1,70 +1,83 @@
 # Pipeline
 
-## 1. 职责
+## 1. pipeline 职责
 
-`pipeline.Pipeline` 是 task 内的顺序处理链：
+pipeline 是 task 内部的数据处理链。它负责在发送前对 packet 做轻量处理与元信息修改。
 
-- 输入：`*packet.Packet`
-- 输出：`bool`（`false` 表示终止该包后续处理）
+边界：
 
-task 会按 `pipelines` 列表顺序执行多个 pipeline，每个 pipeline 内按 stage 顺序执行。
+- pipeline 不负责并发调度。
+- pipeline 不负责网络 IO。
+- pipeline 仅处理 packet 内容与 metadata。
 
-## 2. stage 抽象模型
+## 2. stage 抽象
 
-- 类型：`type StageFunc func(*packet.Packet) bool`
-- 编译：`runtime.compileStage` 将 `config.StageConfig` 转成 `StageFunc`。
-- 缓存：`compilePipelinesWithStageCache` 通过 stage signature 复用已编译 stage。
+`StageFunc` 签名：`func(*packet.Packet) bool`。
 
-## 3. 当前 stage 类型
+语义：
 
-- `match_offset_bytes`
-- `replace_offset_bytes`
-- `mark_as_file_chunk`
-- `clear_file_meta`
-- `route_offset_bytes_sender`
+- 返回 `true`：继续后续 stage。
+- 返回 `false`：终止当前 packet 的后续流程。
 
-## 4. 核心处理流
+## 3. pipeline 主流程图
 
 ```mermaid
 flowchart TD
-  A[Task 收到 packet] --> B[Pipeline1.Stage1]
-  B --> C{返回值}
-  C --> X[丢弃终止]
-  C --> D[Pipeline1.Stage2]
-  D --> E[PipelineN.StageM]
-  E --> F[进入 Sender 阶段]
+  Input[Task Input Packet] --> S1[Stage One]
+  S1 --> Gate{Continue}
+  Gate --> S2[Stage Two]
+  Gate --> Drop[Stop Packet]
+  S2 --> S3[Stage Next]
+  S3 --> Out[To Sender]
 ```
 
-## 5. 输入输出语义
+## 4. 当前 stage 类型与用途
 
-- stage 对 packet **原地修改**（如 offset replace、meta 标记）。
-- 任一 stage 返回 `false`，当前 packet 在 task 中止，不再发送到 sender。
-- 多 task 订阅同一 receiver 时，dispatch 会 clone packet，避免 task 间相互污染。
+### match_offset_bytes
 
-## 6. 关键 stage 说明
+- 作用：按偏移匹配字节序列。
+- 典型用途：协议头过滤。
+- 不通过则直接停止该 packet。
 
-### match / replace
+### replace_offset_bytes
 
-- `match_offset_bytes`：按固定偏移比较字节序列，不匹配则返回 false。
-- `replace_offset_bytes`：按偏移覆盖字节内容，常用于轻量字段改写。
+- 作用：按偏移覆盖字节。
+- 典型用途：报文字段轻量改写。
 
-### 文件语义
+### mark_as_file_chunk
 
-- `mark_as_file_chunk`：将流数据标记为文件分块（设置 `Kind` 和 `Meta`）。
-- `clear_file_meta`：清理文件元信息，把语义恢复为普通流。
+- 作用：把 packet 标记为文件分块语义并补齐元信息。
+- 典型用途：流转文件输出到 sftp。
 
-### sender 路由
+### clear_file_meta
 
-- `route_offset_bytes_sender`：根据 payload 指定偏移字段映射 sender。
-- 若命中 route，则 task 优先单路发送到指定 sender。
+- 作用：清理文件相关 metadata，恢复 stream 语义。
+- 典型用途：文件分块转回普通流。
 
-## 7. 与 sender 的衔接
+### route_offset_bytes_sender
 
-- pipeline 完成后，task 进入 sender fan-out。
-- 若设置了 `Meta.RouteSender`，优先发送到命中的 sender；未命中 fallback 到 fan-out 列表。
+- 作用：根据偏移字段匹配结果设置 `Meta.RouteSender`。
+- 典型用途：在同一 task 内按业务键路由不同 sender。
 
-## 8. 配置建议
+## 5. stage 组合策略
 
-1. 把“过滤型 stage”放在前面，尽早止损。
-2. 仅在需要时使用 payload 改写 stage，减少额外开销。
-3. route stage 的 cases 需覆盖主要键值，避免无意丢弃。
+建议顺序：
+
+1. 过滤类 stage（match）。
+2. 改写类 stage（replace）。
+3. 语义类 stage（file meta）。
+4. 路由类 stage（route）。
+
+这样可以尽早过滤无效数据，降低后续处理和发送开销。
+
+## 6. stage 如何影响 sender
+
+- route stage 可改变 task 最终目标 sender。
+- mark_as_file_chunk 会改变 `Kind` 与 metadata，影响 sftp sender 行为。
+- clear_file_meta 可撤销文件语义，恢复普通 sender 处理路径。
+
+## 7. 特殊行为与约束
+
+- route stage 要求 case key 的 hex 长度一致。
+- route 目标 sender 必须属于 task sender 列表。
+- stage 配置错误会在编译阶段报错并阻止新配置生效。
