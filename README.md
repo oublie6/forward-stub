@@ -9,7 +9,7 @@
 - 将多协议输入统一收敛为内部 `packet.Packet` 数据模型。
 - 通过可编排 `task` 把处理逻辑和下游分发策略配置化。
 - 在不停机前提下更新业务拓扑（receiver/sender/pipeline/task）。
-- 提供可观测入口（日志、流量统计、pprof、bench）支持运维与性能回归。
+- 提供可观测入口（日志、流量统计、pprof、benchmark）支持运维与性能分析。
 
 ## 2. 核心能力
 
@@ -92,89 +92,65 @@ go build -mod=vendor -o bin/forward-stub .
 ./bin/forward-stub -config ./configs/example.json
 ```
 
-### 5.4 压测入口
+### 5.4 Benchmark 入口
 
 ```bash
-go run ./cmd/bench -config ./configs/bench.example.json
+go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
 ```
 
-## 6. cmd/bench 使用说明
+## 6. Benchmark / 性能测试说明
 
-### 6.1 定位
+新的 benchmark 体系只用于评估 **服务内部完整转发链路** 的理论处理上限，核心问题是：
 
-`cmd/bench` 是项目内置的本地压测与回归工具，用于快速验证 `receiver -> dispatch -> task -> sender` 链路在 UDP/TCP 场景下的表现。
+> 在不执行真实外部 I/O 的前提下，forward-stub 在具体协议场景下能处理多快。
 
-它在项目中的角色：
+### 6.1 设计定位
 
-- **开发阶段**：快速检查执行模型或参数修改是否明显影响吞吐。
-- **调优阶段**：对比 `fastpath/pool/channel` 或队列参数差异。
-- **回归阶段**：固定参数重复运行，识别性能退化趋势。
+- 按具体协议场景建模（如 `UDP->UDP`、`Kafka->UDP`、`SFTP->TCP`）。
+- 保留 receiver 侧字节到 `packet.Packet` 的装配和 `packet.CopyFrom` 成本。
+- 覆盖 `dispatch -> task.Handle -> processAndSend -> sender.Send` 全链路。
+- 仅 mock 最终外部提交动作（socket write / Kafka produce / SFTP 写远端）。
 
-### 6.2 适用场景
+### 6.2 不包含内容（必须知晓）
 
-- 对比不同执行模型在同一 payload、workers 下的差异。
-- 对比不同 `pps-sweep` 档位下的丢包拐点。
-- 做本地 smoke test，验证链路可用性。
-- 做代码改动前后同参数回归。
+- 不包含真实 socket 写出。
+- 不包含真实 Kafka broker 提交。
+- 不包含真实 SFTP 远端写入。
+- 不代表真实端到端吞吐。
+- 不代表真实网卡能力。
+- 不代表真实 0 丢包上限。
 
-### 6.3 边界与限制
+### 6.3 当前场景覆盖
 
-- bench 主要覆盖 UDP/TCP 本地闭环，不等价于真实生产流量。
-- 默认 pipeline 为空，侧重调度与收发路径，不代表复杂 stage 场景。
-- 不直接覆盖 Kafka/SFTP 外部依赖链路。
-- 结果更适合“同机同参数横向比较”，不宜直接当容量承诺。
+- `UDP 接收 -> UDP 转发`
+- `UDP 接收 -> TCP 转发`
+- `TCP 接收 -> UDP 转发`
+- `Kafka 接收 -> UDP 转发`
+- `UDP 接收 -> Kafka 转发`
+- `SFTP 接收 -> TCP 转发`
+- `TCP 接收 -> SFTP 转发`
 
-### 6.4 运行方式
+### 6.4 运行建议
 
-最小冒烟：
+- 常规运行：
 
 ```bash
-go run ./cmd/bench -mode udp -duration 2s -warmup 500ms -payload-size 256 -workers 2
+go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
 ```
 
-执行模型对比：
+- 带 profile：
 
 ```bash
-go run ./cmd/bench -mode udp -task-execution-model fastpath -duration 4s -warmup 1s -workers 4
-go run ./cmd/bench -mode udp -task-execution-model pool -task-pool-size 2048 -task-queue-size 4096 -duration 4s -warmup 1s -workers 4
-go run ./cmd/bench -mode udp -task-execution-model channel -task-channel-queue-size 4096 -duration 4s -warmup 1s -workers 4
+go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem -cpuprofile cpu.out -memprofile mem.out
 ```
 
-扫频测试：
+- 单场景过滤（示例）：
 
 ```bash
-go run ./cmd/bench -mode both -duration 4s -warmup 1s -pps-sweep 2000,4000,8000 -payload-size 512 -workers 4
+go test ./src/runtime -bench 'BenchmarkScenarioForwarding/UDP_to_UDP' -benchmem
 ```
 
-顺序性校验：
-
-```bash
-go run ./cmd/bench -mode tcp -validate-order -payload-size 512 -duration 3s -warmup 1s
-```
-
-### 6.5 输出结果解读
-
-bench 输出 `forward benchmark result` 结构化字段，重点关注：
-
-- `sent_packets/recv_packets`：测量窗口发送与接收计数。
-- `loss_rate`：丢包率，接近 0 更稳定。
-- `pps`：接收包速率。
-- `mbps`：接收吞吐（按字节换算）。
-- `order_errors/strict_order_ok`：顺序校验结果（开启 `validate-order` 时有效）。
-
-建议判断方法：
-
-1. 先看 `loss_rate` 是否可接受。
-2. 再比较 `pps/mbps` 差异是否稳定复现。
-3. 最后结合日志观察是否出现 queue full 或 sender 错误。
-
-### 6.6 推荐流程
-
-- **最小上手流程**：先跑 `mode=udp` 冒烟，再跑 `mode=both`。
-- **对比测试流程**：固定其他参数，仅切 execution model 或 queue 参数。
-- **回归验证流程**：固定一组命令作为基线，每次代码改动后重复执行并对比输出。
-
-更多设计与参数细节见：`docs/bench.md`。
+详细边界与设计见 `docs/benchmark.md`。
 
 ## 7. 配置体系说明
 
@@ -644,9 +620,7 @@ bench 输出 `forward benchmark result` 结构化字段，重点关注：
 - `docs/task-and-dispatch.md`：dispatch 快照、task 实例化与调度路径。
 - `docs/deployment.md`：本地、Docker、Kubernetes 部署。
 - `docs/operations.md`：运维操作手册与巡检建议。
-- `docs/observability.md`：日志、流量统计、pprof、bench 观测方法。
-- `docs/bench.md`：bench 设计目的、参数、输出解释、推荐测试方法。
-- `docs/performance.md`：性能设计点、压测方法、优化路径。
-- `docs/performance-baseline.md`：最新版本性能基线、测试矩阵与结果归档索引。
+- `docs/observability.md`：日志、流量统计、pprof、benchmark 观测方法。
+- `docs/benchmark.md`：场景化 benchmark 设计、边界与运行方法。
 - `docs/troubleshooting.md`：故障类型与可操作排查路径。
 - `docs/roadmap.md`：局限、演进方向、文档维护计划。

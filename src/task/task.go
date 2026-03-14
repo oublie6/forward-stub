@@ -68,7 +68,7 @@ type taskRequest struct {
 // Start 初始化任务执行模型。
 func (t *Task) Start() error {
 	if t.PoolSize <= 0 {
-		// 基于仓库压测（cmd/bench）默认采用 4096，优先提升发送侧受限场景吞吐。
+		// 默认采用 4096，优先提升发送侧受限场景吞吐。
 		t.PoolSize = 4096
 	}
 	if t.QueueSize <= 0 {
