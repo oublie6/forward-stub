@@ -78,7 +78,7 @@ make build
 go build -mod=vendor -o bin/forward-stub .
 ```
 
-### 5.2 运行（双配置模式）
+### 5.2 运行（双配置模式，推荐）
 
 ```bash
 ./bin/forward-stub \
@@ -104,523 +104,278 @@ go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
 
 > 在不执行真实外部 I/O 的前提下，forward-stub 在具体协议场景下能处理多快。
 
-### 6.1 设计定位
+- 常规运行：`go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem`
+- 带 profile：`go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem -cpuprofile cpu.out -memprofile mem.out`
+- 单场景过滤：`go test ./src/runtime -bench 'BenchmarkScenarioForwarding/UDP_to_UDP' -benchmem`
 
-- 按具体协议场景建模（如 `UDP->UDP`、`Kafka->UDP`、`SFTP->TCP`）。
-- 保留 receiver 侧字节到 `packet.Packet` 的装配和 `packet.CopyFrom` 成本。
-- 覆盖 `dispatch -> task.Handle -> processAndSend -> sender.Send` 全链路。
-- 仅 mock 最终外部提交动作（socket write / Kafka produce / SFTP 写远端）。
+详细设计见 `docs/benchmark.md`。
 
-### 6.2 不包含内容（必须知晓）
+## 7. 配置快速上手（README 摘要）
 
-- 不包含真实 socket 写出。
-- 不包含真实 Kafka broker 提交。
-- 不包含真实 SFTP 远端写入。
-- 不代表真实端到端吞吐。
-- 不代表真实网卡能力。
-- 不代表真实 0 丢包上限。
+### 7.1 当前支持的配置组织方式
 
-### 6.3 当前场景覆盖
+- **双文件模式（推荐）**
+  - `system-config`：`control`、`logging`、`business_defaults`
+  - `business-config`：`version`、`receivers`、`senders`、`pipelines`、`tasks`
+- **legacy 单文件模式（兼容）**
+  - 使用 `-config`，同一个 JSON 同时作为 system + business 读取。
 
-- `UDP 接收 -> UDP 转发`
-- `UDP 接收 -> TCP 转发`
-- `TCP 接收 -> UDP 转发`
-- `Kafka 接收 -> UDP 转发`
-- `UDP 接收 -> Kafka 转发`
-- `SFTP 接收 -> TCP 转发`
-- `TCP 接收 -> SFTP 转发`
+加载流程：
+1. 通过 `ResolveConfigPaths` 解析 `-system-config/-business-config` 或 `-config`。
+2. 使用严格 JSON 解析（禁止未知字段）。
+3. `SystemConfig.Merge(BusinessConfig)` 合并。
+4. 先应用 `business_defaults`，再应用代码默认值。
+5. 执行全量校验后启动运行时。
 
-### 6.4 运行建议
+> 配置字段的完整解释、默认值和约束请看 `docs/configuration.md`（权威文档）。
 
-- 常规运行：
-
-```bash
-go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
-```
-
-- 带 profile：
-
-```bash
-go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem -cpuprofile cpu.out -memprofile mem.out
-```
-
-- 单场景过滤（示例）：
-
-```bash
-go test ./src/runtime -bench 'BenchmarkScenarioForwarding/UDP_to_UDP' -benchmem
-```
-
-详细边界与设计见 `docs/benchmark.md`。
-
-## 7. 配置体系说明
-
-### 6.1 双配置模式
-
-- `system-config`：系统级配置，包含 `control`、`logging`、`business_defaults`。
-- `business-config`：业务拓扑配置，包含 `version`、`receivers`、`senders`、`pipelines`、`tasks`。
-
-### 6.2 单文件模式
-
-- `example.json` 为兼容模式，system 与 business 合并在同一文件。
-
-### 6.3 配置加载顺序
-
-1. `config.ResolveConfigPaths` 解析参数组合。
-2. `config.LoadLocalPair` 加载本地 JSON。
-3. `SystemConfig.Merge(BusinessConfig)` 合并为运行态 `Config`。
-4. `ApplyBusinessDefaults` 与 `ApplyDefaults` 补齐默认值。
-5. `Validate` 校验引用关系和协议字段。
-
-## 8. Receiver 配置示例总览
-
-> 每个示例均为可复制 JSON 片段，放入 `business-config.receivers` 下。
-
-### 7.1 udp_gnet
-
-用途：高并发 UDP 接入。
-
-关键字段说明：
-
-- `listen`：UDP 监听地址。
-- `multicore` 与 `num_event_loop`：gnet 事件循环并发度。
-- `read_buffer_cap` 与 `socket_recv_buffer`：收包缓冲参数。
-- `log_payload_recv` 与 `payload_log_max_bytes`：输入 payload 观测开关和截断长度。
+### 7.2 `configs/system.example.json`（完整示例）
 
 ```json
 {
-  "rx_udp": {
-    "type": "udp_gnet",
-    "listen": "0.0.0.0:19000",
-    "multicore": true,
-    "num_event_loop": 8,
-    "read_buffer_cap": 1048576,
-    "socket_recv_buffer": 1073741824,
-    "log_payload_recv": false,
-    "payload_log_max_bytes": 256
-  }
-}
-```
-
-### 7.2 tcp_gnet
-
-用途：TCP 长连接接入，支持 framing。
-
-关键字段说明：
-
-- `frame`：TCP 封帧格式，需与对端一致。
-- `num_event_loop`：事件循环并发度。
-- `socket_recv_buffer`：内核接收缓冲区目标值。
-
-```json
-{
-  "rx_tcp": {
-    "type": "tcp_gnet",
-    "listen": "0.0.0.0:19001",
-    "frame": "u16be",
-    "multicore": true,
-    "num_event_loop": 4,
-    "socket_recv_buffer": 1073741824
-  }
-}
-```
-
-### 7.3 kafka
-
-用途：消费 Kafka topic 并转发。
-
-关键字段说明：
-
-- `listen`：broker 列表。
-- `topic` 与 `group_id`：消费目标和消费组。
-- `start_offset`：起始消费位点。
-- `fetch_*`：拉取批次与等待策略。
-- `username/password/sasl_mechanism/tls`：鉴权和链路安全配置。
-
-```json
-{
-  "rx_kafka": {
-    "type": "kafka",
-    "listen": "127.0.0.1:9092",
-    "topic": "input-topic",
-    "group_id": "forward-stub-group",
-    "start_offset": "latest",
-    "fetch_min_bytes": 1,
-    "fetch_max_bytes": 1048576,
-    "fetch_max_wait_ms": 100,
-    "username": "kafka-user",
-    "password": "kafka-pass",
-    "sasl_mechanism": "PLAIN",
-    "tls": false,
-    "tls_skip_verify": false
-  }
-}
-```
-
-### 7.4 sftp
-
-用途：轮询远端目录并按 chunk 读取文件。
-
-关键字段说明：
-
-- `remote_dir`：待轮询目录。
-- `poll_interval_sec`：轮询间隔。
-- `chunk_size`：文件读取分块大小。
-- `host_key_fingerprint`：SSH 主机指纹校验，缺失或错误会拒绝连接。
-
-```json
-{
-  "rx_sftp": {
-    "type": "sftp",
-    "listen": "127.0.0.1:22",
-    "username": "demo",
-    "password": "demo",
-    "remote_dir": "/input",
-    "poll_interval_sec": 3,
-    "chunk_size": 65536,
-    "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"
-  }
-}
-```
-
-## 9. Sender 配置示例总览
-
-> 每个示例均为可复制 JSON 片段，放入 `business-config.senders` 下。
-
-### 8.1 udp_unicast
-
-关键字段说明：
-
-- `remote`：目标地址。
-- `local_ip/local_port`：本地出口绑定。
-- `concurrency`：发送并发 shard 数。
-
-```json
-{
-  "tx_udp": {
-    "type": "udp_unicast",
-    "local_ip": "0.0.0.0",
-    "local_port": 20000,
-    "remote": "127.0.0.1:21000",
-    "concurrency": 8,
-    "socket_send_buffer": 1073741824
-  }
-}
-```
-
-### 8.2 udp_multicast
-
-关键字段说明：
-
-- `remote`：组播地址。
-- `iface`：组播网卡。
-- `ttl/loop`：组播生存时间和回环策略。
-
-```json
-{
-  "tx_mcast": {
-    "type": "udp_multicast",
-    "local_ip": "0.0.0.0",
-    "local_port": 20001,
-    "remote": "239.0.0.10:21001",
-    "iface": "eth0",
-    "ttl": 16,
-    "loop": false,
-    "concurrency": 8,
-    "socket_send_buffer": 1073741824
-  }
-}
-```
-
-### 8.3 tcp_gnet
-
-关键字段说明：
-
-- `remote`：目标 TCP 地址。
-- `frame`：发送封帧策略。
-- `concurrency`：内部发送并发。
-
-```json
-{
-  "tx_tcp": {
-    "type": "tcp_gnet",
-    "remote": "127.0.0.1:21002",
-    "frame": "u16be",
-    "concurrency": 4,
-    "socket_send_buffer": 1073741824
-  }
-}
-```
-
-### 8.4 kafka
-
-关键字段说明：
-
-- `topic`：目标主题。
-- `acks`、`linger_ms`、`batch_max_bytes`：可靠性与吞吐平衡参数。
-- `compression`：压缩算法。
-
-```json
-{
-  "tx_kafka": {
-    "type": "kafka",
-    "remote": "127.0.0.1:9092",
-    "topic": "output-topic",
-    "acks": -1,
-    "linger_ms": 5,
-    "batch_max_bytes": 1048576,
-    "compression": "lz4",
-    "username": "kafka-user",
-    "password": "kafka-pass",
-    "sasl_mechanism": "PLAIN",
-    "tls": false,
-    "tls_skip_verify": false
-  }
-}
-```
-
-### 8.5 sftp
-
-关键字段说明：
-
-- `remote_dir`：写入目录。
-- `temp_suffix`：临时文件后缀，用于原子替换。
-- `host_key_fingerprint`：主机身份校验。
-
-```json
-{
-  "tx_sftp": {
-    "type": "sftp",
-    "remote": "127.0.0.1:22",
-    "username": "demo",
-    "password": "demo",
-    "remote_dir": "/output",
-    "temp_suffix": ".tmp",
-    "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"
-  }
-}
-```
-
-## 10. Pipeline Stage 配置示例总览
-
-> 每个示例均为可复制 JSON 片段，放入 `business-config.pipelines` 下。
-
-### 9.1 match_offset_bytes
-
-关键字段说明：
-
-- `offset`：匹配起始偏移。
-- `hex`：目标字节序列（十六进制）。
-
-```json
-{
-  "pipe_match": [
-    {
-      "type": "match_offset_bytes",
-      "offset": 0,
-      "hex": "aabb"
+  "control": {
+    "api": "",
+    "timeout_sec": 5,
+    "config_watch_interval": "2s",
+    "pprof_port": 6060
+  },
+  "logging": {
+    "level": "info",
+    "file": "",
+    "max_size_mb": 100,
+    "max_backups": 5,
+    "max_age_days": 30,
+    "compress": true,
+    "traffic_stats_interval": "1s",
+    "traffic_stats_sample_every": 1,
+    "payload_log_max_bytes": 256,
+    "payload_pool_max_cached_bytes": 0
+  },
+  "business_defaults": {
+    "task": {
+      "execution_model": "pool",
+      "pool_size": 4096,
+      "queue_size": 8192,
+      "channel_queue_size": 8192,
+      "payload_log_max_bytes": 256
+    },
+    "receiver": {
+      "multicore": true,
+      "num_event_loop": 8,
+      "payload_log_max_bytes": 256
+    },
+    "sender": {
+      "concurrency": 8
     }
-  ]
+  }
 }
 ```
 
-### 9.2 replace_offset_bytes
-
-关键字段说明：
-
-- `offset`：替换起始偏移。
-- `hex`：替换字节序列。
+### 7.3 `configs/business.example.json`（完整示例）
 
 ```json
 {
-  "pipe_replace": [
-    {
-      "type": "replace_offset_bytes",
-      "offset": 2,
-      "hex": "ccdd"
+  "version": 1001,
+  "receivers": {
+    "rx_udp": {
+      "type": "udp_gnet",
+      "listen": "0.0.0.0:19000",
+      "multicore": true,
+      "num_event_loop": 8,
+      "read_buffer_cap": 1048576,
+      "socket_recv_buffer": 1073741824,
+      "log_payload_recv": false,
+      "payload_log_max_bytes": 256
+    },
+    "rx_tcp": {
+      "type": "tcp_gnet",
+      "listen": "0.0.0.0:19001",
+      "frame": "u16be",
+      "multicore": true,
+      "num_event_loop": 4,
+      "socket_recv_buffer": 1073741824
+    },
+    "rx_kafka": {
+      "type": "kafka",
+      "listen": "127.0.0.1:9092",
+      "topic": "input-topic",
+      "group_id": "forward-stub-group",
+      "client_id": "forward-stub-rx",
+      "start_offset": "latest",
+      "fetch_min_bytes": 1,
+      "fetch_max_bytes": 1048576,
+      "fetch_max_wait_ms": 100,
+      "username": "kafka-user",
+      "password": "kafka-pass",
+      "sasl_mechanism": "PLAIN",
+      "tls": false,
+      "tls_skip_verify": false
+    },
+    "rx_sftp": {
+      "type": "sftp",
+      "listen": "127.0.0.1:22",
+      "username": "demo",
+      "password": "demo",
+      "remote_dir": "/input",
+      "poll_interval_sec": 3,
+      "chunk_size": 65536,
+      "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"
     }
-  ]
-}
-```
-
-### 9.3 mark_as_file_chunk
-
-关键字段说明：
-
-- `path`：默认文件路径。
-- `bool`：是否将该 chunk 视为 EOF。
-
-```json
-{
-  "pipe_mark_file": [
-    {
-      "type": "mark_as_file_chunk",
-      "path": "/auto/out.bin",
-      "bool": true
+  },
+  "senders": {
+    "tx_udp": {
+      "type": "udp_unicast",
+      "local_ip": "0.0.0.0",
+      "local_port": 20000,
+      "remote": "127.0.0.1:21000",
+      "concurrency": 8,
+      "socket_send_buffer": 1073741824
+    },
+    "tx_mcast": {
+      "type": "udp_multicast",
+      "local_ip": "0.0.0.0",
+      "local_port": 20001,
+      "remote": "239.0.0.10:21001",
+      "iface": "eth0",
+      "ttl": 16,
+      "loop": false,
+      "concurrency": 8,
+      "socket_send_buffer": 1073741824
+    },
+    "tx_tcp": {
+      "type": "tcp_gnet",
+      "remote": "127.0.0.1:21002",
+      "frame": "u16be",
+      "concurrency": 4,
+      "socket_send_buffer": 1073741824
+    },
+    "tx_kafka": {
+      "type": "kafka",
+      "remote": "127.0.0.1:9092",
+      "topic": "output-topic",
+      "client_id": "forward-stub-tx",
+      "acks": -1,
+      "linger_ms": 5,
+      "batch_max_bytes": 1048576,
+      "compression": "lz4",
+      "username": "kafka-user",
+      "password": "kafka-pass",
+      "sasl_mechanism": "PLAIN",
+      "tls": false,
+      "tls_skip_verify": false
+    },
+    "tx_sftp": {
+      "type": "sftp",
+      "remote": "127.0.0.1:22",
+      "username": "demo",
+      "password": "demo",
+      "remote_dir": "/output",
+      "temp_suffix": ".tmp",
+      "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"
     }
-  ]
-}
-```
-
-### 9.4 clear_file_meta
-
-关键字段说明：
-
-- 无额外字段；作用是清理文件元信息并恢复 stream 语义。
-
-```json
-{
-  "pipe_clear_file": [
-    {
-      "type": "clear_file_meta"
-    }
-  ]
-}
-```
-
-### 9.5 route_offset_bytes_sender
-
-关键字段说明：
-
-- `offset`：路由键偏移。
-- `cases`：路由键到 sender 名字映射（hex key）。
-- `default_sender`：未命中时的回退 sender。
-
-```json
-{
-  "pipe_route_sender": [
-    {
-      "type": "route_offset_bytes_sender",
-      "offset": 0,
-      "cases": {
-        "01": "tx_udp",
-        "02": "tx_tcp"
+  },
+  "pipelines": {
+    "pipe_match_replace": [
+      {
+        "type": "match_offset_bytes",
+        "offset": 0,
+        "hex": "aabb"
       },
-      "default_sender": "tx_kafka"
+      {
+        "type": "replace_offset_bytes",
+        "offset": 2,
+        "hex": "ccdd"
+      }
+    ],
+    "pipe_mark_file": [
+      {
+        "type": "mark_as_file_chunk",
+        "path": "/auto/out.bin",
+        "bool": true
+      }
+    ],
+    "pipe_clear_file": [
+      {
+        "type": "clear_file_meta"
+      }
+    ],
+    "pipe_route_sender": [
+      {
+        "type": "route_offset_bytes_sender",
+        "offset": 0,
+        "cases": {
+          "01": "tx_udp",
+          "02": "tx_tcp"
+        },
+        "default_sender": "tx_kafka"
+      }
+    ]
+  },
+  "tasks": {
+    "task_fastpath": {
+      "receivers": [
+        "rx_udp"
+      ],
+      "pipelines": [
+        "pipe_match_replace"
+      ],
+      "senders": [
+        "tx_udp"
+      ],
+      "execution_model": "fastpath",
+      "queue_size": 2048,
+      "channel_queue_size": 2048,
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
+    },
+    "task_pool": {
+      "receivers": [
+        "rx_tcp"
+      ],
+      "pipelines": [
+        "pipe_route_sender"
+      ],
+      "senders": [
+        "tx_udp",
+        "tx_tcp",
+        "tx_kafka"
+      ],
+      "execution_model": "pool",
+      "pool_size": 2048,
+      "queue_size": 4096,
+      "channel_queue_size": 4096,
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
+    },
+    "task_channel": {
+      "receivers": [
+        "rx_kafka"
+      ],
+      "pipelines": [
+        "pipe_mark_file"
+      ],
+      "senders": [
+        "tx_sftp"
+      ],
+      "execution_model": "channel",
+      "channel_queue_size": 1024,
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
     }
-  ]
-}
-```
-
-## 11. Task 执行模型配置示例总览
-
-> 每个示例均为可复制 JSON 片段，放入 `business-config.tasks` 下。
-
-### 10.1 fastpath
-
-关键字段说明：
-
-- `execution_model=fastpath`：同步执行。
-- `receivers/pipelines/senders`：链路绑定。
-
-```json
-{
-  "task_fastpath": {
-    "receivers": ["rx_udp"],
-    "pipelines": ["pipe_match"],
-    "senders": ["tx_udp"],
-    "execution_model": "fastpath",
-    "queue_size": 2048,
-    "channel_queue_size": 2048,
-    "log_payload_send": false,
-    "payload_log_max_bytes": 256
   }
 }
 ```
 
-### 10.2 pool
+### 7.4 legacy `configs/example.json` 对照
 
-关键字段说明：
+legacy 模式仍支持，但推荐仅用于兼容旧部署。它等价于把上面 system/business 内容合并到一个 `Config` JSON。
 
-- `execution_model=pool`：worker 池执行。
-- `pool_size`：worker 数。
-- `queue_size`：阻塞队列上限。
+## 8. 文档索引
 
-```json
-{
-  "task_pool": {
-    "receivers": ["rx_tcp"],
-    "pipelines": ["pipe_replace"],
-    "senders": ["tx_tcp", "tx_kafka"],
-    "execution_model": "pool",
-    "pool_size": 2048,
-    "queue_size": 4096,
-    "channel_queue_size": 4096,
-    "log_payload_send": false,
-    "payload_log_max_bytes": 256
-  }
-}
-```
-
-### 10.3 channel
-
-关键字段说明：
-
-- `execution_model=channel`：单 worker + 有界 channel。
-- `channel_queue_size`：排队上限。
-
-```json
-{
-  "task_channel": {
-    "receivers": ["rx_kafka"],
-    "pipelines": ["pipe_mark_file"],
-    "senders": ["tx_sftp"],
-    "execution_model": "channel",
-    "pool_size": 1024,
-    "queue_size": 1024,
-    "channel_queue_size": 1024,
-    "log_payload_send": false,
-    "payload_log_max_bytes": 256
-  }
-}
-```
-
-## 12. 配置组合方式说明
-
-### 11.1 典型组合一：UDP 输入到 TCP 输出
-
-- receiver：`rx_udp`
-- pipeline：`pipe_match + pipe_replace`
-- sender：`tx_tcp`
-- task：`execution_model=pool`
-
-### 11.2 典型组合二：Kafka 输入到 SFTP 输出
-
-- receiver：`rx_kafka`
-- pipeline：`pipe_mark_file`
-- sender：`tx_sftp`
-- task：`execution_model=channel`
-
-### 11.3 典型组合三：路由分发
-
-- pipeline 使用 `route_offset_bytes_sender`
-- task 的 sender 列表必须包含 route 命中的 sender 名称
-- route 未命中时使用 `default_sender`
-
-## 13. configs 示例文件说明
-
-`configs/` 保留三份标准配置：
-
-- `configs/system.example.json`：双配置模式中的 system 文件。
-- `configs/business.example.json`：双配置模式中的 business 文件。
-- `configs/example.json`：legacy 单文件模式示例。
-
-关系说明：
-
-- `system.example.json + business.example.json` 合并后语义等价于 `example.json` 的核心字段组合。
-- 新部署建议优先双配置模式，便于控制 system 与 business 的变更边界。
-
-## 14. docs 文档索引
-
-- `docs/architecture.md`：总体架构、模块边界、设计目标。
-- `docs/runtime-and-lifecycle.md`：启动、构建、热更新、关闭流程。
-- `docs/execution-model.md`：fastpath/pool/channel 深度对比。
-- `docs/configuration.md`：配置机制、默认值、校验策略、影响范围。
-- `docs/receivers-and-senders.md`：收发抽象、协议差异、组合模式。
-- `docs/pipeline.md`：stage 语义、组合策略、路由行为。
-- `docs/task-and-dispatch.md`：dispatch 快照、task 实例化与调度路径。
-- `docs/deployment.md`：本地、Docker、Kubernetes 部署。
-- `docs/operations.md`：运维操作手册与巡检建议。
-- `docs/observability.md`：日志、流量统计、pprof、benchmark 观测方法。
-- `docs/benchmark.md`：场景化 benchmark 设计、边界与运行方法。
-- `docs/troubleshooting.md`：故障类型与可操作排查路径。
-- `docs/roadmap.md`：局限、演进方向、文档维护计划。
+- 配置权威文档：`docs/configuration.md`
+- 运行时与生命周期：`docs/runtime-and-lifecycle.md`
+- 执行模型：`docs/execution-model.md`
+- 收发器说明：`docs/receivers-and-senders.md`
+- Pipeline 说明：`docs/pipeline.md`
+- 运维手册：`docs/operations.md`
+- 观测与排障：`docs/observability.md` / `docs/troubleshooting.md`
