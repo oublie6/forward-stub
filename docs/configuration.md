@@ -318,7 +318,7 @@ config
   - `all` 或 `-1`：等待 ISR 全部副本确认，可靠性最高。
 - 约束（与 Kafka/franz-go 语义对齐）：
   - `idempotent=true` 时，`acks` 必须是 `all`（或 `-1`）。
-  - `idempotent=true` 时，`max_in_flight_requests_per_connection` 若显式配置必须为 `1`。
+  - `idempotent=true` 时，不额外强制 `max_in_flight_requests_per_connection` 的具体取值；`<=0` 仍表示使用 franz-go 默认值。
   - `retries`、`max_in_flight_requests_per_connection` 必须 `>=0`。
 
 最小示例：

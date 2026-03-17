@@ -145,9 +145,6 @@ func (c *Config) Validate() error {
 				if acks != -1 {
 					return fmt.Errorf("sender %s kafka idempotent=true requires acks=all/-1", sn)
 				}
-				if s.MaxInFlightRequestsPerConnection > 0 && s.MaxInFlightRequestsPerConnection != 1 {
-					return fmt.Errorf("sender %s kafka idempotent=true requires max_in_flight_requests_per_connection=1", sn)
-				}
 			}
 			if s.Retries < 0 {
 				return fmt.Errorf("sender %s kafka retries must be >= 0", sn)

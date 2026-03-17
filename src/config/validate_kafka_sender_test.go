@@ -33,15 +33,15 @@ func TestValidateKafkaSenderIdempotentAcksConstraint(t *testing.T) {
 	}
 }
 
-func TestValidateKafkaSenderIdempotentMaxInFlightConstraint(t *testing.T) {
+func TestValidateKafkaSenderIdempotentAllowsConfiguredMaxInFlight(t *testing.T) {
 	cfg := kafkaSenderBaseConfig()
 	v := true
 	s := cfg.Senders["k1"]
 	s.Idempotent = &v
 	s.MaxInFlightRequestsPerConnection = 2
 	cfg.Senders["k1"] = s
-	if err := cfg.Validate(); err == nil {
-		t.Fatalf("expected validation error for idempotent=true with max_in_flight_requests_per_connection=2")
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected validation error: %v", err)
 	}
 }
 
