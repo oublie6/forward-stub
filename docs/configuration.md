@@ -303,17 +303,28 @@ config
 
 - 作用：Kafka 生产发送。
 - 必填：`type`、`remote`（brokers CSV）、`topic`。
-- 可选：`acks`、`linger_ms`、`batch_max_bytes`、`compression`、`client_id`、`tls*`、`sasl*`、`concurrency`。
+- 可选：`acks`、`idempotent`、`retries`、`max_in_flight_requests_per_connection`、`linger_ms`、`batch_max_bytes`、`compression`、`client_id`、`tls*`、`sasl*`、`concurrency`。
 - 默认行为：
-  - `acks` 默认按 `-1`（all ISR）处理。
+  - `acks` 默认按 `all`（`-1`）处理。
+  - `idempotent` 默认 `true`（即启用 Kafka 幂等写入）。
+  - `retries<=0` 使用 franz-go 默认值（近似无限重试）。
+  - `max_in_flight_requests_per_connection<=0` 使用 franz-go 默认值；在 `idempotent=true` 下等价为 1。
   - `linger_ms<=0` 回退 1ms。
   - `batch_max_bytes<=0` 回退 1MiB。
   - `compression` 空或 `none` 表示不压缩。
+- `acks` 允许值与语义：
+  - `0`：不等待 broker 确认，最低时延、最低可靠性。
+  - `1`：仅等待 leader 确认。
+  - `all` 或 `-1`：等待 ISR 全部副本确认，可靠性最高。
+- 约束（与 Kafka/franz-go 语义对齐）：
+  - `idempotent=true` 时，`acks` 必须是 `all`（或 `-1`）。
+  - `idempotent=true` 时，`max_in_flight_requests_per_connection` 若显式配置必须为 `1`。
+  - `retries`、`max_in_flight_requests_per_connection` 必须 `>=0`。
 
 最小示例：
 
 ```json
-{ "type": "kafka", "remote": "127.0.0.1:9092", "topic": "output-topic" }
+{ "type": "kafka", "remote": "127.0.0.1:9092", "topic": "output-topic", "acks": "all", "idempotent": true }
 ```
 
 ### 5.2.5 `sftp`

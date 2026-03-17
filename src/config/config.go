@@ -1,6 +1,13 @@
 // config.go 定义系统配置结构体以及各模块配置字段。
 package config
 
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+)
+
 const (
 	DefaultControlTimeoutSec         = 5
 	DefaultConfigWatchInterval       = "2s"
@@ -270,9 +277,18 @@ type SenderConfig struct {
 	// 用法：用于 broker 端日志追踪与监控分组。
 	ClientID string `json:"client_id,omitempty"`
 
-	// Acks 是 Kafka 生产确认策略（-1/1/0）。
-	// 用法：可靠性优先选 -1，低延迟可考虑 1 或 0。
-	Acks int `json:"acks,omitempty"`
+	// Acks 是 Kafka 生产确认策略（0/1/all 或 -1）。
+	// 用法：可靠性优先选 all(-1)，低延迟可考虑 1 或 0。
+	Acks KafkaAcksConfig `json:"acks,omitempty"`
+	// Idempotent 控制 Kafka sender 是否启用幂等写入。
+	// 用法：为空时默认 true；false 时可搭配 acks=0/1 追求低延迟。
+	Idempotent *bool `json:"idempotent,omitempty"`
+	// Retries 控制 Kafka record 级别重试次数。
+	// 用法：<=0 时使用 franz-go 默认值（近似无限重试）。
+	Retries int `json:"retries,omitempty"`
+	// MaxInFlightRequestsPerConnection 控制单 broker 并发 in-flight produce 请求数。
+	// 用法：仅在 idempotent=false 时建议调大；idempotent=true 时必须为 1（或不设置）。
+	MaxInFlightRequestsPerConnection int `json:"max_in_flight_requests_per_connection,omitempty"`
 	// LingerMS 是 Kafka 批发送聚合等待毫秒数。
 	// 用法：调大可提高压缩和吞吐，代价是延迟上升。
 	LingerMS int `json:"linger_ms,omitempty"`
@@ -308,6 +324,62 @@ type SenderConfig struct {
 	// HostKeyFingerprint 是 SFTP 服务端主机公钥指纹（SSH SHA256 格式）。
 	// 用法：必须与服务端实际指纹一致，防止中间人攻击；示例：SHA256:AbCd....
 	HostKeyFingerprint string `json:"host_key_fingerprint,omitempty"`
+}
+
+// KafkaAcksConfig 表示 Kafka sender 的 acks 配置，支持 JSON 数字或字符串。
+// 合法值：0、1、-1、"all"。
+type KafkaAcksConfig string
+
+// UnmarshalJSON 支持 acks 读取 JSON 数字与字符串。
+func (a *KafkaAcksConfig) UnmarshalJSON(data []byte) error {
+	if a == nil {
+		return fmt.Errorf("nil KafkaAcksConfig")
+	}
+	if string(data) == "null" {
+		*a = ""
+		return nil
+	}
+	var n int
+	if err := json.Unmarshal(data, &n); err == nil {
+		*a = KafkaAcksConfig(strconv.Itoa(n))
+		return nil
+	}
+	var sv string
+	if err := json.Unmarshal(data, &sv); err == nil {
+		*a = KafkaAcksConfig(strings.TrimSpace(sv))
+		return nil
+	}
+	return fmt.Errorf("invalid kafka acks, must be int or string")
+}
+
+// MarshalJSON 统一以字符串输出 acks。
+func (a KafkaAcksConfig) MarshalJSON() ([]byte, error) {
+	return json.Marshal(string(a))
+}
+
+// Int 将 acks 语义映射为 Kafka 整数值（0/1/-1）。
+// 为空或非法值时回退 -1。
+func (a KafkaAcksConfig) Int() int {
+	switch strings.ToLower(strings.TrimSpace(string(a))) {
+	case "0":
+		return 0
+	case "1":
+		return 1
+	case "all", "-1", "":
+		return -1
+	default:
+		return -1
+	}
+}
+
+// IsValid 返回该 acks 配置是否是支持的语义值。
+func (a KafkaAcksConfig) IsValid() bool {
+	switch strings.ToLower(strings.TrimSpace(string(a))) {
+	case "", "0", "1", "all", "-1":
+		return true
+	default:
+		return false
+	}
 }
 
 // StageConfig 描述 pipeline 中一个 stage 的参数集合。

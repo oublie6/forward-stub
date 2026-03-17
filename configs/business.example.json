@@ -86,7 +86,10 @@
       "password": "kafka-pass",
       "sasl_mechanism": "PLAIN",
       "tls": false,
-      "tls_skip_verify": false
+      "tls_skip_verify": false,
+      "idempotent": true,
+      "retries": 20,
+      "max_in_flight_requests_per_connection": 1
     },
     "tx_sftp": {
       "type": "sftp",
