@@ -40,7 +40,7 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 	}
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(brs...),
-		kgo.RequiredAcks(kafkaRequiredAcks(sc.Acks)),
+		kgo.RequiredAcks(kafkaRequiredAcks(sc.Acks.Int())),
 		kgo.RecordPartitioner(kgo.StickyKeyPartitioner(nil)),
 		kgo.ProducerBatchMaxBytes(int32(kafkaIntDefault(sc.BatchMaxBytes, 1<<20))),
 		kgo.ProducerLinger(time.Duration(kafkaIntDefault(sc.LingerMS, 1)) * time.Millisecond),
@@ -55,6 +55,20 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 	}
 	if sc.TLS {
 		opts = append(opts, kgo.DialTLSConfig(&tls.Config{InsecureSkipVerify: sc.TLSSkipVerify}))
+	}
+
+	idempotent := true
+	if sc.Idempotent != nil {
+		idempotent = *sc.Idempotent
+	}
+	if !idempotent {
+		opts = append(opts, kgo.DisableIdempotentWrite())
+	}
+	if sc.Retries > 0 {
+		opts = append(opts, kgo.RecordRetries(sc.Retries))
+	}
+	if sc.MaxInFlightRequestsPerConnection > 0 {
+		opts = append(opts, kgo.MaxProduceRequestsInflightPerBroker(sc.MaxInFlightRequestsPerConnection))
 	}
 	if mech, err := buildKafkaSASLMechanism(sc.SASLMechanism, sc.Username, sc.Password); err != nil {
 		return nil, err

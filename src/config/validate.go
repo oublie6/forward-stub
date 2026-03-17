@@ -130,8 +130,30 @@ func (c *Config) Validate() error {
 			if s.Topic == "" {
 				return fmt.Errorf("sender %s kafka requires topic", sn)
 			}
+			if !s.Acks.IsValid() {
+				return fmt.Errorf("sender %s kafka acks must be one of 0/1/all/-1", sn)
+			}
 			if s.Compression != "" && s.Compression != "none" && s.Compression != "gzip" && s.Compression != "snappy" && s.Compression != "lz4" && s.Compression != "zstd" {
 				return fmt.Errorf("sender %s kafka compression unsupported: %s", sn, s.Compression)
+			}
+			idempotent := true
+			if s.Idempotent != nil {
+				idempotent = *s.Idempotent
+			}
+			acks := s.Acks.Int()
+			if idempotent {
+				if acks != -1 {
+					return fmt.Errorf("sender %s kafka idempotent=true requires acks=all/-1", sn)
+				}
+				if s.MaxInFlightRequestsPerConnection > 0 && s.MaxInFlightRequestsPerConnection != 1 {
+					return fmt.Errorf("sender %s kafka idempotent=true requires max_in_flight_requests_per_connection=1", sn)
+				}
+			}
+			if s.Retries < 0 {
+				return fmt.Errorf("sender %s kafka retries must be >= 0", sn)
+			}
+			if s.MaxInFlightRequestsPerConnection < 0 {
+				return fmt.Errorf("sender %s kafka max_in_flight_requests_per_connection must be >= 0", sn)
 			}
 			if err := validateKafkaAuth("sender", sn, s.SASLMechanism, s.Username, s.Password); err != nil {
 				return err
