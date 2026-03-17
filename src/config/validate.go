@@ -152,6 +152,12 @@ func (c *Config) Validate() error {
 			if s.MaxInFlightRequestsPerConnection < 0 {
 				return fmt.Errorf("sender %s kafka max_in_flight_requests_per_connection must be >= 0", sn)
 			}
+			if s.MaxBufferedBytes < 0 {
+				return fmt.Errorf("sender %s kafka max_buffered_bytes must be >= 0", sn)
+			}
+			if s.MaxBufferedRecords < 0 {
+				return fmt.Errorf("sender %s kafka max_buffered_records must be >= 0", sn)
+			}
 			if err := validateKafkaAuth("sender", sn, s.SASLMechanism, s.Username, s.Password); err != nil {
 				return err
 			}

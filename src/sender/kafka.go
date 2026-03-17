@@ -45,6 +45,12 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 		kgo.ProducerBatchMaxBytes(int32(kafkaIntDefault(sc.BatchMaxBytes, 1<<20))),
 		kgo.ProducerLinger(time.Duration(kafkaIntDefault(sc.LingerMS, 1)) * time.Millisecond),
 	}
+	if sc.MaxBufferedBytes > 0 {
+		opts = append(opts, kgo.MaxBufferedBytes(sc.MaxBufferedBytes))
+	}
+	if sc.MaxBufferedRecords > 0 {
+		opts = append(opts, kgo.MaxBufferedRecords(sc.MaxBufferedRecords))
+	}
 	if v := strings.TrimSpace(sc.ClientID); v != "" {
 		opts = append(opts, kgo.ClientID(v))
 	}
