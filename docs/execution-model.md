@@ -27,7 +27,22 @@ flowchart TD
   Proc --> Send[Send Fanout]
 ```
 
+以上总览图对应 `runtime.dispatch -> task.Handle -> task.processAndSend` 的统一主链路；差异点只在 `Handle` 内的执行方式。
+
 ## 3. fastpath
+
+```mermaid
+flowchart LR
+  R[Receiver] --> D[Dispatcher]
+  D --> T[Task.Handle]
+  T --> DP[Direct Path]
+  DP --> P[Pipeline]
+  P --> S[Sender Fanout]
+```
+
+- 执行路径：`dispatch` 把 packet 交给 `Task.Handle` 后，`fastpath` 直接在当前 goroutine 执行 `processAndSend`。
+- 适用场景：链路处理轻、对端稳定、需要尽量压低端到端延迟。
+- 突出特点：路径最短、无额外排队；但下游阻塞会直接传导回 Receiver。
 
 ### 机制
 
@@ -46,6 +61,20 @@ flowchart TD
 
 ## 4. pool
 
+```mermaid
+flowchart LR
+  R[Receiver] --> D[Dispatcher]
+  D --> T[Task.Handle]
+  T --> Q[Pool Submit Queue]
+  Q --> WP[Worker Pool]
+  WP --> P[Pipeline]
+  P --> S[Sender Fanout]
+```
+
+- 执行路径：`Task.Handle` 将任务提交给 ants worker pool，再由 worker 并行执行 `processAndSend`。
+- 适用场景：通用生产流量，需要吞吐、并发与隔离的平衡。
+- 突出特点：可通过 `pool_size` 和 `queue_size` 扩展并发；队列满时会丢弃并记录错误日志。
+
 ### 机制
 
 - 使用 ants 池提交任务。
@@ -63,6 +92,20 @@ flowchart TD
 - 需要平衡吞吐与隔离。
 
 ## 5. channel
+
+```mermaid
+flowchart LR
+  R[Receiver] --> D[Dispatcher]
+  D --> T[Task.Handle]
+  T --> CQ[Channel Queue]
+  CQ --> C[Single Consumer]
+  C --> P[Pipeline]
+  P --> S[Sender Fanout]
+```
+
+- 执行路径：`Task.Handle` 先入有界 channel，再由单消费者 goroutine 顺序执行 `processAndSend`。
+- 适用场景：同一 task 内需要更清晰顺序语义，且峰值流量可控。
+- 突出特点：队列缓冲实现接入与处理解耦；但消费端为单 worker，吞吐上限受限。
 
 ### 机制
 
