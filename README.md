@@ -260,6 +260,8 @@ go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
       "max_in_flight_requests_per_connection": 1,
       "linger_ms": 5,
       "batch_max_bytes": 1048576,
+      "max_buffered_bytes": 67108864,
+      "max_buffered_records": 20000,
       "compression": "lz4",
       "username": "kafka-user",
       "password": "kafka-pass",

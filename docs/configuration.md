@@ -303,7 +303,7 @@ config
 
 - 作用：Kafka 生产发送。
 - 必填：`type`、`remote`（brokers CSV）、`topic`。
-- 可选：`acks`、`idempotent`、`retries`、`max_in_flight_requests_per_connection`、`linger_ms`、`batch_max_bytes`、`compression`、`client_id`、`tls*`、`sasl*`、`concurrency`。
+- 可选：`acks`、`idempotent`、`retries`、`max_in_flight_requests_per_connection`、`linger_ms`、`batch_max_bytes`、`max_buffered_bytes`、`max_buffered_records`、`compression`、`client_id`、`tls*`、`sasl*`、`concurrency`。
 - 默认行为：
   - `acks` 默认按 `all`（`-1`）处理。
   - `idempotent` 默认 `true`（即启用 Kafka 幂等写入）。
@@ -311,6 +311,8 @@ config
   - `max_in_flight_requests_per_connection<=0` 使用 franz-go 默认值；在 `idempotent=true` 下等价为 1。
   - `linger_ms<=0` 回退 1ms。
   - `batch_max_bytes<=0` 回退 1MiB。
+  - `max_buffered_bytes<=0` 使用 franz-go 默认值（不限制）。
+  - `max_buffered_records<=0` 使用 franz-go 默认值（10000）。
   - `compression` 空或 `none` 表示不压缩。
 - `acks` 允许值与语义：
   - `0`：不等待 broker 确认，最低时延、最低可靠性。
@@ -319,7 +321,11 @@ config
 - 约束（与 Kafka/franz-go 语义对齐）：
   - `idempotent=true` 时，`acks` 必须是 `all`（或 `-1`）。
   - `idempotent=true` 时，不额外强制 `max_in_flight_requests_per_connection` 的具体取值；`<=0` 仍表示使用 franz-go 默认值。
-  - `retries`、`max_in_flight_requests_per_connection` 必须 `>=0`。
+  - `retries`、`max_in_flight_requests_per_connection`、`max_buffered_bytes`、`max_buffered_records` 必须 `>=0`。
+- 与 franz-go 的映射：
+  - `max_buffered_bytes` -> `kgo.MaxBufferedBytes`（与 Java producer `buffer.memory` 语义近似对应，按字节限制 producer 缓冲）。
+  - `max_buffered_records` -> `kgo.MaxBufferedRecords`（按 record 条数限制 producer 缓冲）。
+  - 达到上限时，franz-go 会阻塞后续 produce，直到已缓冲记录被发送完成（非手动 flush 模式）。
 
 最小示例：
 

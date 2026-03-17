@@ -295,6 +295,12 @@ type SenderConfig struct {
 	// BatchMaxBytes 是 Kafka 单批次最大字节数。
 	// 用法：应与 broker 的 message.max.bytes 限制协同设置。
 	BatchMaxBytes int `json:"batch_max_bytes,omitempty"`
+	// MaxBufferedBytes 是 Kafka producer 侧可缓冲总字节上限。
+	// 用法：映射 franz-go 的 MaxBufferedBytes；<=0 时沿用 franz-go 默认（不限制）。
+	MaxBufferedBytes int `json:"max_buffered_bytes,omitempty"`
+	// MaxBufferedRecords 是 Kafka producer 侧可缓冲 record 数量上限。
+	// 用法：映射 franz-go 的 MaxBufferedRecords；<=0 时沿用 franz-go 默认（10000）。
+	MaxBufferedRecords int `json:"max_buffered_records,omitempty"`
 	// Compression 是 Kafka 压缩算法（none/gzip/snappy/lz4/zstd）。
 	// 用法：带宽紧张时优先启用压缩，CPU 紧张时可用 none。
 	Compression string `json:"compression,omitempty"`
