@@ -10,7 +10,7 @@ import (
 	"forward-stub/src/task"
 )
 
-// benchCounterSender stores package-local state used by forward_matrix_benchmark_test.go.
+// benchCounterSender 是供 forward_matrix_benchmark_test.go 使用的包内辅助结构。
 type benchCounterSender struct {
 	name  string
 	bytes int64
@@ -19,23 +19,23 @@ type benchCounterSender struct {
 
 var _ sender.Sender = (*benchCounterSender)(nil)
 
-// Name provides runtime-level behavior used by the runtime pipeline.
+// Name 提供运行时链路所需的 runtime 层行为。
 func (s *benchCounterSender) Name() string { return s.name }
 
-// Key provides runtime-level behavior used by the runtime pipeline.
+// Key 提供运行时链路所需的 runtime 层行为。
 func (s *benchCounterSender) Key() string { return s.name }
 
-// Send provides runtime-level behavior used by the runtime pipeline.
+// Send 提供运行时链路所需的 runtime 层行为。
 func (s *benchCounterSender) Send(_ context.Context, p *packet.Packet) error {
 	s.pkts++
 	s.bytes += int64(len(p.Payload))
 	return nil
 }
 
-// Close provides runtime-level behavior used by the runtime pipeline.
+// Close 提供运行时链路所需的 runtime 层行为。
 func (s *benchCounterSender) Close(_ context.Context) error { return nil }
 
-// BenchmarkDispatchMatrix benchmarks the DispatchMatrix behavior for the runtime package.
+// BenchmarkDispatchMatrix 对 runtime 包中 DispatchMatrix 的行为进行基准测试。
 func BenchmarkDispatchMatrix(b *testing.B) {
 	protos := []string{"udp", "tcp", "kafka", "sftp"}
 	payloadSizes := []int{256, 4096}
@@ -68,7 +68,7 @@ func BenchmarkDispatchMatrix(b *testing.B) {
 	}
 }
 
-// BenchmarkDispatchMatrixPoolSizesNoPayloadLog benchmarks the DispatchMatrixPoolSizesNoPayloadLog behavior for the runtime package.
+// BenchmarkDispatchMatrixPoolSizesNoPayloadLog 对 runtime 包中 DispatchMatrixPoolSizesNoPayloadLog 的行为进行基准测试。
 func BenchmarkDispatchMatrixPoolSizesNoPayloadLog(b *testing.B) {
 	protos := []string{"udp", "tcp", "kafka", "sftp"}
 	poolSizes := []int{1024, 4096, 8192}

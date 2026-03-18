@@ -4,7 +4,7 @@ package sender
 
 import "syscall"
 
-// setSocketReuse is a package-local helper used by udp_dial_other.go.
+// setSocketReuse 是供 udp_dial_other.go 使用的包内辅助函数。
 func setSocketReuse(_ syscall.RawConn) error {
 	return nil
 }

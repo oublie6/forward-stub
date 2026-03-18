@@ -10,7 +10,7 @@ import (
 	"forward-stub/src/task"
 )
 
-// captureSender stores package-local state used by update_cache_test.go.
+// captureSender 是供 update_cache_test.go 使用的包内辅助结构。
 type captureSender struct {
 	name string
 
@@ -20,13 +20,13 @@ type captureSender struct {
 
 var _ sender.Sender = (*captureSender)(nil)
 
-// Name provides runtime-level behavior used by the runtime pipeline.
+// Name 提供运行时链路所需的 runtime 层行为。
 func (s *captureSender) Name() string { return s.name }
 
-// Key provides runtime-level behavior used by the runtime pipeline.
+// Key 提供运行时链路所需的 runtime 层行为。
 func (s *captureSender) Key() string { return s.name }
 
-// Send provides runtime-level behavior used by the runtime pipeline.
+// Send 提供运行时链路所需的 runtime 层行为。
 func (s *captureSender) Send(_ context.Context, p *packet.Packet) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -35,10 +35,10 @@ func (s *captureSender) Send(_ context.Context, p *packet.Packet) error {
 	return nil
 }
 
-// Close provides runtime-level behavior used by the runtime pipeline.
+// Close 提供运行时链路所需的 runtime 层行为。
 func (s *captureSender) Close(_ context.Context) error { return nil }
 
-// Last provides runtime-level behavior used by the runtime pipeline.
+// Last 提供运行时链路所需的 runtime 层行为。
 func (s *captureSender) Last() []byte {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -48,7 +48,7 @@ func (s *captureSender) Last() []byte {
 	return s.payload[len(s.payload)-1]
 }
 
-// spyPacketSender stores package-local state used by update_cache_test.go.
+// spyPacketSender 是供 update_cache_test.go 使用的包内辅助结构。
 type spyPacketSender struct {
 	name string
 	last *packet.Packet
@@ -56,22 +56,22 @@ type spyPacketSender struct {
 
 var _ sender.Sender = (*spyPacketSender)(nil)
 
-// Name provides runtime-level behavior used by the runtime pipeline.
+// Name 提供运行时链路所需的 runtime 层行为。
 func (s *spyPacketSender) Name() string { return s.name }
 
-// Key provides runtime-level behavior used by the runtime pipeline.
+// Key 提供运行时链路所需的 runtime 层行为。
 func (s *spyPacketSender) Key() string { return s.name }
 
-// Send provides runtime-level behavior used by the runtime pipeline.
+// Send 提供运行时链路所需的 runtime 层行为。
 func (s *spyPacketSender) Send(_ context.Context, p *packet.Packet) error {
 	s.last = p
 	return nil
 }
 
-// Close provides runtime-level behavior used by the runtime pipeline.
+// Close 提供运行时链路所需的 runtime 层行为。
 func (s *spyPacketSender) Close(_ context.Context) error { return nil }
 
-// TestDispatchClonesForEveryTaskAndReleasesOriginal verifies the DispatchClonesForEveryTaskAndReleasesOriginal behavior for the runtime package.
+// TestDispatchClonesForEveryTaskAndReleasesOriginal 验证 runtime 包中 DispatchClonesForEveryTaskAndReleasesOriginal 的行为。
 func TestDispatchClonesForEveryTaskAndReleasesOriginal(t *testing.T) {
 	ctx := context.Background()
 
@@ -114,7 +114,7 @@ func TestDispatchClonesForEveryTaskAndReleasesOriginal(t *testing.T) {
 	}
 }
 
-// TestDispatchSingleSubscriberReusesOriginalPacket verifies the DispatchSingleSubscriberReusesOriginalPacket behavior for the runtime package.
+// TestDispatchSingleSubscriberReusesOriginalPacket 验证 runtime 包中 DispatchSingleSubscriberReusesOriginalPacket 的行为。
 func TestDispatchSingleSubscriberReusesOriginalPacket(t *testing.T) {
 	ctx := context.Background()
 

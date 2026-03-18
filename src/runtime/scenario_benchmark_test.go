@@ -15,7 +15,7 @@ import (
 	"forward-stub/src/task"
 )
 
-// benchScenario stores package-local state used by scenario_benchmark_test.go.
+// benchScenario 是供 scenario_benchmark_test.go 使用的包内辅助结构。
 type benchScenario struct {
 	name     string
 	receiver string
@@ -23,7 +23,7 @@ type benchScenario struct {
 	mkSender func(concurrency, targets int) sender.Sender
 }
 
-// benchUDPDownstreamSender stores package-local state used by scenario_benchmark_test.go.
+// benchUDPDownstreamSender 是供 scenario_benchmark_test.go 使用的包内辅助结构。
 type benchUDPDownstreamSender struct {
 	name      string
 	shardMask int
@@ -32,16 +32,16 @@ type benchUDPDownstreamSender struct {
 	targets   []string
 }
 
-// Name provides runtime-level behavior used by the runtime pipeline.
+// Name 提供运行时链路所需的 runtime 层行为。
 func (s *benchUDPDownstreamSender) Name() string { return s.name }
 
-// Key provides runtime-level behavior used by the runtime pipeline.
+// Key 提供运行时链路所需的 runtime 层行为。
 func (s *benchUDPDownstreamSender) Key() string { return "bench_udp|" + s.name }
 
-// Close provides runtime-level behavior used by the runtime pipeline.
+// Close 提供运行时链路所需的 runtime 层行为。
 func (s *benchUDPDownstreamSender) Close(context.Context) error { return nil }
 
-// Send provides runtime-level behavior used by the runtime pipeline.
+// Send 提供运行时链路所需的 runtime 层行为。
 func (s *benchUDPDownstreamSender) Send(_ context.Context, p *packet.Packet) error {
 	idx := int(nextShardIndex(&s.nextShard, s.shardMask))
 	targetIdx := 0
@@ -53,7 +53,7 @@ func (s *benchUDPDownstreamSender) Send(_ context.Context, p *packet.Packet) err
 	return nil
 }
 
-// benchTCPDownstreamSender stores package-local state used by scenario_benchmark_test.go.
+// benchTCPDownstreamSender 是供 scenario_benchmark_test.go 使用的包内辅助结构。
 type benchTCPDownstreamSender struct {
 	name      string
 	withLen   bool
@@ -62,16 +62,16 @@ type benchTCPDownstreamSender struct {
 	framePool sync.Pool
 }
 
-// Name provides runtime-level behavior used by the runtime pipeline.
+// Name 提供运行时链路所需的 runtime 层行为。
 func (s *benchTCPDownstreamSender) Name() string { return s.name }
 
-// Key provides runtime-level behavior used by the runtime pipeline.
+// Key 提供运行时链路所需的 runtime 层行为。
 func (s *benchTCPDownstreamSender) Key() string { return "bench_tcp|" + s.name }
 
-// Close provides runtime-level behavior used by the runtime pipeline.
+// Close 提供运行时链路所需的 runtime 层行为。
 func (s *benchTCPDownstreamSender) Close(context.Context) error { return nil }
 
-// Send provides runtime-level behavior used by the runtime pipeline.
+// Send 提供运行时链路所需的 runtime 层行为。
 func (s *benchTCPDownstreamSender) Send(_ context.Context, p *packet.Packet) error {
 	_ = int(nextShardIndex(&s.nextShard, s.shardMask))
 	if !s.withLen {
@@ -93,7 +93,7 @@ func (s *benchTCPDownstreamSender) Send(_ context.Context, p *packet.Packet) err
 	return nil
 }
 
-// benchKafkaDownstreamSender stores package-local state used by scenario_benchmark_test.go.
+// benchKafkaDownstreamSender 是供 scenario_benchmark_test.go 使用的包内辅助结构。
 type benchKafkaDownstreamSender struct {
 	name      string
 	topic     string
@@ -102,16 +102,16 @@ type benchKafkaDownstreamSender struct {
 	headers   [][2]string
 }
 
-// Name provides runtime-level behavior used by the runtime pipeline.
+// Name 提供运行时链路所需的 runtime 层行为。
 func (s *benchKafkaDownstreamSender) Name() string { return s.name }
 
-// Key provides runtime-level behavior used by the runtime pipeline.
+// Key 提供运行时链路所需的 runtime 层行为。
 func (s *benchKafkaDownstreamSender) Key() string { return "bench_kafka|" + s.name }
 
-// Close provides runtime-level behavior used by the runtime pipeline.
+// Close 提供运行时链路所需的 runtime 层行为。
 func (s *benchKafkaDownstreamSender) Close(context.Context) error { return nil }
 
-// Send provides runtime-level behavior used by the runtime pipeline.
+// Send 提供运行时链路所需的 runtime 层行为。
 func (s *benchKafkaDownstreamSender) Send(_ context.Context, p *packet.Packet) error {
 	_ = int(nextShardIndex(&s.nextShard, s.shardMask))
 	_ = s.topic
@@ -121,7 +121,7 @@ func (s *benchKafkaDownstreamSender) Send(_ context.Context, p *packet.Packet) e
 	return nil
 }
 
-// benchSFTPDownstreamSender stores package-local state used by scenario_benchmark_test.go.
+// benchSFTPDownstreamSender 是供 scenario_benchmark_test.go 使用的包内辅助结构。
 type benchSFTPDownstreamSender struct {
 	name      string
 	remoteDir string
@@ -131,16 +131,16 @@ type benchSFTPDownstreamSender struct {
 	written   map[string]int64
 }
 
-// Name provides runtime-level behavior used by the runtime pipeline.
+// Name 提供运行时链路所需的 runtime 层行为。
 func (s *benchSFTPDownstreamSender) Name() string { return s.name }
 
-// Key provides runtime-level behavior used by the runtime pipeline.
+// Key 提供运行时链路所需的 runtime 层行为。
 func (s *benchSFTPDownstreamSender) Key() string { return "bench_sftp|" + s.name }
 
-// Close provides runtime-level behavior used by the runtime pipeline.
+// Close 提供运行时链路所需的 runtime 层行为。
 func (s *benchSFTPDownstreamSender) Close(context.Context) error { return nil }
 
-// Send provides runtime-level behavior used by the runtime pipeline.
+// Send 提供运行时链路所需的 runtime 层行为。
 func (s *benchSFTPDownstreamSender) Send(_ context.Context, p *packet.Packet) error {
 	_ = int(nextShardIndex(&s.nextShard, s.shardMask))
 	transferID := p.Meta.TransferID
@@ -159,7 +159,7 @@ func (s *benchSFTPDownstreamSender) Send(_ context.Context, p *packet.Packet) er
 	return nil
 }
 
-// nextShardIndex is a package-local helper used by scenario_benchmark_test.go.
+// nextShardIndex 是供 scenario_benchmark_test.go 使用的包内辅助函数。
 func nextShardIndex(next *atomic.Uint64, mask int) int {
 	if mask <= 0 {
 		return 0
@@ -168,7 +168,7 @@ func nextShardIndex(next *atomic.Uint64, mask int) int {
 	return i
 }
 
-// benchmarkTask is a package-local helper used by scenario_benchmark_test.go.
+// benchmarkTask 是供 scenario_benchmark_test.go 使用的包内辅助函数。
 func benchmarkTask(model string, snd sender.Sender) (*task.Task, func()) {
 	tk := &task.Task{
 		Name:             "bench-task",
@@ -186,14 +186,14 @@ func benchmarkTask(model string, snd sender.Sender) (*task.Task, func()) {
 	return tk, cleanup
 }
 
-// makeDispatchStore is a package-local helper used by scenario_benchmark_test.go.
+// makeDispatchStore 是供 scenario_benchmark_test.go 使用的包内辅助函数。
 func makeDispatchStore(receiverName string, tk *task.Task) *Store {
 	st := NewStore()
 	st.setDispatchSubs(testDispatchSnapshot(receiverName, &TaskState{Name: "bench-task", T: tk}))
 	return st
 }
 
-// ingestUDPDatagram is a package-local helper used by scenario_benchmark_test.go.
+// ingestUDPDatagram 是供 scenario_benchmark_test.go 使用的包内辅助函数。
 func ingestUDPDatagram(payload []byte, remote, local string) *packet.Packet {
 	buf, rel := packet.CopyFrom(payload)
 	meta := packet.Meta{Proto: packet.ProtoUDP, Remote: remote, Local: local}
@@ -201,7 +201,7 @@ func ingestUDPDatagram(payload []byte, remote, local string) *packet.Packet {
 	return &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: buf, Meta: meta}, ReleaseFn: rel}
 }
 
-// ingestTCPChunk is a package-local helper used by scenario_benchmark_test.go.
+// ingestTCPChunk 是供 scenario_benchmark_test.go 使用的包内辅助函数。
 func ingestTCPChunk(payload []byte, remote, local string) *packet.Packet {
 	buf, rel := packet.CopyFrom(payload)
 	meta := packet.Meta{Proto: packet.ProtoTCP, Remote: remote, Local: local}
@@ -209,19 +209,19 @@ func ingestTCPChunk(payload []byte, remote, local string) *packet.Packet {
 	return &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: buf, Meta: meta}, ReleaseFn: rel}
 }
 
-// ingestKafkaRecord is a package-local helper used by scenario_benchmark_test.go.
+// ingestKafkaRecord 是供 scenario_benchmark_test.go 使用的包内辅助函数。
 func ingestKafkaRecord(value []byte, topic, groupID string) *packet.Packet {
 	buf, rel := packet.CopyFrom(value)
 	return &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: buf, Meta: packet.Meta{Proto: packet.ProtoKafka, Remote: topic, Local: groupID}}, ReleaseFn: rel}
 }
 
-// ingestSFTPChunk is a package-local helper used by scenario_benchmark_test.go.
+// ingestSFTPChunk 是供 scenario_benchmark_test.go 使用的包内辅助函数。
 func ingestSFTPChunk(chunk []byte, transferID string, offset int64, totalSize int64, eof bool) *packet.Packet {
 	buf, rel := packet.CopyFrom(chunk)
 	return &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindFileChunk, Payload: buf, Meta: packet.Meta{Proto: packet.ProtoSFTP, Remote: "/in/file.bin", Local: "sftp:22", FileName: "file.bin", FilePath: "/in/file.bin", TransferID: transferID, Offset: offset, TotalSize: totalSize, EOF: eof}}, ReleaseFn: rel}
 }
 
-// scenarioBenchmarks is a package-local helper used by scenario_benchmark_test.go.
+// scenarioBenchmarks 是供 scenario_benchmark_test.go 使用的包内辅助函数。
 func scenarioBenchmarks() []benchScenario {
 	return []benchScenario{
 		{
@@ -319,7 +319,7 @@ func scenarioBenchmarks() []benchScenario {
 	}
 }
 
-// BenchmarkScenarioForwarding benchmarks the ScenarioForwarding behavior for the runtime package.
+// BenchmarkScenarioForwarding 对 runtime 包中 ScenarioForwarding 的行为进行基准测试。
 func BenchmarkScenarioForwarding(b *testing.B) {
 	scenarios := scenarioBenchmarks()
 	payloadSizes := []int{64, 128, 512, 1200, 4096}

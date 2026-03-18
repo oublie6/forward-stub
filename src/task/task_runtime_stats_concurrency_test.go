@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestRuntimeStatsConcurrentWithStopGraceful verifies the RuntimeStatsConcurrentWithStopGraceful behavior for the task package.
+// TestRuntimeStatsConcurrentWithStopGraceful 验证 task 包中 RuntimeStatsConcurrentWithStopGraceful 的行为。
 func TestRuntimeStatsConcurrentWithStopGraceful(t *testing.T) {
 	tk := &Task{
 		Name:           "task-concurrency",

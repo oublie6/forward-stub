@@ -31,7 +31,7 @@ func CompilePipelines(cfg map[string][]config.StageConfig) (map[string]*Compiled
 	return out, nil
 }
 
-// stageSignature is a package-local helper used by compiler.go.
+// stageSignature 是供 compiler.go 使用的包内辅助函数。
 func stageSignature(sc config.StageConfig) (string, error) {
 	b, err := json.Marshal(sc)
 	if err != nil {
@@ -40,7 +40,7 @@ func stageSignature(sc config.StageConfig) (string, error) {
 	return string(b), nil
 }
 
-// compilePipelinesWithStageCache is a package-local helper used by compiler.go.
+// compilePipelinesWithStageCache 是供 compiler.go 使用的包内辅助函数。
 func (st *Store) compilePipelinesWithStageCache(cfg map[string][]config.StageConfig) (map[string]*CompiledPipeline, map[string][]string, error) {
 	out := make(map[string]*CompiledPipeline, len(cfg))
 	sigsByPipeline := make(map[string][]string, len(cfg))

@@ -278,7 +278,7 @@ func (r *SFTPReceiver) connect() (*ssh.Client, *sftp.Client, error) {
 	return cli, scli, nil
 }
 
-// hostKeyCallback is a package-local helper used by sftp.go.
+// hostKeyCallback 是供 sftp.go 使用的包内辅助函数。
 func (r *SFTPReceiver) hostKeyCallback() ssh.HostKeyCallback {
 	want := strings.TrimSpace(r.cfg.HostKeyFingerprint)
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {

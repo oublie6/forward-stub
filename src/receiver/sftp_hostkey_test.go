@@ -10,7 +10,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// TestSFTPReceiverHostKeyCallback verifies the SFTPReceiverHostKeyCallback behavior for the receiver package.
+// TestSFTPReceiverHostKeyCallback 验证 receiver 包中 SFTPReceiverHostKeyCallback 的行为。
 func TestSFTPReceiverHostKeyCallback(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {

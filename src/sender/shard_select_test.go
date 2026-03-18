@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestNextShardIndexPowerOfTwoRoundRobin verifies the NextShardIndexPowerOfTwoRoundRobin behavior for the sender package.
+// TestNextShardIndexPowerOfTwoRoundRobin 验证 sender 包中 NextShardIndexPowerOfTwoRoundRobin 的行为。
 func TestNextShardIndexPowerOfTwoRoundRobin(t *testing.T) {
 	var next atomic.Uint64
 	got := []int{
@@ -23,7 +23,7 @@ func TestNextShardIndexPowerOfTwoRoundRobin(t *testing.T) {
 	}
 }
 
-// TestNextShardIndexSingleShardAlwaysZero verifies the NextShardIndexSingleShardAlwaysZero behavior for the sender package.
+// TestNextShardIndexSingleShardAlwaysZero 验证 sender 包中 NextShardIndexSingleShardAlwaysZero 的行为。
 func TestNextShardIndexSingleShardAlwaysZero(t *testing.T) {
 	var next atomic.Uint64
 	got := []int{
@@ -39,7 +39,7 @@ func TestNextShardIndexSingleShardAlwaysZero(t *testing.T) {
 	}
 }
 
-// TestNextShardIndexUsesBitMaskWhenCounterOutOfBound verifies the NextShardIndexUsesBitMaskWhenCounterOutOfBound behavior for the sender package.
+// TestNextShardIndexUsesBitMaskWhenCounterOutOfBound 验证 sender 包中 NextShardIndexUsesBitMaskWhenCounterOutOfBound 的行为。
 func TestNextShardIndexUsesBitMaskWhenCounterOutOfBound(t *testing.T) {
 	var next atomic.Uint64
 	next.Store(100)
@@ -54,7 +54,7 @@ func TestNextShardIndexUsesBitMaskWhenCounterOutOfBound(t *testing.T) {
 	}
 }
 
-// TestKafkaNextShardIndexRoundRobin verifies the KafkaNextShardIndexRoundRobin behavior for the sender package.
+// TestKafkaNextShardIndexRoundRobin 验证 sender 包中 KafkaNextShardIndexRoundRobin 的行为。
 func TestKafkaNextShardIndexRoundRobin(t *testing.T) {
 	s := &KafkaSender{concurrency: 4, shardMask: 3}
 	got := []int{
@@ -72,7 +72,7 @@ func TestKafkaNextShardIndexRoundRobin(t *testing.T) {
 	}
 }
 
-// TestUDPPickShardRoundRobin verifies the UDPPickShardRoundRobin behavior for the sender package.
+// TestUDPPickShardRoundRobin 验证 sender 包中 UDPPickShardRoundRobin 的行为。
 func TestUDPPickShardRoundRobin(t *testing.T) {
 	u := &UDPUnicastSender{concurrency: 2, shardMask: 1}
 	m := &UDPMulticastSender{concurrency: 2, shardMask: 1}
@@ -84,7 +84,7 @@ func TestUDPPickShardRoundRobin(t *testing.T) {
 	}
 }
 
-// TestSFTPPickShardTransferAffinityWithRoundRobinAssignment verifies the SFTPPickShardTransferAffinityWithRoundRobinAssignment behavior for the sender package.
+// TestSFTPPickShardTransferAffinityWithRoundRobinAssignment 验证 sender 包中 SFTPPickShardTransferAffinityWithRoundRobinAssignment 的行为。
 func TestSFTPPickShardTransferAffinityWithRoundRobinAssignment(t *testing.T) {
 	s := &SFTPSender{concurrency: 4, shardMask: 3, transferShard: map[string]int{}}
 	if got := s.pickShard("t1"); got != 1 {

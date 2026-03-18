@@ -2,7 +2,7 @@ package config
 
 import "testing"
 
-// TestValidateSSHHostKeyFingerprint verifies the ValidateSSHHostKeyFingerprint behavior for the config package.
+// TestValidateSSHHostKeyFingerprint 验证 config 包中 ValidateSSHHostKeyFingerprint 的行为。
 func TestValidateSSHHostKeyFingerprint(t *testing.T) {
 	cases := []struct {
 		name  string

@@ -10,7 +10,7 @@ import (
 	"forward-stub/src/sender"
 )
 
-// gateSender stores package-local state used by task_blocking_submit_test.go.
+// gateSender 是供 task_blocking_submit_test.go 使用的包内辅助结构。
 type gateSender struct {
 	entered chan struct{}
 	release chan struct{}
@@ -18,16 +18,16 @@ type gateSender struct {
 
 var _ sender.Sender = (*gateSender)(nil)
 
-// Name provides task-level behavior used by the runtime pipeline.
+// Name 提供运行时链路所需的 task 层行为。
 func (s *gateSender) Name() string { return "gate" }
 
-// Key provides task-level behavior used by the runtime pipeline.
+// Key 提供运行时链路所需的 task 层行为。
 func (s *gateSender) Key() string { return "gate" }
 
-// Close provides task-level behavior used by the runtime pipeline.
+// Close 提供运行时链路所需的 task 层行为。
 func (s *gateSender) Close(context.Context) error { return nil }
 
-// Send provides task-level behavior used by the runtime pipeline.
+// Send 提供运行时链路所需的 task 层行为。
 func (s *gateSender) Send(context.Context, *packet.Packet) error {
 	select {
 	case s.entered <- struct{}{}:
@@ -37,13 +37,13 @@ func (s *gateSender) Send(context.Context, *packet.Packet) error {
 	return nil
 }
 
-// trackedPacket is a package-local helper used by task_blocking_submit_test.go.
+// trackedPacket 是供 task_blocking_submit_test.go 使用的包内辅助函数。
 func trackedPacket(payload []byte, released *atomic.Int32) *packet.Packet {
 	out, rel := packet.CopyFrom(payload)
 	return &packet.Packet{Envelope: packet.Envelope{Payload: out}, ReleaseFn: func() { rel(); released.Add(1) }}
 }
 
-// TestTaskSubmitBlocksAndQueuesWhenPoolBusy verifies the TaskSubmitBlocksAndQueuesWhenPoolBusy behavior for the task package.
+// TestTaskSubmitBlocksAndQueuesWhenPoolBusy 验证 task 包中 TaskSubmitBlocksAndQueuesWhenPoolBusy 的行为。
 func TestTaskSubmitBlocksAndQueuesWhenPoolBusy(t *testing.T) {
 	s := &gateSender{entered: make(chan struct{}, 2), release: make(chan struct{})}
 	tk := &Task{PoolSize: 1, QueueSize: 1, Senders: []sender.Sender{s}}

@@ -6,7 +6,7 @@ import (
 	"forward-stub/src/logx"
 )
 
-// TestTaskDetachAndReuseTrafficCounter verifies the TaskDetachAndReuseTrafficCounter behavior for the task package.
+// TestTaskDetachAndReuseTrafficCounter 验证 task 包中 TaskDetachAndReuseTrafficCounter 的行为。
 func TestTaskDetachAndReuseTrafficCounter(t *testing.T) {
 	counter := logx.AcquireTrafficCounter("task send traffic stats", "role", "task", "task", "demo", "direction", "send")
 	t1 := &Task{Name: "demo"}

@@ -3,12 +3,12 @@ package receiver
 
 import "encoding/binary"
 
-// Framer describes receiver-level state used by the forwarding architecture.
+// Framer 描述转发架构中 receiver 层的状态。
 type Framer interface {
 	Feed(in []byte) (frames [][]byte, remain []byte, err error)
 }
 
-// U16BEFramer describes receiver-level state used by the forwarding architecture.
+// U16BEFramer 描述转发架构中 receiver 层的状态。
 type U16BEFramer struct{}
 
 // Feed 负责该函数对应的核心逻辑，详见实现细节。

@@ -6,7 +6,7 @@ import (
 	"forward-stub/src/config"
 )
 
-// testDispatchSnapshot is a package-local helper used by selector_test_helpers_test.go.
+// testDispatchSnapshot 是供 selector_test_helpers_test.go 使用的包内辅助函数。
 func testDispatchSnapshot(receiver string, tasks ...*TaskState) map[string]*ReceiverSelectorDispatchState {
 	return map[string]*ReceiverSelectorDispatchState{
 		receiver: {
@@ -20,7 +20,7 @@ func testDispatchSnapshot(receiver string, tasks ...*TaskState) map[string]*Rece
 	}
 }
 
-// testSelector is a package-local helper used by selector_test_helpers_test.go.
+// testSelector 是供 selector_test_helpers_test.go 使用的包内辅助函数。
 func testSelector(receiver string, tasks ...string) map[string]config.SelectorConfig {
 	return map[string]config.SelectorConfig{
 		"sel": {

@@ -11,7 +11,7 @@ import (
 	"forward-stub/src/task"
 )
 
-// TestMatchDispatchTasksSelectorPriority verifies the MatchDispatchTasksSelectorPriority behavior for the runtime package.
+// TestMatchDispatchTasksSelectorPriority 验证 runtime 包中 MatchDispatchTasksSelectorPriority 的行为。
 func TestMatchDispatchTasksSelectorPriority(t *testing.T) {
 	st := NewStore()
 	st.tasks = map[string]*TaskState{
@@ -84,7 +84,7 @@ func TestMatchDispatchTasksSelectorPriority(t *testing.T) {
 	}
 }
 
-// TestMatchDispatchTasksUsesStructuredSourceMetadata verifies the MatchDispatchTasksUsesStructuredSourceMetadata behavior for the runtime package.
+// TestMatchDispatchTasksUsesStructuredSourceMetadata 验证 runtime 包中 MatchDispatchTasksUsesStructuredSourceMetadata 的行为。
 func TestMatchDispatchTasksUsesStructuredSourceMetadata(t *testing.T) {
 	st := NewStore()
 	st.tasks = map[string]*TaskState{"exact": {Name: "exact"}}
@@ -109,7 +109,7 @@ func TestMatchDispatchTasksUsesStructuredSourceMetadata(t *testing.T) {
 	}
 }
 
-// TestMatchDispatchTasksDedupesTaskAcrossBucketsAndSelectors verifies the MatchDispatchTasksDedupesTaskAcrossBucketsAndSelectors behavior for the runtime package.
+// TestMatchDispatchTasksDedupesTaskAcrossBucketsAndSelectors 验证 runtime 包中 MatchDispatchTasksDedupesTaskAcrossBucketsAndSelectors 的行为。
 func TestMatchDispatchTasksDedupesTaskAcrossBucketsAndSelectors(t *testing.T) {
 	st := NewStore()
 	st.tasks = map[string]*TaskState{
@@ -143,7 +143,7 @@ func TestMatchDispatchTasksDedupesTaskAcrossBucketsAndSelectors(t *testing.T) {
 	}
 }
 
-// TestMatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch verifies the MatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch behavior for the runtime package.
+// TestMatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch 验证 runtime 包中 MatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch 的行为。
 func TestMatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch(t *testing.T) {
 	st := NewStore()
 	st.tasks = map[string]*TaskState{"t1": {Name: "t1"}}
@@ -163,7 +163,7 @@ func TestMatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch(t *testing.
 	}
 }
 
-// TestDispatchUsesSelectorSnapshotForCloneFanout verifies the DispatchUsesSelectorSnapshotForCloneFanout behavior for the runtime package.
+// TestDispatchUsesSelectorSnapshotForCloneFanout 验证 runtime 包中 DispatchUsesSelectorSnapshotForCloneFanout 的行为。
 func TestDispatchUsesSelectorSnapshotForCloneFanout(t *testing.T) {
 	ctx := context.Background()
 	s1 := &captureSender{name: "s1"}
@@ -214,7 +214,7 @@ func TestDispatchUsesSelectorSnapshotForCloneFanout(t *testing.T) {
 	}
 }
 
-// BenchmarkMatchDispatchTasksExactIPv4 benchmarks the MatchDispatchTasksExactIPv4 behavior for the runtime package.
+// BenchmarkMatchDispatchTasksExactIPv4 对 runtime 包中 MatchDispatchTasksExactIPv4 的行为进行基准测试。
 func BenchmarkMatchDispatchTasksExactIPv4(b *testing.B) {
 	buildStore := func() *Store {
 		st := NewStore()
@@ -260,7 +260,7 @@ func BenchmarkMatchDispatchTasksExactIPv4(b *testing.B) {
 	})
 }
 
-// taskNames is a package-local helper used by selector_dispatch_test.go.
+// taskNames 是供 selector_dispatch_test.go 使用的包内辅助函数。
 func taskNames(tasks []*TaskState) []string {
 	out := make([]string, 0, len(tasks))
 	for _, ts := range tasks {

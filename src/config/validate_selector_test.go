@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// baseConfigForSelectorValidation is a package-local helper used by validate_selector_test.go.
+// baseConfigForSelectorValidation 是供 validate_selector_test.go 使用的包内辅助函数。
 func baseConfigForSelectorValidation() Config {
 	return Config{
 		Logging: LoggingConfig{Level: "info"},
@@ -25,7 +25,7 @@ func baseConfigForSelectorValidation() Config {
 	}
 }
 
-// TestValidateSelectorConfigAndDedupes verifies the ValidateSelectorConfigAndDedupes behavior for the config package.
+// TestValidateSelectorConfigAndDedupes 验证 config 包中 ValidateSelectorConfigAndDedupes 的行为。
 func TestValidateSelectorConfigAndDedupes(t *testing.T) {
 	cfg := baseConfigForSelectorValidation()
 	cfg.Selectors["sel"] = SelectorConfig{
@@ -54,7 +54,7 @@ func TestValidateSelectorConfigAndDedupes(t *testing.T) {
 	}
 }
 
-// TestValidateSelectorAllowsSingleDefaultPerReceiver verifies the ValidateSelectorAllowsSingleDefaultPerReceiver behavior for the config package.
+// TestValidateSelectorAllowsSingleDefaultPerReceiver 验证 config 包中 ValidateSelectorAllowsSingleDefaultPerReceiver 的行为。
 func TestValidateSelectorAllowsSingleDefaultPerReceiver(t *testing.T) {
 	cfg := baseConfigForSelectorValidation()
 	cfg.Selectors = map[string]SelectorConfig{
@@ -71,7 +71,7 @@ func TestValidateSelectorAllowsSingleDefaultPerReceiver(t *testing.T) {
 	}
 }
 
-// TestValidateSelectorRejectsMultipleDefaultsPerReceiver verifies the ValidateSelectorRejectsMultipleDefaultsPerReceiver behavior for the config package.
+// TestValidateSelectorRejectsMultipleDefaultsPerReceiver 验证 config 包中 ValidateSelectorRejectsMultipleDefaultsPerReceiver 的行为。
 func TestValidateSelectorRejectsMultipleDefaultsPerReceiver(t *testing.T) {
 	cfg := baseConfigForSelectorValidation()
 	cfg.Selectors = map[string]SelectorConfig{
@@ -88,7 +88,7 @@ func TestValidateSelectorRejectsMultipleDefaultsPerReceiver(t *testing.T) {
 	}
 }
 
-// TestValidateSelectorRejectsInvalidCases verifies the ValidateSelectorRejectsInvalidCases behavior for the config package.
+// TestValidateSelectorRejectsInvalidCases 验证 config 包中 ValidateSelectorRejectsInvalidCases 的行为。
 func TestValidateSelectorRejectsInvalidCases(t *testing.T) {
 	tests := []struct {
 		name    string

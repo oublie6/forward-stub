@@ -1,6 +1,6 @@
 package config
 
-// testSelectors is a package-local helper used by test_helpers_test.go.
+// testSelectors 是供 test_helpers_test.go 使用的包内辅助函数。
 func testSelectors(receiver string, tasks ...string) map[string]SelectorConfig {
 	return map[string]SelectorConfig{
 		"sel": {

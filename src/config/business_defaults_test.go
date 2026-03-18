@@ -2,7 +2,7 @@ package config
 
 import "testing"
 
-// TestSystemBusinessDefaultsAppliedToBusinessConfig verifies the SystemBusinessDefaultsAppliedToBusinessConfig behavior for the config package.
+// TestSystemBusinessDefaultsAppliedToBusinessConfig 验证 config 包中 SystemBusinessDefaultsAppliedToBusinessConfig 的行为。
 func TestSystemBusinessDefaultsAppliedToBusinessConfig(t *testing.T) {
 	m := true
 	sys := SystemConfig{
@@ -38,7 +38,7 @@ func TestSystemBusinessDefaultsAppliedToBusinessConfig(t *testing.T) {
 	}
 }
 
-// TestSystemBusinessDefaultsDoNotOverrideExplicitReceiverMulticore verifies the SystemBusinessDefaultsDoNotOverrideExplicitReceiverMulticore behavior for the config package.
+// TestSystemBusinessDefaultsDoNotOverrideExplicitReceiverMulticore 验证 config 包中 SystemBusinessDefaultsDoNotOverrideExplicitReceiverMulticore 的行为。
 func TestSystemBusinessDefaultsDoNotOverrideExplicitReceiverMulticore(t *testing.T) {
 	m := true
 	explicitFalse := false

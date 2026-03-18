@@ -126,7 +126,7 @@ func Run(version string, args []string) int {
 	}
 }
 
-// logStartupInfo is a package-local helper used by run.go.
+// logStartupInfo 是供 run.go 使用的包内辅助函数。
 func logStartupInfo(lg interface {
 	Infow(string, ...interface{})
 	Info(...interface{})
@@ -144,20 +144,20 @@ func logStartupInfo(lg interface {
 	lg.Info("forward-stub started. Press Ctrl+C to stop.")
 }
 
-// pprofResponseRecorder stores package-local state used by run.go.
+// pprofResponseRecorder 是供 run.go 使用的包内辅助结构。
 type pprofResponseRecorder struct {
 	http.ResponseWriter
 	status int
 	size   int
 }
 
-// WriteHeader provides bootstrap-level behavior used by the runtime pipeline.
+// WriteHeader 提供运行时链路所需的 bootstrap 层行为。
 func (r *pprofResponseRecorder) WriteHeader(statusCode int) {
 	r.status = statusCode
 	r.ResponseWriter.WriteHeader(statusCode)
 }
 
-// Write provides bootstrap-level behavior used by the runtime pipeline.
+// Write 提供运行时链路所需的 bootstrap 层行为。
 func (r *pprofResponseRecorder) Write(b []byte) (int, error) {
 	if r.status == 0 {
 		r.status = http.StatusOK
@@ -167,7 +167,7 @@ func (r *pprofResponseRecorder) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// withPprofRequestLog is a package-local helper used by run.go.
+// withPprofRequestLog 是供 run.go 使用的包内辅助函数。
 func withPprofRequestLog(next http.Handler, lg interface{ Infow(string, ...interface{}) }) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -190,7 +190,7 @@ func withPprofRequestLog(next http.Handler, lg interface{ Infow(string, ...inter
 	})
 }
 
-// startPprofServer is a package-local helper used by run.go.
+// startPprofServer 是供 run.go 使用的包内辅助函数。
 func startPprofServer(lg interface {
 	Infow(string, ...interface{})
 	Warnw(string, ...interface{})
@@ -215,7 +215,7 @@ func startPprofServer(lg interface {
 	return srv
 }
 
-// shutdownPprofServer is a package-local helper used by run.go.
+// shutdownPprofServer 是供 run.go 使用的包内辅助函数。
 func shutdownPprofServer(srv *http.Server, lg interface{ Warnw(string, ...interface{}) }) {
 	if srv == nil {
 		return
@@ -227,7 +227,7 @@ func shutdownPprofServer(srv *http.Server, lg interface{ Warnw(string, ...interf
 	}
 }
 
-// watchConfigFile is a package-local helper used by run.go.
+// watchConfigFile 是供 run.go 使用的包内辅助函数。
 func watchConfigFile(path, initialFingerprint, watchInterval string, notifyCh chan<- struct{}, done <-chan struct{}) {
 	lg := logx.L()
 	currentFingerprint := initialFingerprint
@@ -261,7 +261,7 @@ func watchConfigFile(path, initialFingerprint, watchInterval string, notifyCh ch
 	}
 }
 
-// reloadAndApplyBusinessConfig is a package-local helper used by run.go.
+// reloadAndApplyBusinessConfig 是供 run.go 使用的包内辅助函数。
 func reloadAndApplyBusinessConfig(ctx context.Context, rt *app.Runtime, systemPath, businessPath, sourceKey, sourceValue string) (config.Config, bool) {
 	lg := logx.L()
 	systemCfg, _, next, err := loadConfigPair(ctx, systemPath, businessPath)
@@ -280,7 +280,7 @@ func reloadAndApplyBusinessConfig(ctx context.Context, rt *app.Runtime, systemPa
 	return next, true
 }
 
-// loadConfigPair is a package-local helper used by run.go.
+// loadConfigPair 是供 run.go 使用的包内辅助函数。
 func loadConfigPair(ctx context.Context, systemPath, businessPath string) (config.SystemConfig, config.BusinessConfig, config.Config, error) {
 	sys, biz, cfg, err := config.LoadLocalPair(systemPath, businessPath)
 	if err != nil {

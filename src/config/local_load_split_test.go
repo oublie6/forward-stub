@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestLoadSystemAndBusinessLocal verifies the LoadSystemAndBusinessLocal behavior for the config package.
+// TestLoadSystemAndBusinessLocal 验证 config 包中 LoadSystemAndBusinessLocal 的行为。
 func TestLoadSystemAndBusinessLocal(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.json")

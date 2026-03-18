@@ -6,7 +6,7 @@ import (
 	"forward-stub/src/config"
 )
 
-// TestBuildTaskPayloadLogOptions verifies the BuildTaskPayloadLogOptions behavior for the runtime package.
+// TestBuildTaskPayloadLogOptions 验证 runtime 包中 BuildTaskPayloadLogOptions 的行为。
 func TestBuildTaskPayloadLogOptions(t *testing.T) {
 	lc := config.LoggingConfig{
 		PayloadLogMaxBytes: 128,

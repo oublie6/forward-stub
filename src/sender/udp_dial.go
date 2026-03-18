@@ -6,7 +6,7 @@ import (
 	"syscall"
 )
 
-// dialUDPWithReuse is a package-local helper used by udp_dial.go.
+// dialUDPWithReuse 是供 udp_dial.go 使用的包内辅助函数。
 func dialUDPWithReuse(ctx context.Context, local, remote *net.UDPAddr) (*net.UDPConn, error) {
 	d := net.Dialer{
 		LocalAddr: local,

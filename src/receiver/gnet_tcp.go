@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// GnetTCP describes receiver-level state used by the forwarding architecture.
+// GnetTCP 描述转发架构中 receiver 层的状态。
 type GnetTCP struct {
 	name             string
 	listen           string
@@ -100,7 +100,7 @@ func (r *GnetTCP) Stop(ctx context.Context) error {
 	return nil
 }
 
-// connState stores package-local state used by gnet_tcp.go.
+// connState 是供 gnet_tcp.go 使用的包内辅助结构。
 type connState struct {
 	buf        []byte
 	remote     string
@@ -110,7 +110,7 @@ type connState struct {
 	hasSrcAddr bool
 }
 
-// tcpHandler stores package-local state used by gnet_tcp.go.
+// tcpHandler 是供 gnet_tcp.go 使用的包内辅助结构。
 type tcpHandler struct {
 	gnet.BuiltinEventEngine
 	recv *GnetTCP

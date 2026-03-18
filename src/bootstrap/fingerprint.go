@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-// readConfigFingerprint is a package-local helper used by fingerprint.go.
+// readConfigFingerprint 是供 fingerprint.go 使用的包内辅助函数。
 func readConfigFingerprint(path string) (string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {

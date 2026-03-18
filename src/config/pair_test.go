@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestLoadLocalPairAppliesSystemBusinessDefaults verifies the LoadLocalPairAppliesSystemBusinessDefaults behavior for the config package.
+// TestLoadLocalPairAppliesSystemBusinessDefaults 验证 config 包中 LoadLocalPairAppliesSystemBusinessDefaults 的行为。
 func TestLoadLocalPairAppliesSystemBusinessDefaults(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.json")
@@ -31,7 +31,7 @@ func TestLoadLocalPairAppliesSystemBusinessDefaults(t *testing.T) {
 	}
 }
 
-// TestLoadLocalPairDoesNotApplyRuntimeDefaults verifies the LoadLocalPairDoesNotApplyRuntimeDefaults behavior for the config package.
+// TestLoadLocalPairDoesNotApplyRuntimeDefaults 验证 config 包中 LoadLocalPairDoesNotApplyRuntimeDefaults 的行为。
 func TestLoadLocalPairDoesNotApplyRuntimeDefaults(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.json")

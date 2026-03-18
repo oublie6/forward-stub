@@ -6,7 +6,7 @@ import (
 	"forward-stub/src/config"
 )
 
-// TestCompilePipelineFileStages verifies the CompilePipelineFileStages behavior for the runtime package.
+// TestCompilePipelineFileStages 验证 runtime 包中 CompilePipelineFileStages 的行为。
 func TestCompilePipelineFileStages(t *testing.T) {
 	eof := true
 	cfg := map[string][]config.StageConfig{

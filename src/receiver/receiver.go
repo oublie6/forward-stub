@@ -7,7 +7,7 @@ import (
 	"forward-stub/src/packet"
 )
 
-// Receiver describes receiver-level state used by the forwarding architecture.
+// Receiver 描述转发架构中 receiver 层的状态。
 type Receiver interface {
 	Name() string
 	Key() string

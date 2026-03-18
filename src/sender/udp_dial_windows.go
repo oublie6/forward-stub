@@ -8,7 +8,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// setSocketReuse is a package-local helper used by udp_dial_windows.go.
+// setSocketReuse 是供 udp_dial_windows.go 使用的包内辅助函数。
 func setSocketReuse(c syscall.RawConn) error {
 	var ctrlErr error
 	if err := c.Control(func(fd uintptr) {

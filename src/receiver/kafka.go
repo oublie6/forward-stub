@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// KafkaReceiver describes receiver-level state used by the forwarding architecture.
+// KafkaReceiver 描述转发架构中 receiver 层的状态。
 type KafkaReceiver struct {
 	name    string
 	brokers []string
@@ -82,15 +82,15 @@ func NewKafkaReceiver(name string, rc config.ReceiverConfig) (*KafkaReceiver, er
 	return &KafkaReceiver{name: name, brokers: brs, topic: rc.Topic, groupID: groupID, client: cli}, nil
 }
 
-// Name provides receiver-level behavior used by the runtime pipeline.
+// Name 提供运行时链路所需的 receiver 层行为。
 func (r *KafkaReceiver) Name() string { return r.name }
 
-// Key provides receiver-level behavior used by the runtime pipeline.
+// Key 提供运行时链路所需的 receiver 层行为。
 func (r *KafkaReceiver) Key() string {
 	return "kafka|" + strings.Join(r.brokers, ",") + "|" + r.groupID + "|" + r.topic
 }
 
-// Start provides receiver-level behavior used by the runtime pipeline.
+// Start 提供运行时链路所需的 receiver 层行为。
 func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
 
@@ -171,7 +171,7 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 	}
 }
 
-// Stop provides receiver-level behavior used by the runtime pipeline.
+// Stop 提供运行时链路所需的 receiver 层行为。
 func (r *KafkaReceiver) Stop(ctx context.Context) error {
 	r.mu.Lock()
 	cancel := r.cancel
@@ -191,7 +191,7 @@ func (r *KafkaReceiver) Stop(ctx context.Context) error {
 	}
 }
 
-// splitCSV is a package-local helper used by kafka.go.
+// splitCSV 是供 kafka.go 使用的包内辅助函数。
 func splitCSV(v string) []string {
 	parts := strings.Split(v, ",")
 	out := make([]string, 0, len(parts))
@@ -204,7 +204,7 @@ func splitCSV(v string) []string {
 	return out
 }
 
-// kafkaIntDefault is a package-local helper used by kafka.go.
+// kafkaIntDefault 是供 kafka.go 使用的包内辅助函数。
 func kafkaIntDefault(v, d int) int {
 	if v <= 0 {
 		return d
@@ -212,30 +212,30 @@ func kafkaIntDefault(v, d int) int {
 	return v
 }
 
-// kafkaPlainMechanism stores package-local state used by kafka.go.
+// kafkaPlainMechanism 是供 kafka.go 使用的包内辅助结构。
 type kafkaPlainMechanism struct {
 	username string
 	password string
 }
 
-// Name provides receiver-level behavior used by the runtime pipeline.
+// Name 提供运行时链路所需的 receiver 层行为。
 func (m kafkaPlainMechanism) Name() string { return "PLAIN" }
 
-// Authenticate provides receiver-level behavior used by the runtime pipeline.
+// Authenticate 提供运行时链路所需的 receiver 层行为。
 func (m kafkaPlainMechanism) Authenticate(_ context.Context, _ string) (sasl.Session, []byte, error) {
 	msg := []byte("\x00" + m.username + "\x00" + m.password)
 	return kafkaPlainSession{}, msg, nil
 }
 
-// kafkaPlainSession stores package-local state used by kafka.go.
+// kafkaPlainSession 是供 kafka.go 使用的包内辅助结构。
 type kafkaPlainSession struct{}
 
-// Challenge provides receiver-level behavior used by the runtime pipeline.
+// Challenge 提供运行时链路所需的 receiver 层行为。
 func (kafkaPlainSession) Challenge(_ []byte) (bool, []byte, error) {
 	return true, nil, nil
 }
 
-// buildKafkaSASLMechanism is a package-local helper used by kafka.go.
+// buildKafkaSASLMechanism 是供 kafka.go 使用的包内辅助函数。
 func buildKafkaSASLMechanism(mechanism, username, password string) (sasl.Mechanism, error) {
 	mech := strings.ToUpper(strings.TrimSpace(mechanism))
 	u := strings.TrimSpace(username)

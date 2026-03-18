@@ -3,7 +3,7 @@ package sender
 
 import "github.com/panjf2000/gnet/v2"
 
-// clientEH stores package-local state used by client_eh.go.
+// clientEH 是供 client_eh.go 使用的包内辅助结构。
 type clientEH struct{ gnet.BuiltinEventEngine }
 
 // OnTraffic 负责该函数对应的核心逻辑，详见实现细节。

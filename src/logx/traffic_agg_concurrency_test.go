@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestTrafficCounterCloseConcurrentWithAddBytes verifies the TrafficCounterCloseConcurrentWithAddBytes behavior for the logx package.
+// TestTrafficCounterCloseConcurrentWithAddBytes 验证 logx 包中 TrafficCounterCloseConcurrentWithAddBytes 的行为。
 func TestTrafficCounterCloseConcurrentWithAddBytes(t *testing.T) {
 	tc := AcquireTrafficCounter("test traffic", "role", "receiver", "receiver", "r1", "receiver_key", "k1", "proto", "udp")
 

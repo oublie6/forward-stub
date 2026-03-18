@@ -23,7 +23,7 @@ const (
 )
 
 // Task 表示一条完整数据处理链路：
-// input packet -> pipelines -> senders。
+// 输入 packet -> pipelines -> senders。
 //
 // 架构位置：selector 负责决定“哪些 task 被命中”，Task 负责命中后的执行；
 // 它不再直接绑定 receiver，而是专注于串行执行 pipelines 并在末端 fan-out 到 senders。

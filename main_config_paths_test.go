@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestResolveConfigPaths verifies the ResolveConfigPaths behavior for the  package.
+// TestResolveConfigPaths 验证 ResolveConfigPaths 的路径解析行为。
 func TestResolveConfigPaths(t *testing.T) {
 	tests := []struct {
 		name       string

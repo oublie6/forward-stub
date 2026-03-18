@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestReadConfigFingerprintChangesWithContent verifies the ReadConfigFingerprintChangesWithContent behavior for the bootstrap package.
+// TestReadConfigFingerprintChangesWithContent 验证 bootstrap 包中 ReadConfigFingerprintChangesWithContent 的行为。
 func TestReadConfigFingerprintChangesWithContent(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")

@@ -28,7 +28,7 @@ func MatchOffsetBytes(offset int, want []byte) StageFunc {
 	}
 }
 
-// buildOffsetMatcher is a package-local helper used by stages_offset.go.
+// buildOffsetMatcher 是供 stages_offset.go 使用的包内辅助函数。
 func buildOffsetMatcher(want []byte) func([]byte) bool {
 	switch len(want) {
 	case 0:

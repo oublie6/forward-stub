@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TestK8sConfigMapConfigJSONIsValid verifies the K8sConfigMapConfigJSONIsValid behavior for the config package.
+// TestK8sConfigMapConfigJSONIsValid 验证 config 包中 K8sConfigMapConfigJSONIsValid 的行为。
 func TestK8sConfigMapConfigJSONIsValid(t *testing.T) {
 	raw, err := loadK8sConfigMapConfigJSON("../../deploy/k8s/configmap.yaml")
 	if err != nil {
@@ -26,7 +26,7 @@ func TestK8sConfigMapConfigJSONIsValid(t *testing.T) {
 	}
 }
 
-// loadK8sConfigMapConfigJSON is a package-local helper used by configmap_k8s_test.go.
+// loadK8sConfigMapConfigJSON 是供 configmap_k8s_test.go 使用的包内辅助函数。
 func loadK8sConfigMapConfigJSON(path string) (string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {

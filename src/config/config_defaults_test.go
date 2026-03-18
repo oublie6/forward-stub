@@ -2,7 +2,7 @@ package config
 
 import "testing"
 
-// TestApplyDefaultsSetsControlDefaults verifies the ApplyDefaultsSetsControlDefaults behavior for the config package.
+// TestApplyDefaultsSetsControlDefaults 验证 config 包中 ApplyDefaultsSetsControlDefaults 的行为。
 func TestApplyDefaultsSetsControlDefaults(t *testing.T) {
 	cfg := Config{}
 	cfg.ApplyDefaults()
@@ -14,7 +14,7 @@ func TestApplyDefaultsSetsControlDefaults(t *testing.T) {
 	}
 }
 
-// TestApplyDefaultsKeepsDisabledPprofPort verifies the ApplyDefaultsKeepsDisabledPprofPort behavior for the config package.
+// TestApplyDefaultsKeepsDisabledPprofPort 验证 config 包中 ApplyDefaultsKeepsDisabledPprofPort 的行为。
 func TestApplyDefaultsKeepsDisabledPprofPort(t *testing.T) {
 	cfg := Config{Control: ControlConfig{PprofPort: -1}}
 	cfg.ApplyDefaults()
@@ -23,7 +23,7 @@ func TestApplyDefaultsKeepsDisabledPprofPort(t *testing.T) {
 	}
 }
 
-// TestApplyDefaultsSetsReceiverMulticoreWhenUnset verifies the ApplyDefaultsSetsReceiverMulticoreWhenUnset behavior for the config package.
+// TestApplyDefaultsSetsReceiverMulticoreWhenUnset 验证 config 包中 ApplyDefaultsSetsReceiverMulticoreWhenUnset 的行为。
 func TestApplyDefaultsSetsReceiverMulticoreWhenUnset(t *testing.T) {
 	cfg := Config{Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000"}}}
 	cfg.ApplyDefaults()
@@ -33,7 +33,7 @@ func TestApplyDefaultsSetsReceiverMulticoreWhenUnset(t *testing.T) {
 	}
 }
 
-// TestApplyDefaultsSetsSocketBufferDefaults verifies the ApplyDefaultsSetsSocketBufferDefaults behavior for the config package.
+// TestApplyDefaultsSetsSocketBufferDefaults 验证 config 包中 ApplyDefaultsSetsSocketBufferDefaults 的行为。
 func TestApplyDefaultsSetsSocketBufferDefaults(t *testing.T) {
 	cfg := Config{
 		Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000"}},
@@ -49,7 +49,7 @@ func TestApplyDefaultsSetsSocketBufferDefaults(t *testing.T) {
 	}
 }
 
-// TestApplyDefaultsPreservesExplicitSocketBufferValues verifies the ApplyDefaultsPreservesExplicitSocketBufferValues behavior for the config package.
+// TestApplyDefaultsPreservesExplicitSocketBufferValues 验证 config 包中 ApplyDefaultsPreservesExplicitSocketBufferValues 的行为。
 func TestApplyDefaultsPreservesExplicitSocketBufferValues(t *testing.T) {
 	cfg := Config{
 		Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000", SocketRecvBuffer: 2 << 20}},

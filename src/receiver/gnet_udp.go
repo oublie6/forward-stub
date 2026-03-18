@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// GnetUDP describes receiver-level state used by the forwarding architecture.
+// GnetUDP 描述转发架构中 receiver 层的状态。
 type GnetUDP struct {
 	name             string
 	listen           string
@@ -98,7 +98,7 @@ func (r *GnetUDP) Stop(ctx context.Context) error {
 	return nil
 }
 
-// udpHandler stores package-local state used by gnet_udp.go.
+// udpHandler 是供 gnet_udp.go 使用的包内辅助结构。
 type udpHandler struct {
 	gnet.BuiltinEventEngine
 	recv *GnetUDP

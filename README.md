@@ -22,6 +22,83 @@
 - 支持 business 配置热更新（文件监听 + 信号触发）。
 - 支持 payload 复用、队列边界和回压控制。
 
+## 目录结构
+
+### 当前项目目录树
+
+```text
+.
+├── main.go
+├── configs/
+│   ├── business.example.json
+│   ├── example.json
+│   └── system.example.json
+├── deploy/
+│   └── k8s/
+├── docs/
+├── scripts/
+├── src/
+│   ├── app/
+│   ├── bootstrap/
+│   ├── config/
+│   ├── control/
+│   ├── logx/
+│   ├── packet/
+│   ├── pipeline/
+│   ├── receiver/
+│   ├── runtime/
+│   ├── sender/
+│   └── task/
+└── vendor/
+```
+
+### 关键目录与文件职责
+
+- `main.go`
+  - 二进制程序入口，只负责接收命令行参数并把启动流程委派给 `bootstrap.Run`。
+- `configs/`
+  - 存放系统配置、业务配置以及兼容 legacy 单文件模式的示例，展示当前 `receiver -> selector -> task -> pipelines -> senders` 架构的真实配置写法。
+- `deploy/`
+  - 放置部署侧材料，当前包含 Kubernetes ConfigMap 示例，便于将 system/business 配置映射到运行环境。
+- `docs/`
+  - 存放架构、配置、运行时、性能、排障等专题文档；README 用于快速导航，这里的文档负责展开细节。
+- `scripts/`
+  - 存放仓库辅助脚本，服务于开发、测试或运维动作，本身不参与运行时主链路。
+- `src/app`
+  - 应用层长生命周期包装器，向外暴露启动、停机、缓存更新与系统配置稳定性检查等能力，衔接 `bootstrap` 与 `runtime`。
+- `src/bootstrap`
+  - 启动编排层，负责解析参数、加载配置、应用默认值、启动 pprof、监听文件变更/信号并驱动热更新。
+- `src/config`
+  - 配置模型与校验中心，定义 system/business 配置结构、默认值策略、严格加载规则以及 selector/task/receiver/sender 的约束。
+- `src/control`
+  - 控制面接入层，用于从外部 API 拉取业务配置快照，供 `bootstrap` 合并到本地 system 配置后再下发运行时。
+- `src/logx`
+  - 统一日志与流量统计模块，负责全局 logger 初始化、日志等级判断、task 运行统计采集和周期性吞吐汇总输出。
+- `src/packet`
+  - 统一数据模型层，定义 receiver、selector、task、pipeline、sender 之间共享的 `packet.Packet`、`Meta` 和 payload 缓冲池。
+- `src/pipeline`
+  - 处理阶段抽象层，把多个 stage 串成 task 内部顺序执行的处理链，负责字节匹配/替换、文件语义转换、按字段路由 sender 等逻辑。
+- `src/receiver`
+  - 各类入站适配器，把 UDP/TCP/Kafka/SFTP 等外部输入统一转换成 `packet.Packet`，然后交给运行时 dispatch。
+- `src/runtime`
+  - 运行时编排核心，负责构建并热切换 `receiver -> selector -> task -> pipelines -> senders` 拓扑，维护 selector dispatch 快照、实例复用与更新缓存。
+- `src/sender`
+  - 各类出站适配器，负责把 task 处理后的 packet 投递到 UDP/TCP/Kafka/SFTP 等下游系统。
+- `src/task`
+  - 命中后的执行单元，负责根据执行模型承接 packet，串行执行 pipelines，并在末端 fan-out 到一个或多个 sender。
+- `vendor/`
+  - 项目当前使用的 vendored 依赖，保证构建与测试环境可复现；业务实现不在此目录中维护。
+
+### 模块协作关系
+
+1. `main.go` 调用 `bootstrap.Run` 启动进程。
+2. `bootstrap` 读取本地文件与可选控制面配置，经 `config` 应用默认值并完成校验。
+3. `app`/`runtime` 根据最新配置编译并发布运行时快照。
+4. `receiver` 接收外部数据，封装为 `packet.Packet`。
+5. `runtime` 依据 receiver 名称和 selector 快照进行分发，命中一个或多个 `task`。
+6. `task` 按执行模型运行 `pipeline` 链，并把结果发送到 `sender`。
+7. `logx` 为上述各阶段提供统一日志、统计与可观测支撑。
+
 ## 3. 系统总体架构图
 
 ```mermaid

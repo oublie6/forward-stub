@@ -2,7 +2,7 @@ package config
 
 import "testing"
 
-// TestValidateSFTPSenderRequiresFields verifies the ValidateSFTPSenderRequiresFields behavior for the config package.
+// TestValidateSFTPSenderRequiresFields 验证 config 包中 ValidateSFTPSenderRequiresFields 的行为。
 func TestValidateSFTPSenderRequiresFields(t *testing.T) {
 	cfg := Config{
 		Receivers: map[string]ReceiverConfig{

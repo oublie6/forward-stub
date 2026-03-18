@@ -147,7 +147,7 @@ func (c *Config) ApplyDefaults() {
 	}
 }
 
-// max is a package-local helper used by business_defaults.go.
+// max 是供 business_defaults.go 使用的包内辅助函数。
 func max(a, b int) int {
 	if a > b {
 		return a

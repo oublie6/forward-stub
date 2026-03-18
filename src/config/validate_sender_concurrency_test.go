@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestValidateSenderConcurrencyMustBePowerOfTwo verifies the ValidateSenderConcurrencyMustBePowerOfTwo behavior for the config package.
+// TestValidateSenderConcurrencyMustBePowerOfTwo 验证 config 包中 ValidateSenderConcurrencyMustBePowerOfTwo 的行为。
 func TestValidateSenderConcurrencyMustBePowerOfTwo(t *testing.T) {
 	cfg := Config{
 		Logging: LoggingConfig{Level: "info"},
@@ -27,7 +27,7 @@ func TestValidateSenderConcurrencyMustBePowerOfTwo(t *testing.T) {
 	}
 }
 
-// TestValidateSenderConcurrencyAcceptsPowerOfTwo verifies the ValidateSenderConcurrencyAcceptsPowerOfTwo behavior for the config package.
+// TestValidateSenderConcurrencyAcceptsPowerOfTwo 验证 config 包中 ValidateSenderConcurrencyAcceptsPowerOfTwo 的行为。
 func TestValidateSenderConcurrencyAcceptsPowerOfTwo(t *testing.T) {
 	cfg := Config{
 		Logging: LoggingConfig{Level: "info"},

@@ -2,7 +2,7 @@ package config
 
 import "testing"
 
-// kafkaSenderBaseConfig is a package-local helper used by validate_kafka_sender_test.go.
+// kafkaSenderBaseConfig 是供 validate_kafka_sender_test.go 使用的包内辅助函数。
 func kafkaSenderBaseConfig() Config {
 	cfg := Config{
 		Version: 1,
@@ -23,7 +23,7 @@ func kafkaSenderBaseConfig() Config {
 	return cfg
 }
 
-// TestValidateKafkaSenderIdempotentAcksConstraint verifies the ValidateKafkaSenderIdempotentAcksConstraint behavior for the config package.
+// TestValidateKafkaSenderIdempotentAcksConstraint 验证 config 包中 ValidateKafkaSenderIdempotentAcksConstraint 的行为。
 func TestValidateKafkaSenderIdempotentAcksConstraint(t *testing.T) {
 	cfg := kafkaSenderBaseConfig()
 	v := true
@@ -36,7 +36,7 @@ func TestValidateKafkaSenderIdempotentAcksConstraint(t *testing.T) {
 	}
 }
 
-// TestValidateKafkaSenderIdempotentAllowsConfiguredMaxInFlight verifies the ValidateKafkaSenderIdempotentAllowsConfiguredMaxInFlight behavior for the config package.
+// TestValidateKafkaSenderIdempotentAllowsConfiguredMaxInFlight 验证 config 包中 ValidateKafkaSenderIdempotentAllowsConfiguredMaxInFlight 的行为。
 func TestValidateKafkaSenderIdempotentAllowsConfiguredMaxInFlight(t *testing.T) {
 	cfg := kafkaSenderBaseConfig()
 	v := true
@@ -49,7 +49,7 @@ func TestValidateKafkaSenderIdempotentAllowsConfiguredMaxInFlight(t *testing.T) 
 	}
 }
 
-// TestValidateKafkaSenderNonIdempotentAllowsAcks1 verifies the ValidateKafkaSenderNonIdempotentAllowsAcks1 behavior for the config package.
+// TestValidateKafkaSenderNonIdempotentAllowsAcks1 验证 config 包中 ValidateKafkaSenderNonIdempotentAllowsAcks1 的行为。
 func TestValidateKafkaSenderNonIdempotentAllowsAcks1(t *testing.T) {
 	cfg := kafkaSenderBaseConfig()
 	v := false
@@ -64,7 +64,7 @@ func TestValidateKafkaSenderNonIdempotentAllowsAcks1(t *testing.T) {
 	}
 }
 
-// TestKafkaAcksConfigUnmarshal verifies the KafkaAcksConfigUnmarshal behavior for the config package.
+// TestKafkaAcksConfigUnmarshal 验证 config 包中 KafkaAcksConfigUnmarshal 的行为。
 func TestKafkaAcksConfigUnmarshal(t *testing.T) {
 	var a KafkaAcksConfig
 	if err := a.UnmarshalJSON([]byte("-1")); err != nil {

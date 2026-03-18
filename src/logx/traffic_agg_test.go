@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats verifies the TrafficSummaryTaskAggregateIncludesWorkerPoolStats behavior for the logx package.
+// TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats 验证 logx 包中 TrafficSummaryTaskAggregateIncludesWorkerPoolStats 的行为。
 func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
 	RegisterTaskRuntimeStats("task-a", func() TaskRuntimeStats {
 		return TaskRuntimeStats{
@@ -50,7 +50,7 @@ func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
 	}
 }
 
-// TestTrafficSummaryIncludesRuntimeOnlyTaskWithoutTraffic verifies the TrafficSummaryIncludesRuntimeOnlyTaskWithoutTraffic behavior for the logx package.
+// TestTrafficSummaryIncludesRuntimeOnlyTaskWithoutTraffic 验证 logx 包中 TrafficSummaryIncludesRuntimeOnlyTaskWithoutTraffic 的行为。
 func TestTrafficSummaryIncludesRuntimeOnlyTaskWithoutTraffic(t *testing.T) {
 	stats := TaskRuntimeStats{PoolSize: 16, QueueSize: 64}
 	s := newTrafficSummary(time.Second)

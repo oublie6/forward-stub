@@ -10,7 +10,7 @@ import (
 	"forward-stub/src/pipeline"
 )
 
-// TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks verifies the ExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks behavior for the runtime package.
+// TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks 验证 runtime 包中 ExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks 的行为。
 func TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks(t *testing.T) {
 	oldTasks := map[string]config.TaskConfig{
 		"t1": {Senders: []string{"s1", "s2"}},
@@ -38,7 +38,7 @@ func TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks(t *testin
 	}
 }
 
-// TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts verifies the ExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts behavior for the runtime package.
+// TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts 验证 runtime 包中 ExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts 的行为。
 func TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts(t *testing.T) {
 	oldTasks := map[string]config.TaskConfig{
 		"ta": {Senders: []string{"sx"}},
@@ -68,7 +68,7 @@ func TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts(t *testin
 	}
 }
 
-// TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks verifies the ExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks behavior for the runtime package.
+// TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks 验证 runtime 包中 ExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks 的行为。
 func TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks(t *testing.T) {
 	oldTasks := map[string]config.TaskConfig{
 		"t1": {Pipelines: []string{"p1", "p2"}},
@@ -96,9 +96,9 @@ func TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks(t *test
 	}
 }
 
-// TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree verifies the PlanBusinessDeltaCartesianThreeByThreeByThreeByThree behavior for the runtime package.
+// TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree 验证 runtime 包中 PlanBusinessDeltaCartesianThreeByThreeByThreeByThree 的行为。
 func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
-	// op stores package-local state used by update_cache_delta_test.go.
+	// op 是供 update_cache_delta_test.go 使用的包内辅助结构。
 	type op string
 	const (
 		opAdd    op = "add"
@@ -198,7 +198,7 @@ func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
 	}
 }
 
-// contains is a package-local helper used by update_cache_delta_test.go.
+// contains 是供 update_cache_delta_test.go 使用的包内辅助函数。
 func contains(items []string, want string) bool {
 	for _, item := range items {
 		if item == want {
@@ -208,7 +208,7 @@ func contains(items []string, want string) bool {
 	return false
 }
 
-// hasDup is a package-local helper used by update_cache_delta_test.go.
+// hasDup 是供 update_cache_delta_test.go 使用的包内辅助函数。
 func hasDup(items []string) bool {
 	seen := make(map[string]struct{}, len(items))
 	for _, item := range items {
@@ -220,7 +220,7 @@ func hasDup(items []string) bool {
 	return false
 }
 
-// TestApplyTaskDeltaAddUpdateRemove verifies the ApplyTaskDeltaAddUpdateRemove behavior for the runtime package.
+// TestApplyTaskDeltaAddUpdateRemove 验证 runtime 包中 ApplyTaskDeltaAddUpdateRemove 的行为。
 func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
@@ -268,7 +268,7 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	}
 }
 
-// TestRemoveTaskRefreshDispatchSnapshotImmediately verifies the RemoveTaskRefreshDispatchSnapshotImmediately behavior for the runtime package.
+// TestRemoveTaskRefreshDispatchSnapshotImmediately 验证 runtime 包中 RemoveTaskRefreshDispatchSnapshotImmediately 的行为。
 func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
@@ -289,7 +289,7 @@ func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
 	}
 }
 
-// TestApplyBusinessDeltaUpdatesPayloadLogOptions verifies the ApplyBusinessDeltaUpdatesPayloadLogOptions behavior for the runtime package.
+// TestApplyBusinessDeltaUpdatesPayloadLogOptions 验证 runtime 包中 ApplyBusinessDeltaUpdatesPayloadLogOptions 的行为。
 func TestApplyBusinessDeltaUpdatesPayloadLogOptions(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}

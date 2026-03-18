@@ -3,10 +3,10 @@ package pipeline
 
 import "forward-stub/src/packet"
 
-// StageFunc describes pipeline-level state used by the forwarding architecture.
+// StageFunc 描述转发架构中 pipeline 层的状态。
 type StageFunc func(*packet.Packet) bool
 
-// Pipeline describes pipeline-level state used by the forwarding architecture.
+// Pipeline 描述转发架构中 pipeline 层的状态。
 type Pipeline struct {
 	Name   string
 	Stages []StageFunc

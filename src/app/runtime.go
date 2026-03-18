@@ -11,7 +11,7 @@ import (
 	"forward-stub/src/runtime"
 )
 
-// Runtime describes app-level state used by the forwarding architecture.
+// Runtime 描述转发架构中 app 层的状态。
 type Runtime struct {
 	store *runtime.Store
 

@@ -7,7 +7,7 @@ import (
 	"forward-stub/src/pipeline"
 )
 
-// TestCompilePipelinesWithStageCacheReuseBySignature verifies the CompilePipelinesWithStageCacheReuseBySignature behavior for the runtime package.
+// TestCompilePipelinesWithStageCacheReuseBySignature 验证 runtime 包中 CompilePipelinesWithStageCacheReuseBySignature 的行为。
 func TestCompilePipelinesWithStageCacheReuseBySignature(t *testing.T) {
 	st := NewStore()
 	cfg := map[string][]config.StageConfig{
@@ -27,7 +27,7 @@ func TestCompilePipelinesWithStageCacheReuseBySignature(t *testing.T) {
 	}
 }
 
-// TestStageCacheTaskRefsTrackAddAndRemove verifies the StageCacheTaskRefsTrackAddAndRemove behavior for the runtime package.
+// TestStageCacheTaskRefsTrackAddAndRemove 验证 runtime 包中 StageCacheTaskRefsTrackAddAndRemove 的行为。
 func TestStageCacheTaskRefsTrackAddAndRemove(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}

@@ -9,7 +9,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-// TestNewKafkaSenderAppliesBufferedOptions verifies the NewKafkaSenderAppliesBufferedOptions behavior for the sender package.
+// TestNewKafkaSenderAppliesBufferedOptions 验证 sender 包中 NewKafkaSenderAppliesBufferedOptions 的行为。
 func TestNewKafkaSenderAppliesBufferedOptions(t *testing.T) {
 	s, err := NewKafkaSender("k1", config.SenderConfig{
 		Type:               "kafka",
@@ -36,7 +36,7 @@ func TestNewKafkaSenderAppliesBufferedOptions(t *testing.T) {
 	}
 }
 
-// TestNewKafkaSenderKeepsFranzDefaultsForBufferedOptionsWhenUnset verifies the NewKafkaSenderKeepsFranzDefaultsForBufferedOptionsWhenUnset behavior for the sender package.
+// TestNewKafkaSenderKeepsFranzDefaultsForBufferedOptionsWhenUnset 验证 sender 包中 NewKafkaSenderKeepsFranzDefaultsForBufferedOptionsWhenUnset 的行为。
 func TestNewKafkaSenderKeepsFranzDefaultsForBufferedOptionsWhenUnset(t *testing.T) {
 	s, err := NewKafkaSender("k1", config.SenderConfig{
 		Type:        "kafka",

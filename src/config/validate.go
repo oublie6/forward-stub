@@ -195,7 +195,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// validateDefaultSelectorUniqueness is a package-local helper used by validate.go.
+// validateDefaultSelectorUniqueness 是供 validate.go 使用的包内辅助函数。
 func validateDefaultSelectorUniqueness(selectors map[string]SelectorConfig) error {
 	names := make([]string, 0, len(selectors))
 	for name := range selectors {
@@ -221,7 +221,7 @@ func validateDefaultSelectorUniqueness(selectors map[string]SelectorConfig) erro
 	return nil
 }
 
-// normalizeAndValidateSelector is a package-local helper used by validate.go.
+// normalizeAndValidateSelector 是供 validate.go 使用的包内辅助函数。
 func normalizeAndValidateSelector(c *Config, name string, sc *SelectorConfig) error {
 	if sc == nil {
 		return fmt.Errorf("selector %s config missing", name)
@@ -285,7 +285,7 @@ func normalizeAndValidateSelector(c *Config, name string, sc *SelectorConfig) er
 	return nil
 }
 
-// normalizeCIDROrIP is a package-local helper used by validate.go.
+// normalizeCIDROrIP 是供 validate.go 使用的包内辅助函数。
 func normalizeCIDROrIP(raw string) (string, error) {
 	v := strings.TrimSpace(raw)
 	if v == "" {
@@ -306,7 +306,7 @@ func normalizeCIDROrIP(raw string) (string, error) {
 	return netip.PrefixFrom(addr, bits).Masked().String(), nil
 }
 
-// normalizePortRange is a package-local helper used by validate.go.
+// normalizePortRange 是供 validate.go 使用的包内辅助函数。
 func normalizePortRange(raw string) (string, error) {
 	v := strings.TrimSpace(raw)
 	if v == "" {
@@ -340,7 +340,7 @@ func normalizePortRange(raw string) (string, error) {
 	return fmt.Sprintf("%d-%d", start, end), nil
 }
 
-// parsePort is a package-local helper used by validate.go.
+// parsePort 是供 validate.go 使用的包内辅助函数。
 func parsePort(raw string) (uint16, error) {
 	v := strings.TrimSpace(raw)
 	p, err := strconv.Atoi(v)
@@ -353,7 +353,7 @@ func parsePort(raw string) (uint16, error) {
 	return uint16(p), nil
 }
 
-// dedupeStringsPreserveOrder is a package-local helper used by validate.go.
+// dedupeStringsPreserveOrder 是供 validate.go 使用的包内辅助函数。
 func dedupeStringsPreserveOrder(items []string) []string {
 	if len(items) <= 1 {
 		return items
@@ -374,7 +374,7 @@ func dedupeStringsPreserveOrder(items []string) []string {
 	return out
 }
 
-// validateKafkaAuth is a package-local helper used by validate.go.
+// validateKafkaAuth 是供 validate.go 使用的包内辅助函数。
 func validateKafkaAuth(kind, name, mechanism, username, password string) error {
 	if mechanism == "" && username == "" && password == "" {
 		return nil
@@ -413,7 +413,7 @@ func ValidateSSHHostKeyFingerprint(f string) error {
 	return nil
 }
 
-// containsString is a package-local helper used by validate.go.
+// containsString 是供 validate.go 使用的包内辅助函数。
 func containsString(items []string, want string) bool {
 	for _, it := range items {
 		if it == want {
@@ -423,7 +423,7 @@ func containsString(items []string, want string) bool {
 	return false
 }
 
-// routeStageTargets is a package-local helper used by validate.go.
+// routeStageTargets 是供 validate.go 使用的包内辅助函数。
 func routeStageTargets(sc StageConfig) []string {
 	targets := make([]string, 0, len(sc.Cases)+1)
 	for _, sn := range sc.Cases {
@@ -438,7 +438,7 @@ func routeStageTargets(sc StageConfig) []string {
 	return targets
 }
 
-// validateSenderConcurrency is a package-local helper used by validate.go.
+// validateSenderConcurrency 是供 validate.go 使用的包内辅助函数。
 func validateSenderConcurrency(senderName string, concurrency int) error {
 	if concurrency <= 0 {
 		return nil

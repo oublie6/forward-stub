@@ -141,7 +141,7 @@ func (s *UDPMulticastSender) ensureConnLocked(idx int) error {
 	}
 	_ = c.SetWriteBuffer(s.socketSendBuffer)
 
-	// Multicast options via x/net
+	// 通过 x/net 设置组播相关 socket 选项。
 	if s.group.IP != nil && s.group.IP.To4() != nil {
 		pc := ipv4.NewPacketConn(c)
 		_ = pc.SetMulticastTTL(s.ttl)

@@ -10,7 +10,7 @@ import (
 	"forward-stub/src/sender"
 )
 
-// namedCaptureSender stores package-local state used by task_route_sender_test.go.
+// namedCaptureSender 是供 task_route_sender_test.go 使用的包内辅助结构。
 type namedCaptureSender struct {
 	name  string
 	mu    sync.Mutex
@@ -19,16 +19,16 @@ type namedCaptureSender struct {
 
 var _ sender.Sender = (*namedCaptureSender)(nil)
 
-// Name provides task-level behavior used by the runtime pipeline.
+// Name 提供运行时链路所需的 task 层行为。
 func (s *namedCaptureSender) Name() string { return s.name }
 
-// Key provides task-level behavior used by the runtime pipeline.
+// Key 提供运行时链路所需的 task 层行为。
 func (s *namedCaptureSender) Key() string { return s.name }
 
-// Close provides task-level behavior used by the runtime pipeline.
+// Close 提供运行时链路所需的 task 层行为。
 func (s *namedCaptureSender) Close(context.Context) error { return nil }
 
-// Send provides task-level behavior used by the runtime pipeline.
+// Send 提供运行时链路所需的 task 层行为。
 func (s *namedCaptureSender) Send(context.Context, *packet.Packet) error {
 	s.mu.Lock()
 	s.count++
@@ -36,14 +36,14 @@ func (s *namedCaptureSender) Send(context.Context, *packet.Packet) error {
 	return nil
 }
 
-// Count provides task-level behavior used by the runtime pipeline.
+// Count 提供运行时链路所需的 task 层行为。
 func (s *namedCaptureSender) Count() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.count
 }
 
-// TestTaskRouteSenderSendsOnlyMatchedSender verifies the TaskRouteSenderSendsOnlyMatchedSender behavior for the task package.
+// TestTaskRouteSenderSendsOnlyMatchedSender 验证 task 包中 TaskRouteSenderSendsOnlyMatchedSender 的行为。
 func TestTaskRouteSenderSendsOnlyMatchedSender(t *testing.T) {
 	s1 := &namedCaptureSender{name: "kafka-a"}
 	s2 := &namedCaptureSender{name: "kafka-b"}
@@ -66,13 +66,13 @@ func TestTaskRouteSenderSendsOnlyMatchedSender(t *testing.T) {
 	}
 }
 
-// BenchmarkTaskRouteSenderLookup benchmarks the TaskRouteSenderLookup behavior for the task package.
+// BenchmarkTaskRouteSenderLookup 对 task 包中 TaskRouteSenderLookup 的行为进行基准测试。
 func BenchmarkTaskRouteSenderLookup(b *testing.B) {
 	senders := make([]sender.Sender, 0, 64)
 	for i := 0; i < 64; i++ {
 		senders = append(senders, &namedCaptureSender{name: "s" + string(rune('A'+(i%26))) + string(rune('a'+(i/26)))})
 	}
-	// ensure a deterministic target exists.
+	// 确保存在一个稳定且可预测的目标。
 	target := &namedCaptureSender{name: "target"}
 	senders = append(senders, target)
 	tk := &Task{Name: "bench-route", ExecutionModel: ExecutionModelFastPath, Senders: senders}
