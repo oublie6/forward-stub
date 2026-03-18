@@ -9,7 +9,8 @@ data:
       "control": {
         "api": "",
         "timeout_sec": 5,
-        "config_watch_interval": "2s"
+        "config_watch_interval": "2s",
+        "pprof_port": -1
       },
       "logging": {
         "level": "info",
@@ -19,14 +20,16 @@ data:
         "compress": true,
         "max_size_mb": 100,
         "max_backups": 5,
-        "max_age_days": 30
+        "max_age_days": 30,
+        "payload_log_max_bytes": 256
       },
       "receivers": {
         "udp_in": {
           "type": "udp_gnet",
-          "listen": "udp://0.0.0.0:19000",
+          "listen": "0.0.0.0:19000",
           "multicore": true,
-          "frame": ""
+          "num_event_loop": 1,
+          "socket_recv_buffer": 1048576
         }
       },
       "senders": {
@@ -51,7 +54,7 @@ data:
         "udp-forward": {
           "pool_size": 1024,
           "queue_size": 4096,
-          "fast_path": true,
+          "execution_model": "fastpath",
           "pipelines": ["default"],
           "senders": ["udp_out"]
         }

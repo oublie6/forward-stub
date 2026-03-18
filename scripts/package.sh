@@ -45,6 +45,8 @@ for target in ${TARGETS}; do
   # 附带基础文档和示例配置，降低使用方上手成本。
   cp -f README.md "${WORK_DIR}/"
   mkdir -p "${WORK_DIR}/configs"
+  cp -f configs/system.example.json "${WORK_DIR}/configs/"
+  cp -f configs/business.example.json "${WORK_DIR}/configs/"
   cp -f configs/example.json "${WORK_DIR}/configs/"
 
   ARCHIVE_BASE="${APP_NAME}_${VERSION}_${GOOS}_${GOARCH}"
