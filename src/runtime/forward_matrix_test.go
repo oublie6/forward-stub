@@ -33,6 +33,20 @@ func freeUDPPort(t *testing.T) int {
 	return pc.LocalAddr().(*net.UDPAddr).Port
 }
 
+func dialTCPWithRetry(addr string, timeout time.Duration) (net.Conn, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
+		if err == nil {
+			return conn, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, err
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func runSingleForward(t *testing.T, recv config.ReceiverConfig, sendCfg config.SenderConfig, probe func([]byte) error) {
 	t.Helper()
 	st := NewStore()
@@ -134,7 +148,7 @@ func TestForwardMatrixTCPToTCP_Actual(t *testing.T) {
 		config.ReceiverConfig{Type: "tcp_gnet", Listen: fmt.Sprintf("tcp://127.0.0.1:%d", recvPort)},
 		config.SenderConfig{Type: "tcp_gnet", Remote: fmt.Sprintf("127.0.0.1:%d", sendPort), Concurrency: 1, Frame: "none"},
 		func(payload []byte) error {
-			conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", recvPort))
+			conn, err := dialTCPWithRetry(fmt.Sprintf("127.0.0.1:%d", recvPort), 3*time.Second)
 			if err != nil {
 				return err
 			}

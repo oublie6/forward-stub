@@ -11,7 +11,7 @@ import (
 	"forward-stub/src/task"
 )
 
-func TestMatchDispatchTasksSelectorSourceModes(t *testing.T) {
+func TestMatchDispatchTasksSelectorDefaultFallback(t *testing.T) {
 	st := NewStore()
 	st.tasks = map[string]*TaskState{
 		"default":  {Name: "default"},
@@ -65,11 +65,12 @@ func TestMatchDispatchTasksSelectorSourceModes(t *testing.T) {
 		want   []string
 	}{
 		{name: "default on invalid remote", remote: "not-an-addr", want: []string{"default"}},
-		{name: "exact ip port", remote: "10.0.0.1:9000", want: []string{"exact", "cidr", "default"}},
-		{name: "cidr only", remote: "10.0.0.2:6553", want: []string{"cidr", "default"}},
-		{name: "single port", remote: "10.9.9.9:7000", want: []string{"port", "default"}},
-		{name: "port range", remote: "10.9.9.9:8003", want: []string{"range", "default"}},
-		{name: "cidr and port range", remote: "10.0.1.3:8505", want: []string{"combined", "default"}},
+		{name: "default when all source selectors miss", remote: "192.0.2.10:9999", want: []string{"default"}},
+		{name: "exact ip port suppresses default", remote: "10.0.0.1:9000", want: []string{"exact", "cidr"}},
+		{name: "cidr only suppresses default", remote: "10.0.0.2:6553", want: []string{"cidr"}},
+		{name: "single port suppresses default", remote: "10.9.9.9:7000", want: []string{"port"}},
+		{name: "port range suppresses default", remote: "10.9.9.9:8003", want: []string{"range"}},
+		{name: "cidr and port range suppresses default", remote: "10.0.1.3:8505", want: []string{"combined"}},
 	}
 
 	for _, tc := range cases {
@@ -82,30 +83,57 @@ func TestMatchDispatchTasksSelectorSourceModes(t *testing.T) {
 	}
 }
 
-func TestMatchDispatchTasksDedupesTaskAcrossBuckets(t *testing.T) {
+func TestMatchDispatchTasksDedupesTaskAcrossBucketsAndSelectors(t *testing.T) {
 	st := NewStore()
 	st.tasks = map[string]*TaskState{
-		"t1": {Name: "t1"},
+		"shared": {Name: "shared"},
+		"extra":  {Name: "extra"},
 	}
 	st.selectorCfg = map[string]config.SelectorConfig{
 		"by-ip": {
 			Receivers: []string{"r1"},
-			Tasks:     []string{"t1"},
+			Tasks:     []string{"shared"},
 			Source:    &config.SourceSelectorConfig{SrcCIDRs: []string{"10.0.0.1"}},
 		},
 		"cidr-range": {
 			Receivers: []string{"r1"},
-			Tasks:     []string{"t1"},
+			Tasks:     []string{"shared", "extra"},
 			Source:    &config.SourceSelectorConfig{SrcCIDRs: []string{"10.0.0.0/24"}, SrcPortRanges: []string{"9000-9010"}},
 		},
-		"default": {Receivers: []string{"r1"}, Tasks: []string{"t1"}},
+		"port": {
+			Receivers: []string{"r1"},
+			Tasks:     []string{"shared"},
+			Source:    &config.SourceSelectorConfig{SrcPortRanges: []string{"9001"}},
+		},
+		"default": {Receivers: []string{"r1"}, Tasks: []string{"shared"}},
 	}
 	if err := st.refreshDispatchSubs(); err != nil {
 		t.Fatalf("refresh dispatch: %v", err)
 	}
 	got := st.matchDispatchTasks("r1", &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{Remote: "10.0.0.1:9001"}}})
-	if len(got) != 1 || got[0].Name != "t1" {
-		t.Fatalf("expected deduped single task, got=%v", taskNames(got))
+	if want := []string{"shared", "extra"}; !reflect.DeepEqual(taskNames(got), want) {
+		t.Fatalf("expected deduped source matches %v, got=%v", want, taskNames(got))
+	}
+}
+
+func TestMatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch(t *testing.T) {
+	st := NewStore()
+	st.tasks = map[string]*TaskState{
+		"t1": {Name: "t1"},
+	}
+	st.selectorCfg = map[string]config.SelectorConfig{
+		"src": {
+			Receivers: []string{"r1"},
+			Tasks:     []string{"t1"},
+			Source:    &config.SourceSelectorConfig{SrcCIDRs: []string{"10.0.0.1"}},
+		},
+	}
+	if err := st.refreshDispatchSubs(); err != nil {
+		t.Fatalf("refresh dispatch: %v", err)
+	}
+	got := st.matchDispatchTasks("r1", &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{Remote: "192.0.2.3:9000"}}})
+	if len(got) != 0 {
+		t.Fatalf("expected no matched tasks, got=%v", taskNames(got))
 	}
 }
 

@@ -179,6 +179,8 @@ config
 - key 为 selector 名称。
 - selector 绑定 `receivers + tasks`，可选附加 `source` 条件；命中后返回 task 集，而不是 bool。
 - `source` 为空表示对应 receiver 下的 default selector。
+- 同一 receiver 最多只能定义一个 default selector。
+- default selector 仅在该 receiver 下所有 source selector 都未命中时生效。
 - 当前支持 `source.src_cidrs`（单 IP 或 CIDR）与 `source.src_port_ranges`（单端口或范围）。
 
 | 字段 | 类型 | 必填 | 说明 |

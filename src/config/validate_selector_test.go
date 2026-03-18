@@ -52,6 +52,38 @@ func TestValidateSelectorConfigAndDedupes(t *testing.T) {
 	}
 }
 
+func TestValidateSelectorAllowsSingleDefaultPerReceiver(t *testing.T) {
+	cfg := baseConfigForSelectorValidation()
+	cfg.Selectors = map[string]SelectorConfig{
+		"default": {Receivers: []string{"r1"}, Tasks: []string{"t1"}},
+		"src": {
+			Receivers: []string{"r1"},
+			Tasks:     []string{"t1"},
+			Source:    &SourceSelectorConfig{SrcCIDRs: []string{"10.0.0.1"}},
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected single default selector to be valid: %v", err)
+	}
+}
+
+func TestValidateSelectorRejectsMultipleDefaultsPerReceiver(t *testing.T) {
+	cfg := baseConfigForSelectorValidation()
+	cfg.Selectors = map[string]SelectorConfig{
+		"default-a": {Receivers: []string{"r1"}, Tasks: []string{"t1"}},
+		"default-b": {Receivers: []string{"r1"}, Tasks: []string{"t1"}},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected validate to fail for duplicate default selectors")
+	}
+	if !strings.Contains(err.Error(), "receiver r1 has multiple default selectors") || !strings.Contains(err.Error(), "default-a") || !strings.Contains(err.Error(), "default-b") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestValidateSelectorRejectsInvalidCases(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -87,6 +87,9 @@ func (c *Config) Validate() error {
 		}
 		c.Selectors[sn] = sc
 	}
+	if err := validateDefaultSelectorUniqueness(c.Selectors); err != nil {
+		return err
+	}
 
 	for rn, r := range c.Receivers {
 		switch r.Type {
@@ -187,6 +190,31 @@ func (c *Config) Validate() error {
 			}
 		default:
 			return fmt.Errorf("sender %s unknown type %s", sn, s.Type)
+		}
+	}
+	return nil
+}
+
+func validateDefaultSelectorUniqueness(selectors map[string]SelectorConfig) error {
+	names := make([]string, 0, len(selectors))
+	for name := range selectors {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	defaultsByReceiver := make(map[string]string)
+	for _, selectorName := range names {
+		sc := selectors[selectorName]
+		if sc.Source != nil {
+			continue
+		}
+		receivers := append([]string(nil), sc.Receivers...)
+		sort.Strings(receivers)
+		for _, receiverName := range receivers {
+			if existing, ok := defaultsByReceiver[receiverName]; ok {
+				return fmt.Errorf("receiver %s has multiple default selectors: %s, %s", receiverName, existing, selectorName)
+			}
+			defaultsByReceiver[receiverName] = selectorName
 		}
 	}
 	return nil

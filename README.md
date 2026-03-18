@@ -1,6 +1,6 @@
 # forward-stub
 
-`forward-stub` 是一个面向高吞吐、低延迟、可热更新场景的 Go 转发引擎。系统把协议接入、选择、处理、分发统一抽象为 `receiver -> selector -> task(pipeline + sender)`，通过配置把 UDP/TCP/Kafka/SFTP 组合成可运行的数据转发链路。
+`forward-stub` 是一个面向高吞吐、低延迟、可热更新场景的 Go 转发引擎。系统把协议接入、选择、处理、分发统一抽象为 `receiver -> selector -> task(pipeline + sender)`，通过配置把 UDP/TCP/Kafka/SFTP 组合成可运行的数据转发链路。`selector.source` 为空表示 default selector；同一 receiver 最多只能有一个 default selector，且仅在该 receiver 下所有 source selector 都未命中时才会生效。
 
 ## 1. 项目简介
 

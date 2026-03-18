@@ -307,8 +307,10 @@ func (state *ReceiverSelectorDispatchState) match(addrPort netip.AddrPort) []*Ta
 			appendTasks(bucket.Tasks)
 		}
 	}
-	appendTasks(state.DefaultTasks)
-	return matched
+	if len(matched) > 0 {
+		return matched
+	}
+	return state.DefaultTasks
 }
 
 func packetRemoteAddrPort(pkt *packet.Packet) (netip.AddrPort, bool) {

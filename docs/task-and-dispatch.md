@@ -10,7 +10,7 @@ dispatch 位于 receiver 回调之后，负责：
 
 - 根据 receiver 名字查找 selector dispatch 快照。
 - 解析 `packet.Meta.Remote`，优先走精确 IP / 端口快路径，再补充 CIDR / 端口范围匹配。
-- 合并 selector 返回的 task 集，并复用现有 fan-out 语义。
+- 先合并命中的 source selector task 集；若全部 miss，再回退到 default selector，并复用现有 fan-out 语义。
 
 设计关键点：
 
@@ -41,8 +41,9 @@ task 负责一条完整链路：
 
 ## 4. 实例化关系
 
-- 一个 receiver 可以绑定多个 selector。
+- 一个 receiver 可以绑定多个 selector，但最多只有一个 default selector。
 - 一个 selector 命中后可返回多个 task。
+- default selector 只在该 receiver 的 source selector 全部未命中时生效。
 - 一个 task 可绑定多个 pipeline 和 sender。
 - 一个 sender 可以被多个 task 引用。
 
