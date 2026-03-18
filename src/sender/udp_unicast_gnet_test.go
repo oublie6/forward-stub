@@ -8,6 +8,7 @@ import (
 	"forward-stub/src/packet"
 )
 
+// TestUDPUnicastSenderAllowsSameLocalPortAcrossDifferentRemotes verifies the UDPUnicastSenderAllowsSameLocalPortAcrossDifferentRemotes behavior for the sender package.
 func TestUDPUnicastSenderAllowsSameLocalPortAcrossDifferentRemotes(t *testing.T) {
 	ln1, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
@@ -51,6 +52,7 @@ func TestUDPUnicastSenderAllowsSameLocalPortAcrossDifferentRemotes(t *testing.T)
 	}
 }
 
+// dummyPacket is a package-local helper used by udp_unicast_gnet_test.go.
 func dummyPacket(payload string) *packet.Packet {
 	return &packet.Packet{Envelope: packet.Envelope{Payload: []byte(payload)}}
 }

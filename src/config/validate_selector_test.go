@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// baseConfigForSelectorValidation is a package-local helper used by validate_selector_test.go.
 func baseConfigForSelectorValidation() Config {
 	return Config{
 		Logging: LoggingConfig{Level: "info"},
@@ -24,6 +25,7 @@ func baseConfigForSelectorValidation() Config {
 	}
 }
 
+// TestValidateSelectorConfigAndDedupes verifies the ValidateSelectorConfigAndDedupes behavior for the config package.
 func TestValidateSelectorConfigAndDedupes(t *testing.T) {
 	cfg := baseConfigForSelectorValidation()
 	cfg.Selectors["sel"] = SelectorConfig{
@@ -52,6 +54,7 @@ func TestValidateSelectorConfigAndDedupes(t *testing.T) {
 	}
 }
 
+// TestValidateSelectorAllowsSingleDefaultPerReceiver verifies the ValidateSelectorAllowsSingleDefaultPerReceiver behavior for the config package.
 func TestValidateSelectorAllowsSingleDefaultPerReceiver(t *testing.T) {
 	cfg := baseConfigForSelectorValidation()
 	cfg.Selectors = map[string]SelectorConfig{
@@ -68,6 +71,7 @@ func TestValidateSelectorAllowsSingleDefaultPerReceiver(t *testing.T) {
 	}
 }
 
+// TestValidateSelectorRejectsMultipleDefaultsPerReceiver verifies the ValidateSelectorRejectsMultipleDefaultsPerReceiver behavior for the config package.
 func TestValidateSelectorRejectsMultipleDefaultsPerReceiver(t *testing.T) {
 	cfg := baseConfigForSelectorValidation()
 	cfg.Selectors = map[string]SelectorConfig{
@@ -84,6 +88,7 @@ func TestValidateSelectorRejectsMultipleDefaultsPerReceiver(t *testing.T) {
 	}
 }
 
+// TestValidateSelectorRejectsInvalidCases verifies the ValidateSelectorRejectsInvalidCases behavior for the config package.
 func TestValidateSelectorRejectsInvalidCases(t *testing.T) {
 	tests := []struct {
 		name    string

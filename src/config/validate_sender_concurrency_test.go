@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestValidateSenderConcurrencyMustBePowerOfTwo verifies the ValidateSenderConcurrencyMustBePowerOfTwo behavior for the config package.
 func TestValidateSenderConcurrencyMustBePowerOfTwo(t *testing.T) {
 	cfg := Config{
 		Logging: LoggingConfig{Level: "info"},
@@ -26,6 +27,7 @@ func TestValidateSenderConcurrencyMustBePowerOfTwo(t *testing.T) {
 	}
 }
 
+// TestValidateSenderConcurrencyAcceptsPowerOfTwo verifies the ValidateSenderConcurrencyAcceptsPowerOfTwo behavior for the config package.
 func TestValidateSenderConcurrencyAcceptsPowerOfTwo(t *testing.T) {
 	cfg := Config{
 		Logging: LoggingConfig{Level: "info"},

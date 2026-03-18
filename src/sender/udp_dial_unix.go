@@ -8,6 +8,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// setSocketReuse is a package-local helper used by udp_dial_unix.go.
 func setSocketReuse(c syscall.RawConn) error {
 	var ctrlErr error
 	if err := c.Control(func(fd uintptr) {

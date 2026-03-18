@@ -249,6 +249,7 @@ func (s *SFTPSender) ensureConn(idx int) error {
 	return s.ensureConnLocked(idx)
 }
 
+// ensureConnLocked is a package-local helper used by sftp.go.
 func (s *SFTPSender) ensureConnLocked(idx int) error {
 	if s.sftpClis[idx] != nil && s.sshClients[idx] != nil {
 		return nil
@@ -282,6 +283,7 @@ func (s *SFTPSender) ensureConnLocked(idx int) error {
 	return nil
 }
 
+// invalidateConnLocked is a package-local helper used by sftp.go.
 func (s *SFTPSender) invalidateConnLocked(idx int) {
 	if s.sftpClis[idx] != nil {
 		_ = s.sftpClis[idx].Close()
@@ -294,6 +296,7 @@ func (s *SFTPSender) invalidateConnLocked(idx int) {
 	s.connReady[idx].Store(false)
 }
 
+// pickShard is a package-local helper used by sftp.go.
 func (s *SFTPSender) pickShard(transferID string) int {
 	if s.concurrency <= 1 {
 		return 0
@@ -308,6 +311,7 @@ func (s *SFTPSender) pickShard(transferID string) int {
 	return idx
 }
 
+// hostKeyCallback is a package-local helper used by sftp.go.
 func (s *SFTPSender) hostKeyCallback() ssh.HostKeyCallback {
 	want := strings.TrimSpace(s.hostKeyFingerprint)
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {

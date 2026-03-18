@@ -2,6 +2,7 @@ package config
 
 import "testing"
 
+// TestApplyDefaultsPayloadPoolMaxCachedBytes verifies the ApplyDefaultsPayloadPoolMaxCachedBytes behavior for the config package.
 func TestApplyDefaultsPayloadPoolMaxCachedBytes(t *testing.T) {
 	cfg := Config{}
 	cfg.ApplyDefaults()
@@ -16,6 +17,7 @@ func TestApplyDefaultsPayloadPoolMaxCachedBytes(t *testing.T) {
 	}
 }
 
+// TestValidateRejectsNegativePayloadPoolMaxCachedBytes verifies the ValidateRejectsNegativePayloadPoolMaxCachedBytes behavior for the config package.
 func TestValidateRejectsNegativePayloadPoolMaxCachedBytes(t *testing.T) {
 	cfg := Config{
 		Logging: LoggingConfig{PayloadPoolMaxCachedBytes: -1},

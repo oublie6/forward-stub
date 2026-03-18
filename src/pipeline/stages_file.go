@@ -1,3 +1,4 @@
+// stages_file.go 提供文件语义相关 stage，用于 stream/file_chunk 之间的转换。
 package pipeline
 
 import (

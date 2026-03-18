@@ -2,6 +2,7 @@ package config
 
 import "testing"
 
+// TestApplyDefaultsSetsControlDefaults verifies the ApplyDefaultsSetsControlDefaults behavior for the config package.
 func TestApplyDefaultsSetsControlDefaults(t *testing.T) {
 	cfg := Config{}
 	cfg.ApplyDefaults()
@@ -13,6 +14,7 @@ func TestApplyDefaultsSetsControlDefaults(t *testing.T) {
 	}
 }
 
+// TestApplyDefaultsKeepsDisabledPprofPort verifies the ApplyDefaultsKeepsDisabledPprofPort behavior for the config package.
 func TestApplyDefaultsKeepsDisabledPprofPort(t *testing.T) {
 	cfg := Config{Control: ControlConfig{PprofPort: -1}}
 	cfg.ApplyDefaults()
@@ -21,6 +23,7 @@ func TestApplyDefaultsKeepsDisabledPprofPort(t *testing.T) {
 	}
 }
 
+// TestApplyDefaultsSetsReceiverMulticoreWhenUnset verifies the ApplyDefaultsSetsReceiverMulticoreWhenUnset behavior for the config package.
 func TestApplyDefaultsSetsReceiverMulticoreWhenUnset(t *testing.T) {
 	cfg := Config{Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000"}}}
 	cfg.ApplyDefaults()
@@ -29,6 +32,8 @@ func TestApplyDefaultsSetsReceiverMulticoreWhenUnset(t *testing.T) {
 		t.Fatalf("unexpected receiver multicore default: %+v", rc.Multicore)
 	}
 }
+
+// TestApplyDefaultsSetsSocketBufferDefaults verifies the ApplyDefaultsSetsSocketBufferDefaults behavior for the config package.
 func TestApplyDefaultsSetsSocketBufferDefaults(t *testing.T) {
 	cfg := Config{
 		Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000"}},
@@ -44,6 +49,7 @@ func TestApplyDefaultsSetsSocketBufferDefaults(t *testing.T) {
 	}
 }
 
+// TestApplyDefaultsPreservesExplicitSocketBufferValues verifies the ApplyDefaultsPreservesExplicitSocketBufferValues behavior for the config package.
 func TestApplyDefaultsPreservesExplicitSocketBufferValues(t *testing.T) {
 	cfg := Config{
 		Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000", SocketRecvBuffer: 2 << 20}},

@@ -2,6 +2,7 @@ package config
 
 import "testing"
 
+// TestValidateKafkaSenderBufferedLimitsAllowZero verifies the ValidateKafkaSenderBufferedLimitsAllowZero behavior for the config package.
 func TestValidateKafkaSenderBufferedLimitsAllowZero(t *testing.T) {
 	cfg := kafkaSenderBaseConfig()
 	s := cfg.Senders["k1"]
@@ -13,6 +14,7 @@ func TestValidateKafkaSenderBufferedLimitsAllowZero(t *testing.T) {
 	}
 }
 
+// TestValidateKafkaSenderBufferedLimitsRejectNegative verifies the ValidateKafkaSenderBufferedLimitsRejectNegative behavior for the config package.
 func TestValidateKafkaSenderBufferedLimitsRejectNegative(t *testing.T) {
 	cfg := kafkaSenderBaseConfig()
 	s := cfg.Senders["k1"]

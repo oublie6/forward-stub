@@ -2,6 +2,7 @@ package config
 
 import "testing"
 
+// TestValidateRouteStageTargetsInTaskSenders verifies the ValidateRouteStageTargetsInTaskSenders behavior for the config package.
 func TestValidateRouteStageTargetsInTaskSenders(t *testing.T) {
 	cfg := Config{
 		Logging: LoggingConfig{Level: "info"},

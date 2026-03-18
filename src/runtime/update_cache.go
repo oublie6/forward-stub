@@ -348,6 +348,7 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	return nil
 }
 
+// businessDeltaPlan stores package-local state used by update_cache.go.
 type businessDeltaPlan struct {
 	receiverAdded   []string
 	receiverRemoved []string
@@ -359,6 +360,7 @@ type businessDeltaPlan struct {
 	taskRemoved     []string
 }
 
+// planBusinessDelta is a package-local helper used by update_cache.go.
 func planBusinessDelta(
 	oldReceivers map[string]config.ReceiverConfig,
 	oldSenders map[string]config.SenderConfig,
@@ -417,6 +419,7 @@ func splitDeltaWithReplace[T any](oldMap, newMap map[string]T) (added []string, 
 	return added, removed
 }
 
+// expandTaskDeltaForSenderChanges is a package-local helper used by update_cache.go.
 func expandTaskDeltaForSenderChanges(
 	oldTasks map[string]config.TaskConfig,
 	newTasks map[string]config.TaskConfig,
@@ -468,6 +471,7 @@ func expandTaskDeltaForSenderChanges(
 	return taskAdded, taskRemoved
 }
 
+// taskUsesChangedSender is a package-local helper used by update_cache.go.
 func taskUsesChangedSender(tc config.TaskConfig, changed map[string]struct{}) bool {
 	for _, senderName := range tc.Senders {
 		if _, ok := changed[senderName]; ok {
@@ -477,6 +481,7 @@ func taskUsesChangedSender(tc config.TaskConfig, changed map[string]struct{}) bo
 	return false
 }
 
+// expandTaskDeltaForPipelineChanges is a package-local helper used by update_cache.go.
 func expandTaskDeltaForPipelineChanges(
 	oldTasks map[string]config.TaskConfig,
 	newTasks map[string]config.TaskConfig,
@@ -528,6 +533,7 @@ func expandTaskDeltaForPipelineChanges(
 	return taskAdded, taskRemoved
 }
 
+// taskUsesChangedPipeline is a package-local helper used by update_cache.go.
 func taskUsesChangedPipeline(tc config.TaskConfig, changed map[string]struct{}) bool {
 	for _, pipelineName := range tc.Pipelines {
 		if _, ok := changed[pipelineName]; ok {
@@ -654,6 +660,7 @@ func (st *Store) startReceiver(ctx context.Context, name string, r receiver.Rece
 	return started
 }
 
+// waitReceiversStartInvoked is a package-local helper used by update_cache.go.
 func (st *Store) waitReceiversStartInvoked(started []<-chan struct{}) {
 	for _, ack := range started {
 		<-ack
@@ -909,6 +916,7 @@ func (st *Store) taskSnapshot() []map[string]any {
 	return out
 }
 
+// selectorNamesForTaskLocked is a package-local helper used by update_cache.go.
 func (st *Store) selectorNamesForTaskLocked(taskName string) []string {
 	names := make([]string, 0)
 	for selectorName, sc := range st.selectorCfg {
@@ -974,6 +982,7 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 	first.T.Handle(ctx, pkt)
 }
 
+// refreshRecvPayloadLogOptions is a package-local helper used by update_cache.go.
 func (st *Store) refreshRecvPayloadLogOptions() {
 	snapshot := make(map[string]recvPayloadLogOption)
 	st.mu.RLock()

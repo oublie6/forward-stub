@@ -11,6 +11,7 @@ import (
 	"forward-stub/src/config"
 )
 
+// TestLoadConfigPairAppliesDefaultsWithoutAPI verifies the LoadConfigPairAppliesDefaultsWithoutAPI behavior for the bootstrap package.
 func TestLoadConfigPairAppliesDefaultsWithoutAPI(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.json")
@@ -33,6 +34,7 @@ func TestLoadConfigPairAppliesDefaultsWithoutAPI(t *testing.T) {
 	}
 }
 
+// TestLoadConfigPairAppliesDefaultsAfterAPIOverride verifies the LoadConfigPairAppliesDefaultsAfterAPIOverride behavior for the bootstrap package.
 func TestLoadConfigPairAppliesDefaultsAfterAPIOverride(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"version":3,"receivers":{"r1":{"type":"udp_gnet","listen":":9001"}},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:9002"}},"pipelines":{"p1":[]},"selectors":{"sel":{"receivers":["r1"],"tasks":["t1"]}},"tasks":{"t1":{"pipelines":["p1"],"senders":["s1"]}}}`))
@@ -63,6 +65,7 @@ func TestLoadConfigPairAppliesDefaultsAfterAPIOverride(t *testing.T) {
 	}
 }
 
+// TestLoadConfigPairAPIOnlyBusinessAndMergeSystem verifies the LoadConfigPairAPIOnlyBusinessAndMergeSystem behavior for the bootstrap package.
 func TestLoadConfigPairAPIOnlyBusinessAndMergeSystem(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"version":9,"receivers":{"r1":{"type":"udp_gnet","listen":":9001"}},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:9002"}},"pipelines":{"p1":[]},"selectors":{"sel":{"receivers":["r1"],"tasks":["t1"]}},"tasks":{"t1":{"pipelines":["p1"],"senders":["s1"]}},"control":{"pprof_port":9999}}`))

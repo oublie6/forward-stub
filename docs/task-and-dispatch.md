@@ -1,5 +1,7 @@
 # Task and Dispatch
 
+> 架构基线：`receiver -> selector -> task -> pipelines -> senders`。receiver 只负责收包，selector 返回 task 集，task 负责串行执行 pipelines 并在末端 fan-out 到 senders。
+
 ## 1. 文档目标
 
 本文聚焦运行时最关键的编排路径：receiver 如何把数据送到 selector，selector 如何返回 task 集，task 如何执行 pipeline 并发送到 sender。

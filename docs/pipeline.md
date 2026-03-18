@@ -1,5 +1,7 @@
 # Pipeline
 
+> 架构基线：`receiver -> selector -> task -> pipelines -> senders`。receiver 只负责收包，selector 返回 task 集，task 负责串行执行 pipelines 并在末端 fan-out 到 senders。
+
 ## 1. pipeline 职责
 
 pipeline 是 task 内部的数据处理链。它负责在发送前对 packet 做轻量处理与元信息修改。

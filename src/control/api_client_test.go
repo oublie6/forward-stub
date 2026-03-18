@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// TestFetchBusinessConfigRejectsSystemFields verifies the FetchBusinessConfigRejectsSystemFields behavior for the control package.
 func TestFetchBusinessConfigRejectsSystemFields(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"version":1,"receivers":{},"senders":{},"pipelines":{},"tasks":{},"logging":{"level":"debug"}}`))

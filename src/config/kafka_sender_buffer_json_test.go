@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestSenderConfigKafkaBufferFieldsUnmarshal verifies the SenderConfigKafkaBufferFieldsUnmarshal behavior for the config package.
 func TestSenderConfigKafkaBufferFieldsUnmarshal(t *testing.T) {
 	var sc SenderConfig
 	if err := json.Unmarshal([]byte(`{"type":"kafka","remote":"127.0.0.1:9092","topic":"out","max_buffered_bytes":1048576,"max_buffered_records":5000}`), &sc); err != nil {

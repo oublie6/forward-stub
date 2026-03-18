@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// TestLoadSystemLocalRejectsUnknownField verifies the LoadSystemLocalRejectsUnknownField behavior for the config package.
 func TestLoadSystemLocalRejectsUnknownField(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.json")
@@ -18,6 +19,7 @@ func TestLoadSystemLocalRejectsUnknownField(t *testing.T) {
 	}
 }
 
+// TestLoadBusinessLocalRejectsUnknownField verifies the LoadBusinessLocalRejectsUnknownField behavior for the config package.
 func TestLoadBusinessLocalRejectsUnknownField(t *testing.T) {
 	dir := t.TempDir()
 	businessPath := filepath.Join(dir, "business.json")

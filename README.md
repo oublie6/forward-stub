@@ -8,7 +8,7 @@
 
 - 将多协议输入统一收敛为内部 `packet.Packet` 数据模型。
 - 通过可编排 `task` 把处理逻辑和下游分发策略配置化。
-- 在不停机前提下更新业务拓扑（receiver/sender/pipeline/task）。
+- 在不停机前提下更新业务拓扑（receiver/selector/task/pipeline/sender）。
 - 提供可观测入口（日志、流量统计、pprof、benchmark）支持运维与性能分析。
 
 ## 2. 核心能力
@@ -63,6 +63,26 @@ flowchart TD
   TaskB --> PipeB[Pipeline Process]
   PipeB --> SendB[Sender Fanout]
 ```
+
+## Dispatch Model / 数据分发模型
+
+当前分发模型已经固定为：`receiver -> selector -> task -> pipelines -> senders`。
+
+- `receiver` 只负责把协议输入转换成统一的 `packet.Packet`。
+- `selector` 负责基于 `receiver` 和 `packet.Meta.Remote` 等来源特征返回 task 集，而不是返回 bool。
+- `task` 是执行单元，负责串行执行多个 pipeline，并在末端 fan-out 到 sender。
+- `dispatch` 是 selector 驱动的热路径，不再维护 task 直接绑定 receiver 的旧模型。
+
+引入 selector 的原因是把“收包入口”和“任务命中规则”解耦，使热更新时可以聚焦于 selector snapshot，而不必让 task 直接承载 receiver 绑定关系。
+
+## Hot Path Design / 热路径设计
+
+分发热路径围绕“最少锁、最少分配、优先快路径”设计：
+
+- `dispatchSubs` 通过 `atomic.Value` 保存 `receiver -> selector snapshot`，让 dispatch 在读路径上避免主锁。
+- source 精确匹配优先走 `ip:port`、`ip`、`port` map 快路径，再补充 CIDR / 端口范围 bucket。
+- `matchDispatchTasks` 只在必要时解析 `packet.Meta.Remote`；解析失败时安全回退到 default selector，不会 panic。
+- 单 task 命中时直接复用原始 packet；多 task 命中时才 clone fan-out，尽量减少额外对象分配。
 
 ## 5. 快速开始
 

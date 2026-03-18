@@ -14,10 +14,12 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
-// UDPMulticastSender：方向A（最通用）实现
-// - 使用 net.DialUDP 绑定固定源端口（local_ip:local_port）并发送到组播地址 group
-// - 组播相关 socket option 使用 x/net 的 ipv4/ipv6 PacketConn 设置（跨平台）
-// - 设置 SO_REUSEADDR以允许多 sender 复用同一 local port
+// UDPMulticastSender 负责把处理后的 packet 发送到 UDP 组播地址。
+//
+// 设计说明：
+//   - 每个 sender 维护固定数量的 shard socket，以在并发发送和 socket 复用之间折中；
+//   - sender 位于 task 之后，不参与 selector 决策；
+//   - shard 选择只影响发送并发，不改变单个 socket 内的报文顺序。
 type UDPMulticastSender struct {
 	name             string
 	group            *net.UDPAddr
@@ -34,7 +36,7 @@ type UDPMulticastSender struct {
 	nextIdx     atomic.Uint64
 }
 
-// NewUDPMulticastSender 负责该函数对应的核心逻辑，详见实现细节。
+// NewUDPMulticastSender 创建并预热组播 sender 需要的 socket 分片。
 func NewUDPMulticastSender(name, localIP string, localPort int, group string, ifaceName string, ttl int, loop bool, socketSendBuffer, concurrency int) (*UDPMulticastSender, error) {
 	gaddr, err := net.ResolveUDPAddr("udp", group)
 	if err != nil {
@@ -72,15 +74,15 @@ func NewUDPMulticastSender(name, localIP string, localPort int, group string, if
 	return s, nil
 }
 
-// Name 负责该函数对应的核心逻辑，详见实现细节。
+// Name 返回 sender 的配置名称。
 func (s *UDPMulticastSender) Name() string { return s.name }
 
-// Key 负责该函数对应的核心逻辑，详见实现细节。
+// Key 返回用于日志和连接复用区分的稳定键。
 func (s *UDPMulticastSender) Key() string {
 	return fmt.Sprintf("udp_multicast|%s->%s", s.local.String(), s.group.String())
 }
 
-// Send 负责该函数对应的核心逻辑，详见实现细节。
+// Send 选择一个 shard socket 发送当前 packet 的 payload。
 func (s *UDPMulticastSender) Send(ctx context.Context, p *packet.Packet) error {
 	idx := nextShardIndex(&s.nextIdx, s.shardMask)
 	c := s.conns[idx].Load()
@@ -95,7 +97,7 @@ func (s *UDPMulticastSender) Send(ctx context.Context, p *packet.Packet) error {
 	return err
 }
 
-// Close 负责该函数对应的核心逻辑，详见实现细节。
+// Close 关闭当前 sender 持有的全部 shard socket。
 func (s *UDPMulticastSender) Close(ctx context.Context) error {
 	for i := 0; i < s.concurrency; i++ {
 		s.locks[i].Lock()
@@ -108,7 +110,7 @@ func (s *UDPMulticastSender) Close(ctx context.Context) error {
 	return nil
 }
 
-// getConn 负责该函数对应的核心逻辑，详见实现细节。
+// getConn 获取指定 shard 的 socket，不存在时按需重建。
 func (s *UDPMulticastSender) getConn(idx int) (*net.UDPConn, error) {
 	s.locks[idx].Lock()
 	defer s.locks[idx].Unlock()
@@ -121,14 +123,14 @@ func (s *UDPMulticastSender) getConn(idx int) (*net.UDPConn, error) {
 	return s.conns[idx].Load(), nil
 }
 
-// ensureConn 负责该函数对应的核心逻辑，详见实现细节。
+// ensureConn 在持锁后确保指定 shard 的 socket 已建立。
 func (s *UDPMulticastSender) ensureConn(idx int) error {
 	s.locks[idx].Lock()
 	defer s.locks[idx].Unlock()
 	return s.ensureConnLocked(idx)
 }
 
-// ensureConnLocked 负责该函数对应的核心逻辑，详见实现细节。
+// ensureConnLocked 在调用方已持有 shard 锁的前提下建立 socket。
 func (s *UDPMulticastSender) ensureConnLocked(idx int) error {
 	if s.conns[idx].Load() != nil {
 		return nil

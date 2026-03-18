@@ -19,6 +19,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// KafkaReceiver describes receiver-level state used by the forwarding architecture.
 type KafkaReceiver struct {
 	name    string
 	brokers []string
@@ -81,12 +82,15 @@ func NewKafkaReceiver(name string, rc config.ReceiverConfig) (*KafkaReceiver, er
 	return &KafkaReceiver{name: name, brokers: brs, topic: rc.Topic, groupID: groupID, client: cli}, nil
 }
 
+// Name provides receiver-level behavior used by the runtime pipeline.
 func (r *KafkaReceiver) Name() string { return r.name }
 
+// Key provides receiver-level behavior used by the runtime pipeline.
 func (r *KafkaReceiver) Key() string {
 	return "kafka|" + strings.Join(r.brokers, ",") + "|" + r.groupID + "|" + r.topic
 }
 
+// Start provides receiver-level behavior used by the runtime pipeline.
 func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
 
@@ -167,6 +171,7 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 	}
 }
 
+// Stop provides receiver-level behavior used by the runtime pipeline.
 func (r *KafkaReceiver) Stop(ctx context.Context) error {
 	r.mu.Lock()
 	cancel := r.cancel
@@ -186,6 +191,7 @@ func (r *KafkaReceiver) Stop(ctx context.Context) error {
 	}
 }
 
+// splitCSV is a package-local helper used by kafka.go.
 func splitCSV(v string) []string {
 	parts := strings.Split(v, ",")
 	out := make([]string, 0, len(parts))
@@ -198,6 +204,7 @@ func splitCSV(v string) []string {
 	return out
 }
 
+// kafkaIntDefault is a package-local helper used by kafka.go.
 func kafkaIntDefault(v, d int) int {
 	if v <= 0 {
 		return d
@@ -205,24 +212,30 @@ func kafkaIntDefault(v, d int) int {
 	return v
 }
 
+// kafkaPlainMechanism stores package-local state used by kafka.go.
 type kafkaPlainMechanism struct {
 	username string
 	password string
 }
 
+// Name provides receiver-level behavior used by the runtime pipeline.
 func (m kafkaPlainMechanism) Name() string { return "PLAIN" }
 
+// Authenticate provides receiver-level behavior used by the runtime pipeline.
 func (m kafkaPlainMechanism) Authenticate(_ context.Context, _ string) (sasl.Session, []byte, error) {
 	msg := []byte("\x00" + m.username + "\x00" + m.password)
 	return kafkaPlainSession{}, msg, nil
 }
 
+// kafkaPlainSession stores package-local state used by kafka.go.
 type kafkaPlainSession struct{}
 
+// Challenge provides receiver-level behavior used by the runtime pipeline.
 func (kafkaPlainSession) Challenge(_ []byte) (bool, []byte, error) {
 	return true, nil, nil
 }
 
+// buildKafkaSASLMechanism is a package-local helper used by kafka.go.
 func buildKafkaSASLMechanism(mechanism, username, password string) (sasl.Mechanism, error) {
 	mech := strings.ToUpper(strings.TrimSpace(mechanism))
 	u := strings.TrimSpace(username)

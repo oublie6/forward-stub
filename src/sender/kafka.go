@@ -18,6 +18,7 @@ import (
 	"github.com/twmb/franz-go/pkg/sasl"
 )
 
+// KafkaSender describes sender-level state used by the forwarding architecture.
 type KafkaSender struct {
 	name        string
 	brokers     []string
@@ -134,6 +135,7 @@ func (s *KafkaSender) Close(ctx context.Context) error {
 	return nil
 }
 
+// splitCSV is a package-local helper used by kafka.go.
 func splitCSV(v string) []string {
 	parts := strings.Split(v, ",")
 	out := make([]string, 0, len(parts))
@@ -146,6 +148,7 @@ func splitCSV(v string) []string {
 	return out
 }
 
+// kafkaIntDefault is a package-local helper used by kafka.go.
 func kafkaIntDefault(v, d int) int {
 	if v <= 0 {
 		return d
@@ -153,6 +156,7 @@ func kafkaIntDefault(v, d int) int {
 	return v
 }
 
+// kafkaRequiredAcks is a package-local helper used by kafka.go.
 func kafkaRequiredAcks(acks int) kgo.Acks {
 	switch acks {
 	case 0:
@@ -164,6 +168,7 @@ func kafkaRequiredAcks(acks int) kgo.Acks {
 	}
 }
 
+// kafkaCompressionCodec is a package-local helper used by kafka.go.
 func kafkaCompressionCodec(v string) (kgo.CompressionCodec, bool, error) {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "", "none":
@@ -181,24 +186,30 @@ func kafkaCompressionCodec(v string) (kgo.CompressionCodec, bool, error) {
 	}
 }
 
+// kafkaPlainMechanism stores package-local state used by kafka.go.
 type kafkaPlainMechanism struct {
 	username string
 	password string
 }
 
+// Name provides sender-level behavior used by the runtime pipeline.
 func (m kafkaPlainMechanism) Name() string { return "PLAIN" }
 
+// Authenticate provides sender-level behavior used by the runtime pipeline.
 func (m kafkaPlainMechanism) Authenticate(_ context.Context, _ string) (sasl.Session, []byte, error) {
 	msg := []byte("\x00" + m.username + "\x00" + m.password)
 	return kafkaPlainSession{}, msg, nil
 }
 
+// kafkaPlainSession stores package-local state used by kafka.go.
 type kafkaPlainSession struct{}
 
+// Challenge provides sender-level behavior used by the runtime pipeline.
 func (kafkaPlainSession) Challenge(_ []byte) (bool, []byte, error) {
 	return true, nil, nil
 }
 
+// buildKafkaSASLMechanism is a package-local helper used by kafka.go.
 func buildKafkaSASLMechanism(mechanism, username, password string) (sasl.Mechanism, error) {
 	mech := strings.ToUpper(strings.TrimSpace(mechanism))
 	u := strings.TrimSpace(username)

@@ -71,8 +71,13 @@ type CompiledPipeline struct {
 
 // StageCacheEntry 描述可复用 stage 的缓存条目。
 type StageCacheEntry struct {
-	Sig      string
-	Fn       pipeline.StageFunc
+	// Sig 是 stage 配置签名。
+	// 用法：相同签名的 stage 可以在多个 pipeline/task 之间共享实现实例。
+	Sig string
+	// Fn 是已构建好的 stage 执行函数。
+	Fn pipeline.StageFunc
+	// TaskRefs 是当前引用该 stage 的 task 数量。
 	TaskRefs int
-	Tasks    map[string]struct{}
+	// Tasks 记录具体引用该 stage 的 task 名称。
+	Tasks map[string]struct{}
 }

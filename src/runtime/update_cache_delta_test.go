@@ -10,6 +10,7 @@ import (
 	"forward-stub/src/pipeline"
 )
 
+// TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks verifies the ExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks behavior for the runtime package.
 func TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks(t *testing.T) {
 	oldTasks := map[string]config.TaskConfig{
 		"t1": {Senders: []string{"s1", "s2"}},
@@ -37,6 +38,7 @@ func TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks(t *testin
 	}
 }
 
+// TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts verifies the ExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts behavior for the runtime package.
 func TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts(t *testing.T) {
 	oldTasks := map[string]config.TaskConfig{
 		"ta": {Senders: []string{"sx"}},
@@ -66,6 +68,7 @@ func TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts(t *testin
 	}
 }
 
+// TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks verifies the ExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks behavior for the runtime package.
 func TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks(t *testing.T) {
 	oldTasks := map[string]config.TaskConfig{
 		"t1": {Pipelines: []string{"p1", "p2"}},
@@ -93,7 +96,9 @@ func TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks(t *test
 	}
 }
 
+// TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree verifies the PlanBusinessDeltaCartesianThreeByThreeByThreeByThree behavior for the runtime package.
 func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
+	// op stores package-local state used by update_cache_delta_test.go.
 	type op string
 	const (
 		opAdd    op = "add"
@@ -193,6 +198,7 @@ func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
 	}
 }
 
+// contains is a package-local helper used by update_cache_delta_test.go.
 func contains(items []string, want string) bool {
 	for _, item := range items {
 		if item == want {
@@ -202,6 +208,7 @@ func contains(items []string, want string) bool {
 	return false
 }
 
+// hasDup is a package-local helper used by update_cache_delta_test.go.
 func hasDup(items []string) bool {
 	seen := make(map[string]struct{}, len(items))
 	for _, item := range items {
@@ -213,6 +220,7 @@ func hasDup(items []string) bool {
 	return false
 }
 
+// TestApplyTaskDeltaAddUpdateRemove verifies the ApplyTaskDeltaAddUpdateRemove behavior for the runtime package.
 func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
@@ -260,6 +268,7 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	}
 }
 
+// TestRemoveTaskRefreshDispatchSnapshotImmediately verifies the RemoveTaskRefreshDispatchSnapshotImmediately behavior for the runtime package.
 func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
@@ -280,6 +289,7 @@ func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
 	}
 }
 
+// TestApplyBusinessDeltaUpdatesPayloadLogOptions verifies the ApplyBusinessDeltaUpdatesPayloadLogOptions behavior for the runtime package.
 func TestApplyBusinessDeltaUpdatesPayloadLogOptions(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}

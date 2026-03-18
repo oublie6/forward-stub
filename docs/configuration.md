@@ -1,5 +1,7 @@
 # Configuration（权威配置文档）
 
+> 架构基线：`receiver -> selector -> task -> pipelines -> senders`。receiver 只负责收包，selector 返回 task 集，task 负责串行执行 pipelines 并在末端 fan-out 到 senders。
+
 > 本文以当前源码实现为准，覆盖配置定义、默认值、校验规则、继承覆盖关系和运行时行为。README 仅保留摘要与入口。
 
 ## 1. 文档概览
@@ -460,8 +462,8 @@ config
 ## 6.4 缺失导致校验失败的常见项
 
 - 无 task。
-- task 缺 receiver/sender。
-- task 引用了不存在的 receiver/sender/pipeline。
+- task 缺 sender。
+- selector 引用了不存在的 receiver/task，或 task/sender/pipeline 引用关系不完整。
 - Kafka receiver 缺 `listen/topic`。
 - SFTP receiver 缺 `listen/username/password/remote_dir/host_key_fingerprint`。
 - Kafka sender 缺 `remote/topic`。

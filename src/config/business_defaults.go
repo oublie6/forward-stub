@@ -147,6 +147,7 @@ func (c *Config) ApplyDefaults() {
 	}
 }
 
+// max is a package-local helper used by business_defaults.go.
 func max(a, b int) int {
 	if a > b {
 		return a

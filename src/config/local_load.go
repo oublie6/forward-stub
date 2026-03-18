@@ -9,6 +9,7 @@ import (
 	"os"
 )
 
+// decodeJSONStrict is a package-local helper used by local_load.go.
 func decodeJSONStrict(data []byte, v interface{}) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()

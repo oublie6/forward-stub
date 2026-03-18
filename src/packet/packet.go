@@ -90,6 +90,8 @@ type Packet struct {
 }
 
 // Release 释放当前 packet 占用的可回收资源。
+//
+// Release 对象池回收是幂等的：首次调用后会清空 ReleaseFn，避免重复归还。
 func (p *Packet) Release() {
 	if p.ReleaseFn != nil {
 		p.ReleaseFn()

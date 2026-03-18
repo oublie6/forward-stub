@@ -6,6 +6,7 @@ import (
 	"forward-stub/src/config"
 )
 
+// TestSystemConfigChangeRequiresRestart verifies the SystemConfigChangeRequiresRestart behavior for the app package.
 func TestSystemConfigChangeRequiresRestart(t *testing.T) {
 	rt := NewRuntime()
 	base := config.SystemConfig{Logging: config.LoggingConfig{Level: "info"}}

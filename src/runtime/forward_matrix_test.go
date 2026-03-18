@@ -13,6 +13,7 @@ import (
 	"forward-stub/src/task"
 )
 
+// freeTCPPort is a package-local helper used by forward_matrix_test.go.
 func freeTCPPort(t *testing.T) int {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -23,6 +24,7 @@ func freeTCPPort(t *testing.T) int {
 	return ln.Addr().(*net.TCPAddr).Port
 }
 
+// freeUDPPort is a package-local helper used by forward_matrix_test.go.
 func freeUDPPort(t *testing.T) int {
 	t.Helper()
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -33,6 +35,7 @@ func freeUDPPort(t *testing.T) int {
 	return pc.LocalAddr().(*net.UDPAddr).Port
 }
 
+// dialTCPWithRetry is a package-local helper used by forward_matrix_test.go.
 func dialTCPWithRetry(addr string, timeout time.Duration) (net.Conn, error) {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -47,6 +50,7 @@ func dialTCPWithRetry(addr string, timeout time.Duration) (net.Conn, error) {
 	}
 }
 
+// runSingleForward is a package-local helper used by forward_matrix_test.go.
 func runSingleForward(t *testing.T, recv config.ReceiverConfig, sendCfg config.SenderConfig, probe func([]byte) error) {
 	t.Helper()
 	st := NewStore()
@@ -74,6 +78,7 @@ func runSingleForward(t *testing.T, recv config.ReceiverConfig, sendCfg config.S
 	}
 }
 
+// TestForwardMatrixUDPToUDP_Actual verifies the ForwardMatrixUDPToUDP_Actual behavior for the runtime package.
 func TestForwardMatrixUDPToUDP_Actual(t *testing.T) {
 	recvPort := freeUDPPort(t)
 	sendPort := freeUDPPort(t)
@@ -119,6 +124,7 @@ func TestForwardMatrixUDPToUDP_Actual(t *testing.T) {
 	)
 }
 
+// TestForwardMatrixTCPToTCP_Actual verifies the ForwardMatrixTCPToTCP_Actual behavior for the runtime package.
 func TestForwardMatrixTCPToTCP_Actual(t *testing.T) {
 	recvPort := freeTCPPort(t)
 	sendPort := freeTCPPort(t)
@@ -169,6 +175,7 @@ func TestForwardMatrixTCPToTCP_Actual(t *testing.T) {
 	)
 }
 
+// TestForwardMatrixKafkaAndSFTPSimulated verifies the ForwardMatrixKafkaAndSFTPSimulated behavior for the runtime package.
 func TestForwardMatrixKafkaAndSFTPSimulated(t *testing.T) {
 	if _, err := buildReceiver("kr", config.ReceiverConfig{Type: "kafka", Listen: "127.0.0.1:9092"}, "error"); err == nil {
 		t.Fatalf("expected kafka receiver build to fail when topic is missing")
@@ -185,6 +192,7 @@ func TestForwardMatrixKafkaAndSFTPSimulated(t *testing.T) {
 	}
 }
 
+// TestBuildSenderRejectsUnknownTCPFrame verifies the BuildSenderRejectsUnknownTCPFrame behavior for the runtime package.
 func TestBuildSenderRejectsUnknownTCPFrame(t *testing.T) {
 	_, err := buildSender("tcp1", config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:9", Frame: "bad_frame"}, "error")
 	if err == nil {
@@ -192,6 +200,7 @@ func TestBuildSenderRejectsUnknownTCPFrame(t *testing.T) {
 	}
 }
 
+// TestSimulatedDispatchAcrossProtocolCombinations verifies the SimulatedDispatchAcrossProtocolCombinations behavior for the runtime package.
 func TestSimulatedDispatchAcrossProtocolCombinations(t *testing.T) {
 	types := []string{"udp", "tcp", "kafka", "sftp"}
 	for _, in := range types {

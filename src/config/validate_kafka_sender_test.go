@@ -2,6 +2,7 @@ package config
 
 import "testing"
 
+// kafkaSenderBaseConfig is a package-local helper used by validate_kafka_sender_test.go.
 func kafkaSenderBaseConfig() Config {
 	cfg := Config{
 		Version: 1,
@@ -22,6 +23,7 @@ func kafkaSenderBaseConfig() Config {
 	return cfg
 }
 
+// TestValidateKafkaSenderIdempotentAcksConstraint verifies the ValidateKafkaSenderIdempotentAcksConstraint behavior for the config package.
 func TestValidateKafkaSenderIdempotentAcksConstraint(t *testing.T) {
 	cfg := kafkaSenderBaseConfig()
 	v := true
@@ -34,6 +36,7 @@ func TestValidateKafkaSenderIdempotentAcksConstraint(t *testing.T) {
 	}
 }
 
+// TestValidateKafkaSenderIdempotentAllowsConfiguredMaxInFlight verifies the ValidateKafkaSenderIdempotentAllowsConfiguredMaxInFlight behavior for the config package.
 func TestValidateKafkaSenderIdempotentAllowsConfiguredMaxInFlight(t *testing.T) {
 	cfg := kafkaSenderBaseConfig()
 	v := true
@@ -46,6 +49,7 @@ func TestValidateKafkaSenderIdempotentAllowsConfiguredMaxInFlight(t *testing.T) 
 	}
 }
 
+// TestValidateKafkaSenderNonIdempotentAllowsAcks1 verifies the ValidateKafkaSenderNonIdempotentAllowsAcks1 behavior for the config package.
 func TestValidateKafkaSenderNonIdempotentAllowsAcks1(t *testing.T) {
 	cfg := kafkaSenderBaseConfig()
 	v := false
@@ -60,6 +64,7 @@ func TestValidateKafkaSenderNonIdempotentAllowsAcks1(t *testing.T) {
 	}
 }
 
+// TestKafkaAcksConfigUnmarshal verifies the KafkaAcksConfigUnmarshal behavior for the config package.
 func TestKafkaAcksConfigUnmarshal(t *testing.T) {
 	var a KafkaAcksConfig
 	if err := a.UnmarshalJSON([]byte("-1")); err != nil {

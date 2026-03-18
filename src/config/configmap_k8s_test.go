@@ -8,6 +8,7 @@ import (
 	"testing"
 )
 
+// TestK8sConfigMapConfigJSONIsValid verifies the K8sConfigMapConfigJSONIsValid behavior for the config package.
 func TestK8sConfigMapConfigJSONIsValid(t *testing.T) {
 	raw, err := loadK8sConfigMapConfigJSON("../../deploy/k8s/configmap.yaml")
 	if err != nil {
@@ -25,6 +26,7 @@ func TestK8sConfigMapConfigJSONIsValid(t *testing.T) {
 	}
 }
 
+// loadK8sConfigMapConfigJSON is a package-local helper used by configmap_k8s_test.go.
 func loadK8sConfigMapConfigJSON(path string) (string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {

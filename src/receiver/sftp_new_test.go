@@ -6,6 +6,7 @@ import (
 	"forward-stub/src/config"
 )
 
+// TestNewSFTPReceiverRejectsInvalidFingerprint verifies the NewSFTPReceiverRejectsInvalidFingerprint behavior for the receiver package.
 func TestNewSFTPReceiverRejectsInvalidFingerprint(t *testing.T) {
 	_, err := NewSFTPReceiver("r1", config.ReceiverConfig{
 		Listen:             "127.0.0.1:22",

@@ -9,6 +9,7 @@ import (
 	"forward-stub/src/packet"
 )
 
+// TestUDPUnicastSenderWithConcurrencySendsPackets verifies the UDPUnicastSenderWithConcurrencySendsPackets behavior for the sender package.
 func TestUDPUnicastSenderWithConcurrencySendsPackets(t *testing.T) {
 	ln, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {

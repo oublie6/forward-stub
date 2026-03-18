@@ -10,6 +10,7 @@ import (
 	"forward-stub/src/sender"
 )
 
+// namedCaptureSender stores package-local state used by task_route_sender_test.go.
 type namedCaptureSender struct {
 	name  string
 	mu    sync.Mutex
@@ -18,9 +19,16 @@ type namedCaptureSender struct {
 
 var _ sender.Sender = (*namedCaptureSender)(nil)
 
-func (s *namedCaptureSender) Name() string                { return s.name }
-func (s *namedCaptureSender) Key() string                 { return s.name }
+// Name provides task-level behavior used by the runtime pipeline.
+func (s *namedCaptureSender) Name() string { return s.name }
+
+// Key provides task-level behavior used by the runtime pipeline.
+func (s *namedCaptureSender) Key() string { return s.name }
+
+// Close provides task-level behavior used by the runtime pipeline.
 func (s *namedCaptureSender) Close(context.Context) error { return nil }
+
+// Send provides task-level behavior used by the runtime pipeline.
 func (s *namedCaptureSender) Send(context.Context, *packet.Packet) error {
 	s.mu.Lock()
 	s.count++
@@ -28,12 +36,14 @@ func (s *namedCaptureSender) Send(context.Context, *packet.Packet) error {
 	return nil
 }
 
+// Count provides task-level behavior used by the runtime pipeline.
 func (s *namedCaptureSender) Count() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.count
 }
 
+// TestTaskRouteSenderSendsOnlyMatchedSender verifies the TaskRouteSenderSendsOnlyMatchedSender behavior for the task package.
 func TestTaskRouteSenderSendsOnlyMatchedSender(t *testing.T) {
 	s1 := &namedCaptureSender{name: "kafka-a"}
 	s2 := &namedCaptureSender{name: "kafka-b"}
@@ -56,6 +66,7 @@ func TestTaskRouteSenderSendsOnlyMatchedSender(t *testing.T) {
 	}
 }
 
+// BenchmarkTaskRouteSenderLookup benchmarks the TaskRouteSenderLookup behavior for the task package.
 func BenchmarkTaskRouteSenderLookup(b *testing.B) {
 	senders := make([]sender.Sender, 0, 64)
 	for i := 0; i < 64; i++ {

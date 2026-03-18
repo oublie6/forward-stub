@@ -25,6 +25,9 @@ const (
 // Task 表示一条完整数据处理链路：
 // input packet -> pipelines -> senders。
 //
+// 架构位置：selector 负责决定“哪些 task 被命中”，Task 负责命中后的执行；
+// 它不再直接绑定 receiver，而是专注于串行执行 pipelines 并在末端 fan-out 到 senders。
+//
 // 运行模型：
 //  1. fastpath：当前 goroutine 内同步执行，低延迟；
 //  2. pool：走 ants worker pool（高吞吐、可控并发）；
@@ -60,12 +63,13 @@ type Task struct {
 	inflightCount atomic.Int64
 }
 
+// taskRequest 是 channel 执行模型在队列中传递的最小工作单元。
 type taskRequest struct {
 	ctx context.Context
 	pkt *packet.Packet
 }
 
-// Start 初始化任务执行模型。
+// Start 初始化 Task 的执行模型、发送侧索引和可观测状态。
 func (t *Task) Start() error {
 	if t.PoolSize <= 0 {
 		// 默认采用 4096，优先提升发送侧受限场景吞吐。
@@ -112,7 +116,9 @@ func (t *Task) Start() error {
 }
 
 // Handle 接收单个 packet 并提交处理。
+//
 // 生命周期约束：谁持有 packet 谁负责 Release。
+// 分配说明：fastpath 不额外分配；pool/channel 仅创建轻量闭包或 taskRequest。
 func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 	if !t.accepting.Load() {
 		pkt.Release()
@@ -161,6 +167,7 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 	}
 }
 
+// channelWorker 消费 channel 执行模型中的排队请求，并保持 task 内顺序处理。
 func (t *Task) channelWorker() {
 	defer t.wg.Done()
 	for req := range t.ch {
@@ -173,6 +180,7 @@ func (t *Task) channelWorker() {
 	}
 }
 
+// resolveExecutionModel 解析最终执行模型，并兼容历史 FastPath 配置。
 func (t *Task) resolveExecutionModel() string {
 	if t.ExecutionModel == "" {
 		if t.FastPath {
@@ -240,6 +248,8 @@ func (t *Task) StopGraceful() {
 }
 
 // processAndSend 依次执行 pipeline，再将结果发送到所有 sender。
+//
+// 该函数位于 task 的核心执行路径上：任一 pipeline 返回 false 会立刻终止后续发送。
 func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 	for _, pl := range t.Pipelines {
 		if !pl.Process(pkt) {
@@ -259,6 +269,7 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 	}
 }
 
+// payloadHex 把 payload 编码为十六进制摘要，供日志输出使用。
 func payloadHex(b []byte, max int) string {
 	if len(b) == 0 {
 		return ""
@@ -272,6 +283,7 @@ func payloadHex(b []byte, max int) string {
 	return hex.EncodeToString(b)
 }
 
+// runtimeStats 生成 Task 的瞬时运行统计，供 observability 与热更新日志读取。
 func (t *Task) runtimeStats() logx.TaskRuntimeStats {
 	stats := logx.TaskRuntimeStats{
 		PoolSize:  t.PoolSize,
@@ -305,6 +317,7 @@ func (t *Task) runtimeStats() logx.TaskRuntimeStats {
 	return stats
 }
 
+// rebuildSenderIndex 为 RouteSender 场景重建 sender 名称到实例的索引。
 func (t *Task) rebuildSenderIndex() {
 	if len(t.Senders) == 0 {
 		t.sendersByName = nil
@@ -320,6 +333,7 @@ func (t *Task) rebuildSenderIndex() {
 	t.sendersByName = idx
 }
 
+// sendToSender 执行单个 sender 的发送动作，并在需要时补充流量统计和 payload 日志。
 func (t *Task) sendToSender(ctx context.Context, pkt *packet.Packet, s sender.Sender) {
 	if t.sendStats != nil {
 		t.sendStats.AddBytes(len(pkt.Payload))

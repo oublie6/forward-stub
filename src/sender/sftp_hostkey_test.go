@@ -8,6 +8,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// TestSFTPSenderHostKeyCallback verifies the SFTPSenderHostKeyCallback behavior for the sender package.
 func TestSFTPSenderHostKeyCallback(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {

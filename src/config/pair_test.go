@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// TestLoadLocalPairAppliesSystemBusinessDefaults verifies the LoadLocalPairAppliesSystemBusinessDefaults behavior for the config package.
 func TestLoadLocalPairAppliesSystemBusinessDefaults(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.json")
@@ -30,6 +31,7 @@ func TestLoadLocalPairAppliesSystemBusinessDefaults(t *testing.T) {
 	}
 }
 
+// TestLoadLocalPairDoesNotApplyRuntimeDefaults verifies the LoadLocalPairDoesNotApplyRuntimeDefaults behavior for the config package.
 func TestLoadLocalPairDoesNotApplyRuntimeDefaults(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.json")

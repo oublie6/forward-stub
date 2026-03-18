@@ -1,5 +1,7 @@
 # Architecture
 
+> 架构基线：`receiver -> selector -> task -> pipelines -> senders`。receiver 只负责收包，selector 返回 task 集，task 负责串行执行 pipelines 并在末端 fan-out 到 senders。
+
 ## 1. 系统定位
 
 `forward-stub` 是一个配置驱动的转发引擎。核心目标不是提供复杂业务计算，而是稳定地完成多协议接入、轻量数据处理和多下游分发。

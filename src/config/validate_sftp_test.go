@@ -2,6 +2,7 @@ package config
 
 import "testing"
 
+// TestValidateSFTPReceiverRequiresFields verifies the ValidateSFTPReceiverRequiresFields behavior for the config package.
 func TestValidateSFTPReceiverRequiresFields(t *testing.T) {
 	cfg := Config{
 		Receivers: map[string]ReceiverConfig{

@@ -1,5 +1,7 @@
 # Operations
 
+> 架构基线：`receiver -> selector -> task -> pipelines -> senders`。receiver 只负责收包，selector 返回 task 集，task 负责串行执行 pipelines 并在末端 fan-out 到 senders。
+
 ## 1. 运维目标
 
 本文面向值班和维护人员，提供日常操作、巡检、变更和风险控制建议。

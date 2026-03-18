@@ -2,6 +2,7 @@ package runtime
 
 import "testing"
 
+// TestRefreshRecvPayloadLogOptionsBuildsSnapshot verifies the RefreshRecvPayloadLogOptionsBuildsSnapshot behavior for the runtime package.
 func TestRefreshRecvPayloadLogOptionsBuildsSnapshot(t *testing.T) {
 	st := NewStore()
 	st.mu.Lock()

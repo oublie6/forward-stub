@@ -2,6 +2,7 @@ package config
 
 import "testing"
 
+// baseConfigForTaskModel is a package-local helper used by validate_execution_model_test.go.
 func baseConfigForTaskModel() Config {
 	return Config{
 		Version: 1,
@@ -19,6 +20,7 @@ func baseConfigForTaskModel() Config {
 	}
 }
 
+// TestValidateTaskExecutionModel verifies the ValidateTaskExecutionModel behavior for the config package.
 func TestValidateTaskExecutionModel(t *testing.T) {
 	cfg := baseConfigForTaskModel()
 	if err := cfg.Validate(); err != nil {

@@ -6,11 +6,13 @@ import (
 	"testing"
 )
 
+// captureInfowLogger stores package-local state used by pprof_middleware_test.go.
 type captureInfowLogger struct {
 	msg    string
 	fields map[string]interface{}
 }
 
+// Infow provides bootstrap-level behavior used by the runtime pipeline.
 func (l *captureInfowLogger) Infow(msg string, kv ...interface{}) {
 	l.msg = msg
 	l.fields = map[string]interface{}{}
@@ -23,6 +25,7 @@ func (l *captureInfowLogger) Infow(msg string, kv ...interface{}) {
 	}
 }
 
+// TestWithPprofRequestLogRecordsRequestDetails verifies the WithPprofRequestLogRecordsRequestDetails behavior for the bootstrap package.
 func TestWithPprofRequestLogRecordsRequestDetails(t *testing.T) {
 	lg := &captureInfowLogger{}
 	h := withPprofRequestLog(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

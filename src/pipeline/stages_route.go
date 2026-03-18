@@ -1,3 +1,4 @@
+// stages_route.go 提供按 payload 字段选择目标 sender 的路由 stage。
 package pipeline
 
 import "forward-stub/src/packet"

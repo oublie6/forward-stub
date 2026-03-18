@@ -11,6 +11,7 @@ import (
 	"forward-stub/src/task"
 )
 
+// TestMatchDispatchTasksSelectorDefaultFallback verifies the MatchDispatchTasksSelectorDefaultFallback behavior for the runtime package.
 func TestMatchDispatchTasksSelectorDefaultFallback(t *testing.T) {
 	st := NewStore()
 	st.tasks = map[string]*TaskState{
@@ -83,6 +84,7 @@ func TestMatchDispatchTasksSelectorDefaultFallback(t *testing.T) {
 	}
 }
 
+// TestMatchDispatchTasksDedupesTaskAcrossBucketsAndSelectors verifies the MatchDispatchTasksDedupesTaskAcrossBucketsAndSelectors behavior for the runtime package.
 func TestMatchDispatchTasksDedupesTaskAcrossBucketsAndSelectors(t *testing.T) {
 	st := NewStore()
 	st.tasks = map[string]*TaskState{
@@ -116,6 +118,7 @@ func TestMatchDispatchTasksDedupesTaskAcrossBucketsAndSelectors(t *testing.T) {
 	}
 }
 
+// TestMatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch verifies the MatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch behavior for the runtime package.
 func TestMatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch(t *testing.T) {
 	st := NewStore()
 	st.tasks = map[string]*TaskState{
@@ -137,6 +140,7 @@ func TestMatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch(t *testing.
 	}
 }
 
+// TestDispatchUsesSelectorSnapshotForCloneFanout verifies the DispatchUsesSelectorSnapshotForCloneFanout behavior for the runtime package.
 func TestDispatchUsesSelectorSnapshotForCloneFanout(t *testing.T) {
 	ctx := context.Background()
 	s1 := &captureSender{name: "s1"}
@@ -186,6 +190,7 @@ func TestDispatchUsesSelectorSnapshotForCloneFanout(t *testing.T) {
 	}
 }
 
+// taskNames is a package-local helper used by selector_dispatch_test.go.
 func taskNames(tasks []*TaskState) []string {
 	out := make([]string, 0, len(tasks))
 	for _, ts := range tasks {

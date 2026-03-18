@@ -11,6 +11,7 @@ import (
 
 var version = "dev"
 
+// main starts the forward-stub process from the command-line entrypoint.
 func main() {
 	os.Exit(bootstrap.Run(version, os.Args[1:]))
 }

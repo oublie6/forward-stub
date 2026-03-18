@@ -1,3 +1,4 @@
+// pair.go 负责双文件配置模式下的路径解析与本地加载。
 package config
 
 import "fmt"

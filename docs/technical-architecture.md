@@ -1,5 +1,7 @@
 # forward-stub 技术架构（2026 复审版）
 
+> 架构基线：`receiver -> selector -> task -> pipelines -> senders`。receiver 只负责收包，selector 返回 task 集，task 负责串行执行 pipelines 并在末端 fan-out 到 senders。
+
 本文聚焦：模块边界、数据路径、性能设计、扩展点、安全基线与运维策略。本文按“首次接手项目”的阅读路径组织：先看分层，再看时序，再看性能和扩展。
 
 ## 1. 架构分层

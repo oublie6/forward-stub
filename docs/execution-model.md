@@ -1,5 +1,7 @@
 # Execution Model
 
+> 架构基线：`receiver -> selector -> task -> pipelines -> senders`。receiver 只负责收包，selector 返回 task 集，task 负责串行执行 pipelines 并在末端 fan-out 到 senders。
+
 ## 1. 设计目的
 
 `Task` 负责把 packet 变成下游发送动作。为兼顾不同链路目标，系统提供三种执行模型：

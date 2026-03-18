@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestNextShardIndexPowerOfTwoRoundRobin verifies the NextShardIndexPowerOfTwoRoundRobin behavior for the sender package.
 func TestNextShardIndexPowerOfTwoRoundRobin(t *testing.T) {
 	var next atomic.Uint64
 	got := []int{
@@ -22,6 +23,7 @@ func TestNextShardIndexPowerOfTwoRoundRobin(t *testing.T) {
 	}
 }
 
+// TestNextShardIndexSingleShardAlwaysZero verifies the NextShardIndexSingleShardAlwaysZero behavior for the sender package.
 func TestNextShardIndexSingleShardAlwaysZero(t *testing.T) {
 	var next atomic.Uint64
 	got := []int{
@@ -37,6 +39,7 @@ func TestNextShardIndexSingleShardAlwaysZero(t *testing.T) {
 	}
 }
 
+// TestNextShardIndexUsesBitMaskWhenCounterOutOfBound verifies the NextShardIndexUsesBitMaskWhenCounterOutOfBound behavior for the sender package.
 func TestNextShardIndexUsesBitMaskWhenCounterOutOfBound(t *testing.T) {
 	var next atomic.Uint64
 	next.Store(100)
@@ -50,6 +53,8 @@ func TestNextShardIndexUsesBitMaskWhenCounterOutOfBound(t *testing.T) {
 		t.Fatalf("idx=%d want=3", got)
 	}
 }
+
+// TestKafkaNextShardIndexRoundRobin verifies the KafkaNextShardIndexRoundRobin behavior for the sender package.
 func TestKafkaNextShardIndexRoundRobin(t *testing.T) {
 	s := &KafkaSender{concurrency: 4, shardMask: 3}
 	got := []int{
@@ -67,6 +72,7 @@ func TestKafkaNextShardIndexRoundRobin(t *testing.T) {
 	}
 }
 
+// TestUDPPickShardRoundRobin verifies the UDPPickShardRoundRobin behavior for the sender package.
 func TestUDPPickShardRoundRobin(t *testing.T) {
 	u := &UDPUnicastSender{concurrency: 2, shardMask: 1}
 	m := &UDPMulticastSender{concurrency: 2, shardMask: 1}
@@ -78,6 +84,7 @@ func TestUDPPickShardRoundRobin(t *testing.T) {
 	}
 }
 
+// TestSFTPPickShardTransferAffinityWithRoundRobinAssignment verifies the SFTPPickShardTransferAffinityWithRoundRobinAssignment behavior for the sender package.
 func TestSFTPPickShardTransferAffinityWithRoundRobinAssignment(t *testing.T) {
 	s := &SFTPSender{concurrency: 4, shardMask: 3, transferShard: map[string]int{}}
 	if got := s.pickShard("t1"); got != 1 {

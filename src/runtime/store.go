@@ -11,17 +11,17 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// Store 持有运行时对象的全集快照。
-
-type recvPayloadLogOption struct {
-	enabled bool
-	max     int
-}
-
-// 设计说明：
-//  1. 通过单把互斥锁保护元数据 map，避免复杂的细粒度锁导致状态不一致；
-//  2. UpdateCache 在重建时整体替换 map，Store 提供“快照后异步处理”的能力；
-//  3. 停机阶段使用并发关闭，缩短 receiver/sender 数量较多场景下的整体停机耗时。
+// Store 持有当前生效的运行时拓扑快照。
+//
+// 架构位置：
+//   - receiver 负责把外部输入转换为 packet.Packet；
+//   - selector 快照负责按 receiver + source 特征返回 task 集；
+//   - task 继续串行执行 pipelines 并在末端 fan-out 到 senders。
+//
+// 并发模型：
+//   - 元数据 map 由 mu 保护，用于热更新时替换实例；
+//   - dispatch 热路径只读取 dispatchSubs / recvPayloadLogOptions 这两个 atomic 快照；
+//   - selectorCfg 保留配置形态，供 refreshDispatchSubs 编译新的 selector snapshot。
 type Store struct {
 	mu sync.RWMutex
 
@@ -38,6 +38,8 @@ type Store struct {
 	// stageCache 保存可复用 stage 实例及其被 task 使用计数。
 	stageCache map[string]*StageCacheEntry
 
+	// selectorCfg 保留最近一次生效的 selector 配置快照。
+	// 用法：热更新线程在持锁路径内更新它，refreshDispatchSubs 再把它编译成热路径可读的 dispatchSubs。
 	selectorCfg map[string]config.SelectorConfig
 
 	// dispatchSubs 保存 receiver -> selector dispatch state 的只读快照，供 dispatch 热路径无锁读取。
@@ -48,7 +50,14 @@ type Store struct {
 	payloadLogDefaultMax int
 }
 
-// NewStore 负责该函数对应的核心逻辑，详见实现细节。
+// recvPayloadLogOption 描述 dispatch 热路径需要读取的 receiver payload 日志策略。
+// 把它单独做成原子快照可以避免 dispatch 为了打印日志再读取 receiver map 并持锁。
+type recvPayloadLogOption struct {
+	enabled bool
+	max     int
+}
+
+// NewStore 创建一个空的 Store，并初始化 dispatch/日志相关的只读快照。
 func NewStore() *Store {
 	s := &Store{
 		receivers:         make(map[string]*ReceiverState),
@@ -65,7 +74,9 @@ func NewStore() *Store {
 	return s
 }
 
-// setDispatchSubs 负责该函数对应的核心逻辑，详见实现细节。
+// setDispatchSubs 原子替换 receiver -> selector dispatch snapshot。
+//
+// 该函数不加锁，因为它只更新 dispatch 热路径读取的 atomic.Value。
 func (s *Store) setDispatchSubs(m map[string]*ReceiverSelectorDispatchState) {
 	s.dispatchSubs.Store(m)
 }

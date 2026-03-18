@@ -9,6 +9,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+// TestNewKafkaSenderAppliesBufferedOptions verifies the NewKafkaSenderAppliesBufferedOptions behavior for the sender package.
 func TestNewKafkaSenderAppliesBufferedOptions(t *testing.T) {
 	s, err := NewKafkaSender("k1", config.SenderConfig{
 		Type:               "kafka",
@@ -35,6 +36,7 @@ func TestNewKafkaSenderAppliesBufferedOptions(t *testing.T) {
 	}
 }
 
+// TestNewKafkaSenderKeepsFranzDefaultsForBufferedOptionsWhenUnset verifies the NewKafkaSenderKeepsFranzDefaultsForBufferedOptionsWhenUnset behavior for the sender package.
 func TestNewKafkaSenderKeepsFranzDefaultsForBufferedOptionsWhenUnset(t *testing.T) {
 	s, err := NewKafkaSender("k1", config.SenderConfig{
 		Type:        "kafka",

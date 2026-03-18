@@ -6,6 +6,7 @@ import (
 	"forward-stub/src/packet"
 )
 
+// TestRouteSenderByOffsetBytes verifies the RouteSenderByOffsetBytes behavior for the pipeline package.
 func TestRouteSenderByOffsetBytes(t *testing.T) {
 	st := RouteSenderByOffsetBytes(1, 2, map[string]string{string([]byte{0xAA, 0xBB}): "kafka-a"}, "")
 	p := &packet.Packet{Envelope: packet.Envelope{Payload: []byte{0x00, 0xAA, 0xBB, 0xCC}}}
@@ -17,6 +18,7 @@ func TestRouteSenderByOffsetBytes(t *testing.T) {
 	}
 }
 
+// TestRouteSenderByOffsetBytesDefault verifies the RouteSenderByOffsetBytesDefault behavior for the pipeline package.
 func TestRouteSenderByOffsetBytesDefault(t *testing.T) {
 	st := RouteSenderByOffsetBytes(0, 1, map[string]string{string([]byte{0x11}): "s1"}, "default-s")
 	p := &packet.Packet{Envelope: packet.Envelope{Payload: []byte{0x22}}}

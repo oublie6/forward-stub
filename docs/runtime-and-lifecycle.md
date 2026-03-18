@@ -1,5 +1,7 @@
 # Runtime and Lifecycle
 
+> 架构基线：`receiver -> selector -> task -> pipelines -> senders`。receiver 只负责收包，selector 返回 task 集，task 负责串行执行 pipelines 并在末端 fan-out 到 senders。
+
 ## 1. 文档目标
 
 本文说明系统如何从配置文件变成运行中的 receiver/selector/task/pipeline/sender 实例，以及热更新和退出时的资源管理路径。

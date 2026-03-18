@@ -10,6 +10,7 @@ import (
 	"forward-stub/src/task"
 )
 
+// captureSender stores package-local state used by update_cache_test.go.
 type captureSender struct {
 	name string
 
@@ -19,10 +20,13 @@ type captureSender struct {
 
 var _ sender.Sender = (*captureSender)(nil)
 
+// Name provides runtime-level behavior used by the runtime pipeline.
 func (s *captureSender) Name() string { return s.name }
 
+// Key provides runtime-level behavior used by the runtime pipeline.
 func (s *captureSender) Key() string { return s.name }
 
+// Send provides runtime-level behavior used by the runtime pipeline.
 func (s *captureSender) Send(_ context.Context, p *packet.Packet) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -31,8 +35,10 @@ func (s *captureSender) Send(_ context.Context, p *packet.Packet) error {
 	return nil
 }
 
+// Close provides runtime-level behavior used by the runtime pipeline.
 func (s *captureSender) Close(_ context.Context) error { return nil }
 
+// Last provides runtime-level behavior used by the runtime pipeline.
 func (s *captureSender) Last() []byte {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -42,6 +48,7 @@ func (s *captureSender) Last() []byte {
 	return s.payload[len(s.payload)-1]
 }
 
+// spyPacketSender stores package-local state used by update_cache_test.go.
 type spyPacketSender struct {
 	name string
 	last *packet.Packet
@@ -49,17 +56,22 @@ type spyPacketSender struct {
 
 var _ sender.Sender = (*spyPacketSender)(nil)
 
+// Name provides runtime-level behavior used by the runtime pipeline.
 func (s *spyPacketSender) Name() string { return s.name }
 
+// Key provides runtime-level behavior used by the runtime pipeline.
 func (s *spyPacketSender) Key() string { return s.name }
 
+// Send provides runtime-level behavior used by the runtime pipeline.
 func (s *spyPacketSender) Send(_ context.Context, p *packet.Packet) error {
 	s.last = p
 	return nil
 }
 
+// Close provides runtime-level behavior used by the runtime pipeline.
 func (s *spyPacketSender) Close(_ context.Context) error { return nil }
 
+// TestDispatchClonesForEveryTaskAndReleasesOriginal verifies the DispatchClonesForEveryTaskAndReleasesOriginal behavior for the runtime package.
 func TestDispatchClonesForEveryTaskAndReleasesOriginal(t *testing.T) {
 	ctx := context.Background()
 
@@ -102,6 +114,7 @@ func TestDispatchClonesForEveryTaskAndReleasesOriginal(t *testing.T) {
 	}
 }
 
+// TestDispatchSingleSubscriberReusesOriginalPacket verifies the DispatchSingleSubscriberReusesOriginalPacket behavior for the runtime package.
 func TestDispatchSingleSubscriberReusesOriginalPacket(t *testing.T) {
 	ctx := context.Background()
 

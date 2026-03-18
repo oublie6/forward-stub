@@ -35,6 +35,7 @@ func SetTrafficStatsSampleEvery(n int) {
 	trafficStatsSampleEvery.Store(int64(n))
 }
 
+// trafficStatsSampleN is a package-local helper used by traffic_agg.go.
 func trafficStatsSampleN() uint64 {
 	v := trafficStatsSampleEvery.Load()
 	if v <= 0 {
@@ -52,6 +53,7 @@ func trafficStatsInterval() time.Duration {
 	return time.Duration(n)
 }
 
+// TaskRuntimeStats describes logx-level state used by the forwarding architecture.
 type TaskRuntimeStats struct {
 	PoolSize       int
 	PoolRunning    int
@@ -86,6 +88,7 @@ func UnregisterTaskRuntimeStats(task string) {
 	taskRuntimeStatsMu.Unlock()
 }
 
+// lookupTaskRuntimeStats is a package-local helper used by traffic_agg.go.
 func lookupTaskRuntimeStats(task string) (TaskRuntimeStats, bool) {
 	taskRuntimeStatsMu.RLock()
 	fn := taskRuntimeStatsFn[task]
@@ -96,6 +99,7 @@ func lookupTaskRuntimeStats(task string) (TaskRuntimeStats, bool) {
 	return fn(), true
 }
 
+// listTaskRuntimeStats is a package-local helper used by traffic_agg.go.
 func listTaskRuntimeStats() map[string]TaskRuntimeStats {
 	taskRuntimeStatsMu.RLock()
 	fns := make(map[string]func() TaskRuntimeStats, len(taskRuntimeStatsFn))
@@ -114,6 +118,7 @@ func listTaskRuntimeStats() map[string]TaskRuntimeStats {
 	return out
 }
 
+// trafficCounter stores package-local state used by traffic_agg.go.
 type trafficCounter struct {
 	msg    string
 	fields []any
@@ -130,6 +135,7 @@ type trafficCounter struct {
 	seen    atomic.Uint64
 }
 
+// TrafficCounter describes logx-level state used by the forwarding architecture.
 type TrafficCounter struct {
 	hub *trafficStatsHub
 	key string
@@ -165,6 +171,7 @@ func (tc *TrafficCounter) Close() {
 	tc.hub.release(tc.key)
 }
 
+// trafficStatsHub stores package-local state used by traffic_agg.go.
 type trafficStatsHub struct {
 	mu       sync.RWMutex
 	counters map[string]*trafficCounter
@@ -265,11 +272,13 @@ func (h *trafficStatsHub) flush(elapsed, interval time.Duration) {
 	}
 }
 
+// trafficSummary stores package-local state used by traffic_agg.go.
 type trafficSummary struct {
 	Uptime string               `json:"uptime"`
 	Tasks  []taskAggregateStats `json:"tasks"`
 }
 
+// taskAggregateStats stores package-local state used by traffic_agg.go.
 type taskAggregateStats struct {
 	Task            string           `json:"task"`
 	TotalPackets    uint64           `json:"total_packets"`
@@ -281,6 +290,7 @@ type taskAggregateStats struct {
 	WorkerPool      *workerPoolStats `json:"worker_pool,omitempty"`
 }
 
+// workerPoolStats stores package-local state used by traffic_agg.go.
 type workerPoolStats struct {
 	Size           int   `json:"size"`
 	Running        int   `json:"running"`
@@ -292,10 +302,12 @@ type workerPoolStats struct {
 	FastPath       bool  `json:"fast_path"`
 }
 
+// newTrafficSummary is a package-local helper used by traffic_agg.go.
 func newTrafficSummary(elapsed time.Duration) *trafficSummary {
 	return &trafficSummary{Uptime: elapsed.Truncate(time.Millisecond).String()}
 }
 
+// add is a package-local helper used by traffic_agg.go.
 func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, interval time.Duration) {
 	if c.role != "task" {
 		return
@@ -337,6 +349,7 @@ func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, interval 
 	s.Tasks = append(s.Tasks, item)
 }
 
+// diffCounter is a package-local helper used by traffic_agg.go.
 func diffCounter(cur, prev uint64) uint64 {
 	if cur >= prev {
 		return cur - prev
@@ -344,10 +357,12 @@ func diffCounter(cur, prev uint64) uint64 {
 	return cur
 }
 
+// hasData is a package-local helper used by traffic_agg.go.
 func (s *trafficSummary) hasData() bool {
 	return len(s.Tasks) > 0
 }
 
+// log is a package-local helper used by traffic_agg.go.
 func (s *trafficSummary) log() {
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -357,6 +372,7 @@ func (s *trafficSummary) log() {
 	L().Info("traffic stats summary\n" + string(b))
 }
 
+// addRuntimeOnlyTask is a package-local helper used by traffic_agg.go.
 func (s *trafficSummary) addRuntimeOnlyTask(task string, runtime TaskRuntimeStats) {
 	s.Tasks = append(s.Tasks, taskAggregateStats{
 		Task: task,
@@ -373,6 +389,7 @@ func (s *trafficSummary) addRuntimeOnlyTask(task string, runtime TaskRuntimeStat
 	})
 }
 
+// parseTrafficMeta is a package-local helper used by traffic_agg.go.
 func parseTrafficMeta(fields []any) (role string, name string, key string) {
 	for i := 0; i < len(fields)-1; i += 2 {
 		k, ok := fields[i].(string)

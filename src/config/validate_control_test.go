@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestValidateRejectsInvalidPprofPort verifies the ValidateRejectsInvalidPprofPort behavior for the config package.
 func TestValidateRejectsInvalidPprofPort(t *testing.T) {
 	cfg := Config{
 		Control: ControlConfig{PprofPort: 70000},
@@ -29,6 +30,7 @@ func TestValidateRejectsInvalidPprofPort(t *testing.T) {
 	}
 }
 
+// TestValidateAllowsDisabledPprofPort verifies the ValidateAllowsDisabledPprofPort behavior for the config package.
 func TestValidateAllowsDisabledPprofPort(t *testing.T) {
 	cfg := Config{
 		Control: ControlConfig{PprofPort: -1},

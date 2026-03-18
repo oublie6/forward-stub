@@ -15,6 +15,7 @@ import (
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
 
+// GnetTCPSender describes sender-level state used by the forwarding architecture.
 type GnetTCPSender struct {
 	name             string
 	remote           string
@@ -125,6 +126,7 @@ func (s *GnetTCPSender) Close(ctx context.Context) error {
 	return nil
 }
 
+// loadConns is a package-local helper used by gnet_tcp.go.
 func (s *GnetTCPSender) loadConns() []gnet.Conn {
 	v := s.conns.Load()
 	if v == nil {
@@ -187,6 +189,7 @@ func (s *GnetTCPSender) pickConn() gnet.Conn {
 	return conns[i]
 }
 
+// releaseFrameBuf is a package-local helper used by gnet_tcp.go.
 func (s *GnetTCPSender) releaseFrameBuf(bufPtr *[]byte) {
 	if bufPtr == nil {
 		return

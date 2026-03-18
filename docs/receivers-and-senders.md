@@ -1,5 +1,7 @@
 # Receivers and Senders
 
+> 架构基线：`receiver -> selector -> task -> pipelines -> senders`。receiver 只负责收包，selector 返回 task 集，task 负责串行执行 pipelines 并在末端 fan-out 到 senders。
+
 ## 1. 抽象职责
 
 ### Receiver 抽象

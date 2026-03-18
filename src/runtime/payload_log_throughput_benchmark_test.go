@@ -1,3 +1,4 @@
+// payload_log_throughput_benchmark_test.go 关注 payload 日志开关对 dispatch/task 热路径的影响。
 package runtime
 
 import (

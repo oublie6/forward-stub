@@ -1,5 +1,7 @@
 # Observability
 
+> 架构基线：`receiver -> selector -> task -> pipelines -> senders`。receiver 只负责收包，selector 返回 task 集，task 负责串行执行 pipelines 并在末端 fan-out 到 senders。
+
 ## 1. 可观测性入口总览
 
 当前仓库中可用的观测入口：

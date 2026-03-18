@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// TestLoadSystemAndBusinessLocal verifies the LoadSystemAndBusinessLocal behavior for the config package.
 func TestLoadSystemAndBusinessLocal(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.json")

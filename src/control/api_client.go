@@ -12,6 +12,7 @@ import (
 	"forward-stub/src/config"
 )
 
+// ConfigAPIClient describes control-level state used by the forwarding architecture.
 type ConfigAPIClient struct {
 	baseURL string
 	client  *http.Client

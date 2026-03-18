@@ -2,6 +2,7 @@ package config
 
 import "testing"
 
+// TestSystemBusinessDefaultsAppliedToBusinessConfig verifies the SystemBusinessDefaultsAppliedToBusinessConfig behavior for the config package.
 func TestSystemBusinessDefaultsAppliedToBusinessConfig(t *testing.T) {
 	m := true
 	sys := SystemConfig{
@@ -37,6 +38,7 @@ func TestSystemBusinessDefaultsAppliedToBusinessConfig(t *testing.T) {
 	}
 }
 
+// TestSystemBusinessDefaultsDoNotOverrideExplicitReceiverMulticore verifies the SystemBusinessDefaultsDoNotOverrideExplicitReceiverMulticore behavior for the config package.
 func TestSystemBusinessDefaultsDoNotOverrideExplicitReceiverMulticore(t *testing.T) {
 	m := true
 	explicitFalse := false

@@ -10,6 +10,7 @@ import (
 	"forward-stub/src/config"
 )
 
+// TestForwardUDPToUDPWithChannelTaskModel verifies the ForwardUDPToUDPWithChannelTaskModel behavior for the runtime package.
 func TestForwardUDPToUDPWithChannelTaskModel(t *testing.T) {
 	recvPort := freeUDPPort(t)
 	sendPort := freeUDPPort(t)

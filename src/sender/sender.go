@@ -7,6 +7,7 @@ import (
 	"forward-stub/src/packet"
 )
 
+// Sender describes sender-level state used by the forwarding architecture.
 type Sender interface {
 	Name() string
 	Key() string

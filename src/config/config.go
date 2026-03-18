@@ -1,4 +1,7 @@
 // config.go 定义系统配置结构体以及各模块配置字段。
+//
+// 当前业务拓扑固定为 receiver -> selector -> task -> pipelines -> senders；
+// Config 负责把这些抽象在 system/business 两个维度上串起来。
 package config
 
 import (
