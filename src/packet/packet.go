@@ -1,6 +1,14 @@
 // packet.go 定义统一报文结构与复制、释放等方法。
 package packet
 
+import (
+	"encoding/binary"
+	"net"
+	"net/netip"
+	"strconv"
+	"strings"
+)
+
 // Proto 表示报文来源协议类型。
 // 用法：由 receiver 在入站时写入，供 pipeline/sender 判断来源与后续路由策略。
 type Proto uint8
@@ -37,6 +45,14 @@ type Meta struct {
 	// Local 是本地接入地址或本地资源标识。
 	// 用法：用于区分来自哪个入口实例，辅助排障。
 	Local string
+	// SrcIPv4 保存 selector 热路径使用的结构化 IPv4 源地址。
+	// 用法：receiver 若能在入站阶段确定 IPv4 源地址，应直接写入该字段，避免 dispatch 再解析 Remote 字符串。
+	SrcIPv4 uint32
+	// SrcPort 保存 selector 热路径使用的结构化源端口。
+	// 用法：与 SrcIPv4/HasSrcAddr 配合提供 selector 的 O(1) 精确匹配键。
+	SrcPort uint16
+	// HasSrcAddr 表示 SrcIPv4/SrcPort 是否包含可直接用于 selector 分发表的结构化源地址。
+	HasSrcAddr bool
 
 	// TransferID 是文件传输会话标识。
 	// 用法：file_chunk 场景下用于 sender 聚合同一文件的多个分块。
@@ -87,6 +103,56 @@ type Envelope struct {
 type Packet struct {
 	Envelope
 	ReleaseFn func()
+}
+
+// SetSourceAddrPort 把结构化源地址写入 Meta，供 selector 热路径直接使用。
+func (m *Meta) SetSourceAddrPort(addrPort netip.AddrPort) {
+	if !addrPort.IsValid() || !addrPort.Addr().Is4() {
+		m.HasSrcAddr = false
+		m.SrcIPv4 = 0
+		m.SrcPort = 0
+		return
+	}
+	addr := addrPort.Addr().As4()
+	m.SrcIPv4 = binary.BigEndian.Uint32(addr[:])
+	m.SrcPort = addrPort.Port()
+	m.HasSrcAddr = true
+}
+
+// SetSourceFromRemote 尝试从 Remote 字符串解析结构化源地址，供 selector 快路径复用。
+func (m *Meta) SetSourceFromRemote(remote string) {
+	addrPort, ok := ParseAddrPort(remote)
+	if !ok {
+		m.HasSrcAddr = false
+		m.SrcIPv4 = 0
+		m.SrcPort = 0
+		return
+	}
+	m.SetSourceAddrPort(addrPort)
+}
+
+// ParseAddrPort 从常见的 host:port 文本中解析 netip.AddrPort。
+func ParseAddrPort(remote string) (netip.AddrPort, bool) {
+	remote = strings.TrimSpace(remote)
+	if remote == "" {
+		return netip.AddrPort{}, false
+	}
+	if addrPort, err := netip.ParseAddrPort(remote); err == nil {
+		return addrPort, true
+	}
+	host, portStr, err := net.SplitHostPort(remote)
+	if err != nil {
+		return netip.AddrPort{}, false
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return netip.AddrPort{}, false
+	}
+	port, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil {
+		return netip.AddrPort{}, false
+	}
+	return netip.AddrPortFrom(addr, uint16(port)), true
 }
 
 // Release 释放当前 packet 占用的可回收资源。

@@ -10,10 +10,12 @@ import (
 func testDispatchSnapshot(receiver string, tasks ...*TaskState) map[string]*ReceiverSelectorDispatchState {
 	return map[string]*ReceiverSelectorDispatchState{
 		receiver: {
-			DefaultTasks:  append([]*TaskState(nil), tasks...),
-			ExactAddrPort: map[netip.AddrPort][]*TaskState{},
-			ByIP:          map[netip.Addr][]*TaskState{},
-			ByPort:        map[uint16][]*TaskState{},
+			DefaultTasks:   append([]*TaskState(nil), tasks...),
+			ExactAddrPort:  map[uint64][]*TaskState{},
+			ByIP:           map[uint32][]*TaskState{},
+			ByPort:         map[uint16][]*TaskState{},
+			ExactAddrPort6: map[netip.AddrPort][]*TaskState{},
+			ByIP6:          map[netip.Addr][]*TaskState{},
 		},
 	}
 }

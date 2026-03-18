@@ -80,8 +80,9 @@ flowchart TD
 分发热路径围绕“最少锁、最少分配、优先快路径”设计：
 
 - `dispatchSubs` 通过 `atomic.Value` 保存 `receiver -> selector snapshot`，让 dispatch 在读路径上避免主锁。
-- source 精确匹配优先走 `ip:port`、`ip`、`port` map 快路径，再补充 CIDR / 端口范围 bucket。
-- `matchDispatchTasks` 只在必要时解析 `packet.Meta.Remote`；解析失败时安全回退到 default selector，不会 panic。
+- 精确 source 规则会预编译成整数分发表：IPv4 走 `uint32` 地址和 `uint64(ip<<16|port)` 组合键，避免热路径拼接字符串。
+- CIDR 与端口范围只保留轻量 bucket，不会在快照阶段暴力展开成海量精确 key。
+- `matchDispatchTasks` 优先读取 `packet.Meta` 中结构化的源地址字段；只有缺失时才回退解析 `packet.Meta.Remote`，解析失败时安全回退到 default selector。
 - 单 task 命中时直接复用原始 packet；多 task 命中时才 clone fan-out，尽量减少额外对象分配。
 
 ## 5. 快速开始

@@ -35,14 +35,14 @@
 
 ### 1.3 运行层
 
-- `UpdateCache` 负责编译 pipeline、构建 sender/task，并把 selector 编译为 receiver 维度的 dispatch 快照后再启动 receiver。
+- `UpdateCache` 负责编译 pipeline、构建 sender/task，并把 selector 预编译为 receiver 维度的 dispatch 快照后再启动 receiver：精确规则进入 map 快路径，CIDR/范围规则进入轻量 bucket。
 - `Store` 保存活跃实例并提供 dispatch 快照。
 - 生命周期遵循“构建成功后切换、失败不污染现网状态”。
 
 ### 1.4 数据层
 
 - receiver 收到数据后包装为 `packet.Packet`。
-- dispatch 按 receiver 查 selector 快照，解析源 IP / 端口后命中 task 集。
+- dispatch 按 receiver 查 selector 快照，优先使用 packet 中结构化的源 IPv4/端口字段命中整数分发表；仅在缺失时回退解析 `packet.Meta.Remote`。
 - task 执行 pipeline，再发送到一个或多个 sender。
 
 ---

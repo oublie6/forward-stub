@@ -44,7 +44,7 @@ runtime 的核心在 `runtime.UpdateCache`。
 
 - `receivers/senders/tasks/pipelines`：运行中实例索引。
 - `selectorCfg`：selector 配置快照。
-- `dispatchSubs`：receiver -> selector dispatch state 快照（`atomic.Value`）。
+- `dispatchSubs`：receiver -> selector dispatch state 快照（`atomic.Value`）；精确规则是整数分发表，范围规则是轻量 bucket。
 - `recvPayloadLogOptions`：receiver 观测策略快照。
 - `stageCache`：已编译 stage 的可复用缓存。
 

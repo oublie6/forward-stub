@@ -3,6 +3,7 @@ package receiver
 
 import (
 	"context"
+	"net/netip"
 	"sync"
 	"sync/atomic"
 
@@ -124,15 +125,21 @@ func (h *udpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 		stats.AddBytes(len(in))
 	}
 	payload, rel := packet.CopyFrom(in)
+	meta := packet.Meta{
+		Proto:  packet.ProtoUDP,
+		Remote: c.RemoteAddr().String(),
+		Local:  c.LocalAddr().String(),
+	}
+	if addrPort, err := netip.ParseAddrPort(meta.Remote); err == nil {
+		meta.SetSourceAddrPort(addrPort)
+	} else {
+		meta.SetSourceFromRemote(meta.Remote)
+	}
 	h.recv.onPacket(&packet.Packet{
 		Envelope: packet.Envelope{
 			Kind:    packet.PayloadKindStream,
 			Payload: payload,
-			Meta: packet.Meta{
-				Proto:  packet.ProtoUDP,
-				Remote: c.RemoteAddr().String(),
-				Local:  c.LocalAddr().String(),
-			},
+			Meta:    meta,
 		},
 		ReleaseFn: rel,
 	})

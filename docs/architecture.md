@@ -78,7 +78,7 @@ flowchart LR
 
 ## 7. 适配高吞吐低延迟热更新的原因
 
-- `dispatchSubs` 使用 `atomic.Value` 保存 receiver -> selector dispatch state 只读快照，减少分发路径锁。
+- `dispatchSubs` 使用 `atomic.Value` 保存 receiver -> selector dispatch state 只读快照，减少分发路径锁；其中精确规则会被预编译到整数分发表，范围规则保留为轻量 bucket。
 - 多订阅场景 clone packet，避免任务间共享释放竞争。
 - `task` 提供三种执行模型，允许按链路特征优化。
 - runtime 构建顺序先 sender 后 task，再编译 selector 快照，最后启动 receiver，缩小切换窗口。

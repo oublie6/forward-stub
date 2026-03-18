@@ -1,8 +1,8 @@
 package runtime
 
 import (
+	"encoding/binary"
 	"fmt"
-	"net"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -15,22 +15,31 @@ import (
 //
 // 热路径说明：
 //   - dispatch 先按 receiver 名称定位本结构；
-//   - 再按 packet.Meta.Remote 解析出的源地址/端口走精确匹配、范围匹配和 default fallback；
-//   - 该结构只读、可被多个 goroutine 并发访问，因此适合通过 atomic.Value 整体替换。
+//   - IPv4 精确规则使用整数 key 的 map 快路径（ip:port / ip / port）；
+//   - 范围规则只保留轻量 bucket，避免在快照构建阶段暴力展开大范围 CIDR 或端口区间；
+//   - default selector 只在全部 source selector miss 时兜底。
 type ReceiverSelectorDispatchState struct {
-	ExactAddrPort   map[netip.AddrPort][]*TaskState
-	ByIP            map[netip.Addr][]*TaskState
-	ByPort          map[uint16][]*TaskState
+	ExactAddrPort map[uint64][]*TaskState
+	ByIP          map[uint32][]*TaskState
+	ByPort        map[uint16][]*TaskState
+
 	CIDRBuckets     []CIDRDispatchBucket
 	PortBuckets     []PortRangeDispatchBucket
 	CIDRPortBuckets []CIDRPortDispatchBucket
-	DefaultTasks    []*TaskState
+
+	DefaultTasks []*TaskState
+
+	ExactAddrPort6 map[netip.AddrPort][]*TaskState
+	ByIP6          map[netip.Addr][]*TaskState
+	CIDRBuckets6   []CIDRDispatchBucket6
+	CIDRPort6      []CIDRPortDispatchBucket6
 }
 
-// CIDRDispatchBucket 表示“仅按源 IP CIDR”匹配的 selector bucket。
+// CIDRDispatchBucket 表示“仅按 IPv4 源网段”匹配的 selector bucket。
 type CIDRDispatchBucket struct {
-	Prefix netip.Prefix
-	Tasks  []*TaskState
+	Network uint32
+	Mask    uint32
+	Tasks   []*TaskState
 }
 
 // PortRangeDispatchBucket 表示“仅按源端口范围”匹配的 selector bucket。
@@ -40,35 +49,70 @@ type PortRangeDispatchBucket struct {
 	Tasks []*TaskState
 }
 
-// CIDRPortDispatchBucket 表示“源 IP CIDR + 源端口范围”联合匹配的 selector bucket。
+// CIDRPortDispatchBucket 表示“IPv4 源网段 + 源端口范围”联合匹配的 selector bucket。
 type CIDRPortDispatchBucket struct {
+	Network uint32
+	Mask    uint32
+	Start   uint16
+	End     uint16
+	Tasks   []*TaskState
+}
+
+// CIDRDispatchBucket6 保存非 IPv4 源网段规则，作为兼容性 fallback 使用。
+type CIDRDispatchBucket6 struct {
+	Prefix netip.Prefix
+	Tasks  []*TaskState
+}
+
+// CIDRPortDispatchBucket6 保存非 IPv4 的网段+端口联合规则，作为兼容性 fallback 使用。
+type CIDRPortDispatchBucket6 struct {
 	Prefix netip.Prefix
 	Start  uint16
 	End    uint16
 	Tasks  []*TaskState
 }
 
+// selectorPrefix 保存编译 selector source 时得到的已规范化前缀信息。
+type selectorPrefix struct {
+	Prefix  netip.Prefix
+	IsIPv4  bool
+	Network uint32
+	Mask    uint32
+}
+
+// selectorPortRange 保存规范化后的源端口范围。
+type selectorPortRange struct {
+	Start uint16
+	End   uint16
+}
+
+// selectorSource 保存从 packet 提取出的结构化源地址，用于热路径匹配。
+type selectorSource struct {
+	IPv4        uint32
+	Port        uint16
+	HasIPv4     bool
+	GenericAddr netip.AddrPort
+	HasGeneric  bool
+}
+
 // buildSelectorDispatchSnapshot 把 selector 配置编译为 receiver 维度的只读 dispatch 快照。
-//
-// 返回值以 receiver 为第一层索引，保证 dispatch 热路径不会回退到“遍历所有 task”。
 func buildSelectorDispatchSnapshot(selectors map[string]config.SelectorConfig, tasks map[string]*TaskState) (map[string]*ReceiverSelectorDispatchState, error) {
 	snapshot := make(map[string]*ReceiverSelectorDispatchState)
 	for selectorName, sc := range selectors {
-		selectorTasks, err := selectorTasksForDispatch(selectorName, sc, tasks)
-		if err != nil {
-			return nil, err
-		}
+		selectorTasks := selectorTasksForDispatch(sc, tasks)
 		for _, receiverName := range sc.Receivers {
 			state := snapshot[receiverName]
 			if state == nil {
 				state = &ReceiverSelectorDispatchState{
-					ExactAddrPort: make(map[netip.AddrPort][]*TaskState),
-					ByIP:          make(map[netip.Addr][]*TaskState),
-					ByPort:        make(map[uint16][]*TaskState),
+					ExactAddrPort:  make(map[uint64][]*TaskState),
+					ByIP:           make(map[uint32][]*TaskState),
+					ByPort:         make(map[uint16][]*TaskState),
+					ExactAddrPort6: make(map[netip.AddrPort][]*TaskState),
+					ByIP6:          make(map[netip.Addr][]*TaskState),
 				}
 				snapshot[receiverName] = state
 			}
-			if err := compileSelectorIntoDispatchState(state, sc, selectorTasks); err != nil {
+			if err := compileSelectorIntoDispatchState(state, selectorName, sc, selectorTasks); err != nil {
 				return nil, fmt.Errorf("selector %s receiver %s compile error: %w", selectorName, receiverName, err)
 			}
 		}
@@ -77,22 +121,18 @@ func buildSelectorDispatchSnapshot(selectors map[string]config.SelectorConfig, t
 }
 
 // selectorTasksForDispatch 把 selector 引用的 task 名称解析为运行时 TaskState 列表。
-func selectorTasksForDispatch(_ string, sc config.SelectorConfig, tasks map[string]*TaskState) ([]*TaskState, error) {
+func selectorTasksForDispatch(sc config.SelectorConfig, tasks map[string]*TaskState) []*TaskState {
 	out := make([]*TaskState, 0, len(sc.Tasks))
 	for _, taskName := range sc.Tasks {
-		ts := tasks[taskName]
-		if ts == nil {
-			continue
+		if ts := tasks[taskName]; ts != nil {
+			out = append(out, ts)
 		}
-		out = append(out, ts)
 	}
-	return out, nil
+	return out
 }
 
 // compileSelectorIntoDispatchState 把单个 selector 编译进某个 receiver 的 dispatch state。
-//
-// 编译策略优先为 exact ip:port / ip / port 建立 map 快路径，只有无法精确索引的规则才保留为范围 bucket。
-func compileSelectorIntoDispatchState(state *ReceiverSelectorDispatchState, sc config.SelectorConfig, selectorTasks []*TaskState) error {
+func compileSelectorIntoDispatchState(state *ReceiverSelectorDispatchState, _ string, sc config.SelectorConfig, selectorTasks []*TaskState) error {
 	if len(selectorTasks) == 0 {
 		return nil
 	}
@@ -115,63 +155,71 @@ func compileSelectorIntoDispatchState(state *ReceiverSelectorDispatchState, sc c
 	for _, prefix := range prefixes {
 		if hasPort {
 			for _, pr := range ports {
-				if prefix.Bits() == prefix.Addr().BitLen() && pr.Start == pr.End {
-					addrPort := netip.AddrPortFrom(prefix.Addr(), pr.Start)
-					state.ExactAddrPort[addrPort] = mergeTaskStateSliceUnique(state.ExactAddrPort[addrPort], selectorTasks)
+				if prefix.IsIPv4 && prefix.Prefix.Bits() == 32 && pr.Start == pr.End {
+					state.ExactAddrPort[composeAddrPortKey(prefix.Network, pr.Start)] = mergeTaskStateSliceUnique(state.ExactAddrPort[composeAddrPortKey(prefix.Network, pr.Start)], selectorTasks)
 					continue
 				}
-				bucket := CIDRPortDispatchBucket{Prefix: prefix, Start: pr.Start, End: pr.End, Tasks: selectorTasks}
-				state.CIDRPortBuckets = mergeCIDRPortBucket(state.CIDRPortBuckets, bucket)
+				if prefix.IsIPv4 {
+					state.CIDRPortBuckets = mergeCIDRPortBucket(state.CIDRPortBuckets, CIDRPortDispatchBucket{Network: prefix.Network, Mask: prefix.Mask, Start: pr.Start, End: pr.End, Tasks: selectorTasks})
+					continue
+				}
+				state.CIDRPort6 = mergeCIDRPortBucket6(state.CIDRPort6, CIDRPortDispatchBucket6{Prefix: prefix.Prefix, Start: pr.Start, End: pr.End, Tasks: selectorTasks})
 			}
 			continue
 		}
-		if prefix.Bits() == prefix.Addr().BitLen() {
-			state.ByIP[prefix.Addr()] = mergeTaskStateSliceUnique(state.ByIP[prefix.Addr()], selectorTasks)
+		if prefix.IsIPv4 {
+			if prefix.Prefix.Bits() == 32 {
+				state.ByIP[prefix.Network] = mergeTaskStateSliceUnique(state.ByIP[prefix.Network], selectorTasks)
+				continue
+			}
+			state.CIDRBuckets = mergeCIDRBucket(state.CIDRBuckets, CIDRDispatchBucket{Network: prefix.Network, Mask: prefix.Mask, Tasks: selectorTasks})
 			continue
 		}
-		bucket := CIDRDispatchBucket{Prefix: prefix, Tasks: selectorTasks}
-		state.CIDRBuckets = mergeCIDRBucket(state.CIDRBuckets, bucket)
+		if prefix.Prefix.Bits() == prefix.Prefix.Addr().BitLen() {
+			state.ByIP6[prefix.Prefix.Addr()] = mergeTaskStateSliceUnique(state.ByIP6[prefix.Prefix.Addr()], selectorTasks)
+			continue
+		}
+		state.CIDRBuckets6 = mergeCIDRBucket6(state.CIDRBuckets6, CIDRDispatchBucket6{Prefix: prefix.Prefix, Tasks: selectorTasks})
 	}
 	if hasIP {
 		return nil
 	}
 	for _, pr := range ports {
-		if !hasPort {
-			continue
-		}
 		if pr.Start == pr.End {
 			state.ByPort[pr.Start] = mergeTaskStateSliceUnique(state.ByPort[pr.Start], selectorTasks)
 			continue
 		}
-		bucket := PortRangeDispatchBucket{Start: pr.Start, End: pr.End, Tasks: selectorTasks}
-		state.PortBuckets = mergePortRangeBucket(state.PortBuckets, bucket)
+		state.PortBuckets = mergePortRangeBucket(state.PortBuckets, PortRangeDispatchBucket{Start: pr.Start, End: pr.End, Tasks: selectorTasks})
 	}
 	return nil
 }
 
-// selectorPortRange 保存规范化后的源端口范围。
-type selectorPortRange struct {
-	Start uint16
-	End   uint16
-}
-
-// parseSelectorPrefixes 把 selector 的 CIDR/IP 配置解析为已 masked 的 netip.Prefix 列表。
-func parseSelectorPrefixes(values []string) ([]netip.Prefix, error) {
-	out := make([]netip.Prefix, 0, len(values))
+// parseSelectorPrefixes 把 selector 的 CIDR/IP 配置解析为已 masked 的前缀列表。
+func parseSelectorPrefixes(values []string) ([]selectorPrefix, error) {
+	out := make([]selectorPrefix, 0, len(values))
 	for _, value := range values {
+		var prefix netip.Prefix
+		var err error
 		if strings.Contains(value, "/") {
-			prefix, err := netip.ParsePrefix(value)
+			prefix, err = netip.ParsePrefix(value)
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, prefix.Masked())
-			continue
+			prefix = prefix.Masked()
+		} else {
+			addr, err := netip.ParseAddr(value)
+			if err != nil {
+				return nil, err
+			}
+			prefix = netip.PrefixFrom(addr, addr.BitLen()).Masked()
 		}
-		addr, err := netip.ParseAddr(value)
-		if err != nil {
-			return nil, err
+		compiled := selectorPrefix{Prefix: prefix, IsIPv4: prefix.Addr().Is4()}
+		if compiled.IsIPv4 {
+			compiled.Network = ipv4ToUint32(prefix.Addr())
+			compiled.Mask = prefixMask(prefix.Bits())
+			compiled.Network &= compiled.Mask
 		}
-		out = append(out, netip.PrefixFrom(addr, addr.BitLen()).Masked())
+		out = append(out, compiled)
 	}
 	return out, nil
 }
@@ -202,7 +250,6 @@ func parseSelectorPortRanges(values []string) ([]selectorPortRange, error) {
 	return out, nil
 }
 
-// mergeTaskStateSliceUnique 合并 task 列表并去重，避免同一 task 因多个 selector bucket 命中而重复投递。
 func mergeTaskStateSliceUnique(dst []*TaskState, src []*TaskState) []*TaskState {
 	for _, ts := range src {
 		if !containsTaskState(dst, ts) {
@@ -212,7 +259,6 @@ func mergeTaskStateSliceUnique(dst []*TaskState, src []*TaskState) []*TaskState 
 	return dst
 }
 
-// containsTaskState is a package-local helper used by selector_dispatch.go.
 func containsTaskState(items []*TaskState, want *TaskState) bool {
 	for _, item := range items {
 		if item == want {
@@ -222,18 +268,16 @@ func containsTaskState(items []*TaskState, want *TaskState) bool {
 	return false
 }
 
-// mergeCIDRBucket is a package-local helper used by selector_dispatch.go.
 func mergeCIDRBucket(dst []CIDRDispatchBucket, add CIDRDispatchBucket) []CIDRDispatchBucket {
 	for i := range dst {
-		if dst[i].Prefix == add.Prefix {
+		if dst[i].Network == add.Network && dst[i].Mask == add.Mask {
 			dst[i].Tasks = mergeTaskStateSliceUnique(dst[i].Tasks, add.Tasks)
 			return dst
 		}
 	}
-	return append(dst, CIDRDispatchBucket{Prefix: add.Prefix, Tasks: append([]*TaskState(nil), add.Tasks...)})
+	return append(dst, CIDRDispatchBucket{Network: add.Network, Mask: add.Mask, Tasks: append([]*TaskState(nil), add.Tasks...)})
 }
 
-// mergePortRangeBucket is a package-local helper used by selector_dispatch.go.
 func mergePortRangeBucket(dst []PortRangeDispatchBucket, add PortRangeDispatchBucket) []PortRangeDispatchBucket {
 	for i := range dst {
 		if dst[i].Start == add.Start && dst[i].End == add.End {
@@ -244,23 +288,37 @@ func mergePortRangeBucket(dst []PortRangeDispatchBucket, add PortRangeDispatchBu
 	return append(dst, PortRangeDispatchBucket{Start: add.Start, End: add.End, Tasks: append([]*TaskState(nil), add.Tasks...)})
 }
 
-// mergeCIDRPortBucket is a package-local helper used by selector_dispatch.go.
 func mergeCIDRPortBucket(dst []CIDRPortDispatchBucket, add CIDRPortDispatchBucket) []CIDRPortDispatchBucket {
+	for i := range dst {
+		if dst[i].Network == add.Network && dst[i].Mask == add.Mask && dst[i].Start == add.Start && dst[i].End == add.End {
+			dst[i].Tasks = mergeTaskStateSliceUnique(dst[i].Tasks, add.Tasks)
+			return dst
+		}
+	}
+	return append(dst, CIDRPortDispatchBucket{Network: add.Network, Mask: add.Mask, Start: add.Start, End: add.End, Tasks: append([]*TaskState(nil), add.Tasks...)})
+}
+
+func mergeCIDRBucket6(dst []CIDRDispatchBucket6, add CIDRDispatchBucket6) []CIDRDispatchBucket6 {
+	for i := range dst {
+		if dst[i].Prefix == add.Prefix {
+			dst[i].Tasks = mergeTaskStateSliceUnique(dst[i].Tasks, add.Tasks)
+			return dst
+		}
+	}
+	return append(dst, CIDRDispatchBucket6{Prefix: add.Prefix, Tasks: append([]*TaskState(nil), add.Tasks...)})
+}
+
+func mergeCIDRPortBucket6(dst []CIDRPortDispatchBucket6, add CIDRPortDispatchBucket6) []CIDRPortDispatchBucket6 {
 	for i := range dst {
 		if dst[i].Prefix == add.Prefix && dst[i].Start == add.Start && dst[i].End == add.End {
 			dst[i].Tasks = mergeTaskStateSliceUnique(dst[i].Tasks, add.Tasks)
 			return dst
 		}
 	}
-	return append(dst, CIDRPortDispatchBucket{Prefix: add.Prefix, Start: add.Start, End: add.End, Tasks: append([]*TaskState(nil), add.Tasks...)})
+	return append(dst, CIDRPortDispatchBucket6{Prefix: add.Prefix, Start: add.Start, End: add.End, Tasks: append([]*TaskState(nil), add.Tasks...)})
 }
 
 // matchDispatchTasks 根据 receiver 名称和 packet 元信息返回命中的 task 集。
-//
-// 热路径说明：
-//   - 只读取 atomic 快照，不持有 Store 主锁；
-//   - 仅解析 packet.Meta.Remote，不分配额外中间结构；
-//   - Remote 解析失败时不会 panic，而是安全回退到 default selector。
 func (s *Store) matchDispatchTasks(receiver string, pkt *packet.Packet) []*TaskState {
 	v := s.dispatchSubs.Load()
 	if v == nil {
@@ -270,64 +328,58 @@ func (s *Store) matchDispatchTasks(receiver string, pkt *packet.Packet) []*TaskS
 	if state == nil {
 		return nil
 	}
-	addrPort, ok := packetRemoteAddrPort(pkt)
-	if !ok {
-		return state.DefaultTasks
+	source := packetSelectorSource(pkt)
+	if source.HasIPv4 {
+		return state.matchIPv4(source.IPv4, source.Port)
 	}
-	return state.match(addrPort)
+	if source.HasGeneric {
+		return state.matchGeneric(source.GenericAddr)
+	}
+	return state.DefaultTasks
 }
 
-// match 在单个 receiver 的 selector 快照内完成 source 匹配。
-//
-// 优先级说明：
-//   - 任意 source selector 命中时，仅返回 source selector 关联的 task；
-//   - 只有所有 source selector 全 miss 时，才回退到 DefaultTasks。
-func (state *ReceiverSelectorDispatchState) match(addrPort netip.AddrPort) []*TaskState {
+func (state *ReceiverSelectorDispatchState) matchIPv4(ip uint32, port uint16) []*TaskState {
 	var matched []*TaskState
 	var seen map[*TaskState]struct{}
 	appendTasks := func(tasks []*TaskState) {
-		if len(tasks) == 0 {
-			return
-		}
-		for _, ts := range tasks {
-			if len(matched) == 0 {
-				matched = append(matched, ts)
-				continue
-			}
-			if seen == nil {
-				duplicate := false
-				for _, existing := range matched {
-					if existing == ts {
-						duplicate = true
-						break
-					}
-				}
-				if duplicate {
-					continue
-				}
-				if len(matched) == 1 {
-					matched = append(matched, ts)
-					continue
-				}
-				seen = make(map[*TaskState]struct{}, len(matched)+len(tasks))
-				for _, existing := range matched {
-					seen[existing] = struct{}{}
-				}
-			}
-			if seen != nil {
-				if _, exists := seen[ts]; exists {
-					continue
-				}
-				seen[ts] = struct{}{}
-			}
-			matched = append(matched, ts)
-		}
+		matched, seen = appendUniqueTaskStates(matched, seen, tasks)
 	}
 
-	appendTasks(state.ExactAddrPort[addrPort])
-	appendTasks(state.ByIP[addrPort.Addr()])
-	appendTasks(state.ByPort[addrPort.Port()])
+	appendTasks(state.ExactAddrPort[composeAddrPortKey(ip, port)])
+	appendTasks(state.ByIP[ip])
+	appendTasks(state.ByPort[port])
 	for _, bucket := range state.CIDRBuckets {
+		if ip&bucket.Mask == bucket.Network {
+			appendTasks(bucket.Tasks)
+		}
+	}
+	for _, bucket := range state.PortBuckets {
+		if port >= bucket.Start && port <= bucket.End {
+			appendTasks(bucket.Tasks)
+		}
+	}
+	for _, bucket := range state.CIDRPortBuckets {
+		if ip&bucket.Mask == bucket.Network && port >= bucket.Start && port <= bucket.End {
+			appendTasks(bucket.Tasks)
+		}
+	}
+	if len(matched) > 0 {
+		return matched
+	}
+	return state.DefaultTasks
+}
+
+func (state *ReceiverSelectorDispatchState) matchGeneric(addrPort netip.AddrPort) []*TaskState {
+	var matched []*TaskState
+	var seen map[*TaskState]struct{}
+	appendTasks := func(tasks []*TaskState) {
+		matched, seen = appendUniqueTaskStates(matched, seen, tasks)
+	}
+
+	appendTasks(state.ExactAddrPort6[addrPort])
+	appendTasks(state.ByIP6[addrPort.Addr()])
+	appendTasks(state.ByPort[addrPort.Port()])
+	for _, bucket := range state.CIDRBuckets6 {
 		if bucket.Prefix.Contains(addrPort.Addr()) {
 			appendTasks(bucket.Tasks)
 		}
@@ -337,7 +389,7 @@ func (state *ReceiverSelectorDispatchState) match(addrPort netip.AddrPort) []*Ta
 			appendTasks(bucket.Tasks)
 		}
 	}
-	for _, bucket := range state.CIDRPortBuckets {
+	for _, bucket := range state.CIDRPort6 {
 		if bucket.Prefix.Contains(addrPort.Addr()) && addrPort.Port() >= bucket.Start && addrPort.Port() <= bucket.End {
 			appendTasks(bucket.Tasks)
 		}
@@ -348,31 +400,79 @@ func (state *ReceiverSelectorDispatchState) match(addrPort netip.AddrPort) []*Ta
 	return state.DefaultTasks
 }
 
-// packetRemoteAddrPort 从 packet.Meta.Remote 提取源地址和端口。
-//
-// 输入通常来自 receiver 写入的 socket 对端地址；解析失败时返回 false，调用方应按“仅 default selector”处理。
-func packetRemoteAddrPort(pkt *packet.Packet) (netip.AddrPort, bool) {
+func appendUniqueTaskStates(matched []*TaskState, seen map[*TaskState]struct{}, tasks []*TaskState) ([]*TaskState, map[*TaskState]struct{}) {
+	if len(tasks) == 0 {
+		return matched, seen
+	}
+	for _, ts := range tasks {
+		if len(matched) == 0 {
+			matched = append(matched, ts)
+			continue
+		}
+		if seen == nil {
+			duplicate := false
+			for _, existing := range matched {
+				if existing == ts {
+					duplicate = true
+					break
+				}
+			}
+			if duplicate {
+				continue
+			}
+			if len(matched) == 1 {
+				matched = append(matched, ts)
+				continue
+			}
+			seen = make(map[*TaskState]struct{}, len(matched)+len(tasks))
+			for _, existing := range matched {
+				seen[existing] = struct{}{}
+			}
+		}
+		if _, exists := seen[ts]; exists {
+			continue
+		}
+		seen[ts] = struct{}{}
+		matched = append(matched, ts)
+	}
+	return matched, seen
+}
+
+func packetSelectorSource(pkt *packet.Packet) selectorSource {
 	if pkt == nil {
-		return netip.AddrPort{}, false
+		return selectorSource{}
 	}
-	remote := strings.TrimSpace(pkt.Meta.Remote)
-	if remote == "" {
-		return netip.AddrPort{}, false
+	if pkt.Meta.HasSrcAddr {
+		return selectorSource{IPv4: pkt.Meta.SrcIPv4, Port: pkt.Meta.SrcPort, HasIPv4: true}
 	}
-	if addrPort, err := netip.ParseAddrPort(remote); err == nil {
-		return addrPort, true
+	addrPort, ok := packet.ParseAddrPort(pkt.Meta.Remote)
+	if !ok {
+		return selectorSource{}
 	}
-	host, portStr, err := net.SplitHostPort(remote)
-	if err != nil {
-		return netip.AddrPort{}, false
+	source := selectorSource{GenericAddr: addrPort, HasGeneric: true}
+	if addrPort.Addr().Is4() {
+		source.IPv4 = ipv4ToUint32(addrPort.Addr())
+		source.Port = addrPort.Port()
+		source.HasIPv4 = true
 	}
-	addr, err := netip.ParseAddr(host)
-	if err != nil {
-		return netip.AddrPort{}, false
+	return source
+}
+
+func composeAddrPortKey(ip uint32, port uint16) uint64 {
+	return (uint64(ip) << 16) | uint64(port)
+}
+
+func prefixMask(bits int) uint32 {
+	if bits <= 0 {
+		return 0
 	}
-	port, err := strconv.ParseUint(portStr, 10, 16)
-	if err != nil {
-		return netip.AddrPort{}, false
+	if bits >= 32 {
+		return ^uint32(0)
 	}
-	return netip.AddrPortFrom(addr, uint16(port)), true
+	return ^uint32(0) << (32 - bits)
+}
+
+func ipv4ToUint32(addr netip.Addr) uint32 {
+	v := addr.As4()
+	return binary.BigEndian.Uint32(v[:])
 }

@@ -196,13 +196,17 @@ func makeDispatchStore(receiverName string, tk *task.Task) *Store {
 // ingestUDPDatagram is a package-local helper used by scenario_benchmark_test.go.
 func ingestUDPDatagram(payload []byte, remote, local string) *packet.Packet {
 	buf, rel := packet.CopyFrom(payload)
-	return &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: buf, Meta: packet.Meta{Proto: packet.ProtoUDP, Remote: remote, Local: local}}, ReleaseFn: rel}
+	meta := packet.Meta{Proto: packet.ProtoUDP, Remote: remote, Local: local}
+	meta.SetSourceFromRemote(remote)
+	return &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: buf, Meta: meta}, ReleaseFn: rel}
 }
 
 // ingestTCPChunk is a package-local helper used by scenario_benchmark_test.go.
 func ingestTCPChunk(payload []byte, remote, local string) *packet.Packet {
 	buf, rel := packet.CopyFrom(payload)
-	return &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: buf, Meta: packet.Meta{Proto: packet.ProtoTCP, Remote: remote, Local: local}}, ReleaseFn: rel}
+	meta := packet.Meta{Proto: packet.ProtoTCP, Remote: remote, Local: local}
+	meta.SetSourceFromRemote(remote)
+	return &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: buf, Meta: meta}, ReleaseFn: rel}
 }
 
 // ingestKafkaRecord is a package-local helper used by scenario_benchmark_test.go.

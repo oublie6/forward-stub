@@ -11,8 +11,8 @@ import (
 	"forward-stub/src/task"
 )
 
-// TestMatchDispatchTasksSelectorDefaultFallback verifies the MatchDispatchTasksSelectorDefaultFallback behavior for the runtime package.
-func TestMatchDispatchTasksSelectorDefaultFallback(t *testing.T) {
+// TestMatchDispatchTasksSelectorPriority verifies the MatchDispatchTasksSelectorPriority behavior for the runtime package.
+func TestMatchDispatchTasksSelectorPriority(t *testing.T) {
 	st := NewStore()
 	st.tasks = map[string]*TaskState{
 		"default":  {Name: "default"},
@@ -61,26 +61,51 @@ func TestMatchDispatchTasksSelectorDefaultFallback(t *testing.T) {
 	}
 
 	cases := []struct {
-		name   string
-		remote string
-		want   []string
+		name string
+		pkt  *packet.Packet
+		want []string
 	}{
-		{name: "default on invalid remote", remote: "not-an-addr", want: []string{"default"}},
-		{name: "default when all source selectors miss", remote: "192.0.2.10:9999", want: []string{"default"}},
-		{name: "exact ip port suppresses default", remote: "10.0.0.1:9000", want: []string{"exact", "cidr"}},
-		{name: "cidr only suppresses default", remote: "10.0.0.2:6553", want: []string{"cidr"}},
-		{name: "single port suppresses default", remote: "10.9.9.9:7000", want: []string{"port"}},
-		{name: "port range suppresses default", remote: "10.9.9.9:8003", want: []string{"range"}},
-		{name: "cidr and port range suppresses default", remote: "10.0.1.3:8505", want: []string{"combined"}},
+		{name: "default on invalid remote", pkt: &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{Remote: "not-an-addr"}}}, want: []string{"default"}},
+		{name: "default when all source selectors miss", pkt: testSelectorPacket("192.0.2.10:9999"), want: []string{"default"}},
+		{name: "exact ip port", pkt: testSelectorPacket("10.0.0.1:9000"), want: []string{"exact", "cidr"}},
+		{name: "exact ip", pkt: testSelectorPacket("10.0.0.2:6553"), want: []string{"cidr"}},
+		{name: "exact port", pkt: testSelectorPacket("10.9.9.9:7000"), want: []string{"port"}},
+		{name: "port range", pkt: testSelectorPacket("10.9.9.9:8003"), want: []string{"range"}},
+		{name: "cidr and port range", pkt: testSelectorPacket("10.0.1.3:8505"), want: []string{"combined"}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := taskNames(st.matchDispatchTasks("r1", &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{Remote: tc.remote}}}))
+			got := taskNames(st.matchDispatchTasks("r1", tc.pkt))
 			if !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("matchDispatchTasks(%q)=%v want=%v", tc.remote, got, tc.want)
+				t.Fatalf("matchDispatchTasks=%v want=%v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestMatchDispatchTasksUsesStructuredSourceMetadata verifies the MatchDispatchTasksUsesStructuredSourceMetadata behavior for the runtime package.
+func TestMatchDispatchTasksUsesStructuredSourceMetadata(t *testing.T) {
+	st := NewStore()
+	st.tasks = map[string]*TaskState{"exact": {Name: "exact"}}
+	st.selectorCfg = map[string]config.SelectorConfig{
+		"exact": {
+			Receivers: []string{"r1"},
+			Tasks:     []string{"exact"},
+			Source: &config.SourceSelectorConfig{
+				SrcCIDRs:      []string{"10.0.0.1"},
+				SrcPortRanges: []string{"9000"},
+			},
+		},
+	}
+	if err := st.refreshDispatchSubs(); err != nil {
+		t.Fatalf("refresh dispatch: %v", err)
+	}
+
+	pkt := &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{Remote: "ignored", SrcIPv4: 0x0a000001, SrcPort: 9000, HasSrcAddr: true}}}
+	got := st.matchDispatchTasks("r1", pkt)
+	if want := []string{"exact"}; !reflect.DeepEqual(taskNames(got), want) {
+		t.Fatalf("expected structured source hit %v, got=%v", want, taskNames(got))
 	}
 }
 
@@ -112,7 +137,7 @@ func TestMatchDispatchTasksDedupesTaskAcrossBucketsAndSelectors(t *testing.T) {
 	if err := st.refreshDispatchSubs(); err != nil {
 		t.Fatalf("refresh dispatch: %v", err)
 	}
-	got := st.matchDispatchTasks("r1", &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{Remote: "10.0.0.1:9001"}}})
+	got := st.matchDispatchTasks("r1", testSelectorPacket("10.0.0.1:9001"))
 	if want := []string{"shared", "extra"}; !reflect.DeepEqual(taskNames(got), want) {
 		t.Fatalf("expected deduped source matches %v, got=%v", want, taskNames(got))
 	}
@@ -121,9 +146,7 @@ func TestMatchDispatchTasksDedupesTaskAcrossBucketsAndSelectors(t *testing.T) {
 // TestMatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch verifies the MatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch behavior for the runtime package.
 func TestMatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch(t *testing.T) {
 	st := NewStore()
-	st.tasks = map[string]*TaskState{
-		"t1": {Name: "t1"},
-	}
+	st.tasks = map[string]*TaskState{"t1": {Name: "t1"}}
 	st.selectorCfg = map[string]config.SelectorConfig{
 		"src": {
 			Receivers: []string{"r1"},
@@ -134,7 +157,7 @@ func TestMatchDispatchTasksReturnsEmptyWhenNoDefaultAndNoSourceMatch(t *testing.
 	if err := st.refreshDispatchSubs(); err != nil {
 		t.Fatalf("refresh dispatch: %v", err)
 	}
-	got := st.matchDispatchTasks("r1", &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{Remote: "192.0.2.3:9000"}}})
+	got := st.matchDispatchTasks("r1", testSelectorPacket("192.0.2.3:9000"))
 	if len(got) != 0 {
 		t.Fatalf("expected no matched tasks, got=%v", taskNames(got))
 	}
@@ -173,7 +196,8 @@ func TestDispatchUsesSelectorSnapshotForCloneFanout(t *testing.T) {
 	}
 
 	payload := []byte("selector-fanout")
-	pkt := &packet.Packet{Envelope: packet.Envelope{Payload: append([]byte(nil), payload...), Meta: packet.Meta{Remote: "192.0.2.1:5000"}}}
+	pkt := testSelectorPacket("192.0.2.1:5000")
+	pkt.Payload = append([]byte(nil), payload...)
 	released := 0
 	pkt.ReleaseFn = func() { released++ }
 
@@ -190,6 +214,52 @@ func TestDispatchUsesSelectorSnapshotForCloneFanout(t *testing.T) {
 	}
 }
 
+// BenchmarkMatchDispatchTasksExactIPv4 benchmarks the MatchDispatchTasksExactIPv4 behavior for the runtime package.
+func BenchmarkMatchDispatchTasksExactIPv4(b *testing.B) {
+	buildStore := func() *Store {
+		st := NewStore()
+		st.tasks = map[string]*TaskState{"exact": {Name: "exact"}}
+		st.selectorCfg = map[string]config.SelectorConfig{
+			"exact": {
+				Receivers: []string{"r1"},
+				Tasks:     []string{"exact"},
+				Source: &config.SourceSelectorConfig{
+					SrcCIDRs:      []string{"10.0.0.1"},
+					SrcPortRanges: []string{"9000"},
+				},
+			},
+		}
+		if err := st.refreshDispatchSubs(); err != nil {
+			b.Fatalf("refresh dispatch: %v", err)
+		}
+		return st
+	}
+
+	b.Run("structured_meta", func(b *testing.B) {
+		st := buildStore()
+		pkt := &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{SrcIPv4: 0x0a000001, SrcPort: 9000, HasSrcAddr: true}}}
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if got := st.matchDispatchTasks("r1", pkt); len(got) != 1 {
+				b.Fatalf("unexpected tasks: %v", taskNames(got))
+			}
+		}
+	})
+
+	b.Run("remote_parse_fallback", func(b *testing.B) {
+		st := buildStore()
+		pkt := &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{Remote: "10.0.0.1:9000"}}}
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if got := st.matchDispatchTasks("r1", pkt); len(got) != 1 {
+				b.Fatalf("unexpected tasks: %v", taskNames(got))
+			}
+		}
+	})
+}
+
 // taskNames is a package-local helper used by selector_dispatch_test.go.
 func taskNames(tasks []*TaskState) []string {
 	out := make([]string, 0, len(tasks))
@@ -197,4 +267,10 @@ func taskNames(tasks []*TaskState) []string {
 		out = append(out, ts.Name)
 	}
 	return out
+}
+
+func testSelectorPacket(remote string) *packet.Packet {
+	pkt := &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{Remote: remote}}}
+	pkt.Meta.SetSourceFromRemote(remote)
+	return pkt
 }

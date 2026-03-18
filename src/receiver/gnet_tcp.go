@@ -3,6 +3,7 @@ package receiver
 
 import (
 	"context"
+	"net/netip"
 	"sync"
 	"sync/atomic"
 
@@ -101,9 +102,12 @@ func (r *GnetTCP) Stop(ctx context.Context) error {
 
 // connState stores package-local state used by gnet_tcp.go.
 type connState struct {
-	buf    []byte
-	remote string
-	local  string
+	buf        []byte
+	remote     string
+	local      string
+	srcIPv4    uint32
+	srcPort    uint16
+	hasSrcAddr bool
 }
 
 // tcpHandler stores package-local state used by gnet_tcp.go.
@@ -122,11 +126,25 @@ func (h *tcpHandler) OnBoot(eng gnet.Engine) (action gnet.Action) {
 
 // OnOpen 负责该函数对应的核心逻辑，详见实现细节。
 func (h *tcpHandler) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
-	c.SetContext(&connState{
+	state := &connState{
 		buf:    make([]byte, 0, 4096),
 		remote: c.RemoteAddr().String(),
 		local:  c.LocalAddr().String(),
-	})
+	}
+	if addrPort, err := netip.ParseAddrPort(state.remote); err == nil {
+		meta := packet.Meta{}
+		meta.SetSourceAddrPort(addrPort)
+		state.srcIPv4 = meta.SrcIPv4
+		state.srcPort = meta.SrcPort
+		state.hasSrcAddr = meta.HasSrcAddr
+	} else {
+		meta := packet.Meta{}
+		meta.SetSourceFromRemote(state.remote)
+		state.srcIPv4 = meta.SrcIPv4
+		state.srcPort = meta.SrcPort
+		state.hasSrcAddr = meta.HasSrcAddr
+	}
+	c.SetContext(state)
 	return nil, gnet.None
 }
 
@@ -147,15 +165,12 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 		}
 		payload, rel := packet.CopyFrom(cs.buf)
 		cs.buf = cs.buf[:0]
+		meta := packet.Meta{Proto: packet.ProtoTCP, Remote: cs.remote, Local: cs.local, SrcIPv4: cs.srcIPv4, SrcPort: cs.srcPort, HasSrcAddr: cs.hasSrcAddr}
 		h.recv.onPacket(&packet.Packet{
 			Envelope: packet.Envelope{
 				Kind:    packet.PayloadKindStream,
 				Payload: payload,
-				Meta: packet.Meta{
-					Proto:  packet.ProtoTCP,
-					Remote: cs.remote,
-					Local:  cs.local,
-				},
+				Meta:    meta,
 			},
 			ReleaseFn: rel,
 		})
@@ -173,15 +188,12 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 			stats.AddBytes(len(fr))
 		}
 		payload, rel := packet.CopyFrom(fr)
+		meta := packet.Meta{Proto: packet.ProtoTCP, Remote: cs.remote, Local: cs.local, SrcIPv4: cs.srcIPv4, SrcPort: cs.srcPort, HasSrcAddr: cs.hasSrcAddr}
 		h.recv.onPacket(&packet.Packet{
 			Envelope: packet.Envelope{
 				Kind:    packet.PayloadKindStream,
 				Payload: payload,
-				Meta: packet.Meta{
-					Proto:  packet.ProtoTCP,
-					Remote: cs.remote,
-					Local:  cs.local,
-				},
+				Meta:    meta,
 			},
 			ReleaseFn: rel,
 		})

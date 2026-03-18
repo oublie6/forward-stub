@@ -11,12 +11,14 @@
 dispatch 位于 receiver 回调之后，负责：
 
 - 根据 receiver 名字查找 selector dispatch 快照。
-- 解析 `packet.Meta.Remote`，优先走精确 IP / 端口快路径，再补充 CIDR / 端口范围匹配。
+- 优先读取 `packet.Meta` 中结构化的源 IPv4/端口字段；若缺失再回退解析 `packet.Meta.Remote`，然后依次执行精确 IP:port / IP / port 快路径，再补充 CIDR / 端口范围匹配。
 - 先合并命中的 source selector task 集；若全部 miss，再回退到 default selector，并复用现有 fan-out 语义。
 
 设计关键点：
 
 - `dispatchSubs` 为只读快照，读路径无锁。
+- 精确规则编译到整数 map，避免热路径反复构造字符串 key。
+- CIDR 与端口范围保留为轻量 bucket，避免大范围暴力展开。
 - 单订阅复用原 packet，减少复制。
 
 对应实现位置：
