@@ -78,12 +78,7 @@ func TestDispatchClonesForEveryTaskAndReleasesOriginal(t *testing.T) {
 	defer t2.StopGraceful()
 
 	st := NewStore()
-	st.setDispatchSubs(map[string][]*TaskState{
-		"receiver": {
-			{Name: "t1", T: t1},
-			{Name: "t2", T: t2},
-		},
-	})
+	st.setDispatchSubs(testDispatchSnapshot("receiver", &TaskState{Name: "t1", T: t1}, &TaskState{Name: "t2", T: t2}))
 
 	payload := []byte("hello-kafka-and-udp")
 	pkt := &packet.Packet{Envelope: packet.Envelope{Payload: append([]byte(nil), payload...)}}
@@ -118,11 +113,7 @@ func TestDispatchSingleSubscriberReusesOriginalPacket(t *testing.T) {
 	defer t1.StopGraceful()
 
 	st := NewStore()
-	st.setDispatchSubs(map[string][]*TaskState{
-		"receiver": {
-			{Name: "t1", T: t1},
-		},
-	})
+	st.setDispatchSubs(testDispatchSnapshot("receiver", &TaskState{Name: "t1", T: t1}))
 
 	payload := []byte("single-subscriber")
 	pkt := &packet.Packet{Envelope: packet.Envelope{Payload: append([]byte(nil), payload...)}}

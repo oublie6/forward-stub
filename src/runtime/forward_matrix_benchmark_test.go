@@ -43,7 +43,7 @@ func BenchmarkDispatchMatrix(b *testing.B) {
 					defer tk.StopGraceful()
 
 					st := NewStore()
-					st.setDispatchSubs(map[string][]*TaskState{in: {&TaskState{Name: "bench-task", T: tk}}})
+					st.setDispatchSubs(testDispatchSnapshot(in, &TaskState{Name: "bench-task", T: tk}))
 					payload := make([]byte, payloadSize)
 					ctx := context.Background()
 
@@ -81,7 +81,7 @@ func BenchmarkDispatchMatrixPoolSizesNoPayloadLog(b *testing.B) {
 				defer tk.StopGraceful()
 
 				st := NewStore()
-				st.setDispatchSubs(map[string][]*TaskState{proto: {&TaskState{Name: "bench-task-pool", T: tk}}})
+				st.setDispatchSubs(testDispatchSnapshot(proto, &TaskState{Name: "bench-task-pool", T: tk}))
 				payload := make([]byte, payloadSize)
 				ctx := context.Background()
 

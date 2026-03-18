@@ -153,7 +153,7 @@ func benchmarkTask(model string, snd sender.Sender) (*task.Task, func()) {
 
 func makeDispatchStore(receiverName string, tk *task.Task) *Store {
 	st := NewStore()
-	st.setDispatchSubs(map[string][]*TaskState{receiverName: []*TaskState{{Name: "bench-task", T: tk}}})
+	st.setDispatchSubs(testDispatchSnapshot(receiverName, &TaskState{Name: "bench-task", T: tk}))
 	return st
 }
 

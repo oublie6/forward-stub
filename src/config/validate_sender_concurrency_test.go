@@ -15,8 +15,9 @@ func TestValidateSenderConcurrencyMustBePowerOfTwo(t *testing.T) {
 			"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:9002", Concurrency: 3},
 		},
 		Pipelines: map[string][]StageConfig{"p1": {}},
+		Selectors: testSelectors("r1", "t1"),
 		Tasks: map[string]TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
 
@@ -35,8 +36,9 @@ func TestValidateSenderConcurrencyAcceptsPowerOfTwo(t *testing.T) {
 			"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:9002", Concurrency: 8},
 		},
 		Pipelines: map[string][]StageConfig{"p1": {}},
+		Selectors: testSelectors("r1", "t1"),
 		Tasks: map[string]TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
 

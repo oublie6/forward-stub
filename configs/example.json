@@ -156,13 +156,28 @@
       }
     ]
   },
-  "tasks": {
-    "task_pool": {
+  "selectors": {
+    "sel_stream_default": {
       "receivers": [
         "rx_udp",
         "rx_tcp",
         "rx_kafka"
       ],
+      "tasks": [
+        "task_pool"
+      ]
+    },
+    "sel_sftp_default": {
+      "receivers": [
+        "rx_sftp"
+      ],
+      "tasks": [
+        "task_channel_file"
+      ]
+    }
+  },
+  "tasks": {
+    "task_pool": {
       "pipelines": [
         "pipe_route_sender"
       ],
@@ -179,9 +194,6 @@
       "payload_log_max_bytes": 256
     },
     "task_channel_file": {
-      "receivers": [
-        "rx_sftp"
-      ],
       "pipelines": [
         "pipe_clear_file"
       ],

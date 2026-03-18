@@ -16,7 +16,8 @@ func TestSystemBusinessDefaultsAppliedToBusinessConfig(t *testing.T) {
 		Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000"}},
 		Senders:   map[string]SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:9100"}},
 		Pipelines: map[string][]StageConfig{"p1": {}},
-		Tasks:     map[string]TaskConfig{"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}}},
+		Selectors: testSelectors("r1", "t1"),
+		Tasks:     map[string]TaskConfig{"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}}},
 	}
 
 	cfg := sys.Merge(biz)
@@ -49,7 +50,8 @@ func TestSystemBusinessDefaultsDoNotOverrideExplicitReceiverMulticore(t *testing
 		Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000", Multicore: &explicitFalse}},
 		Senders:   map[string]SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:9100"}},
 		Pipelines: map[string][]StageConfig{"p1": {}},
-		Tasks:     map[string]TaskConfig{"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}}},
+		Selectors: testSelectors("r1", "t1"),
+		Tasks:     map[string]TaskConfig{"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}}},
 	}
 
 	cfg := sys.Merge(biz)

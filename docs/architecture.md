@@ -7,7 +7,8 @@
 系统的基础抽象由四个对象组成：
 
 - `receiver`：协议输入端，负责把外部数据转成 `packet.Packet`。
-- `task`：执行单元，负责调度 pipeline 和 sender。
+- `selector`：匹配单元，负责按 packet 来源特征返回 task 集。
+- `task`：执行单元，负责串行执行 pipeline 并调用 sender。
 - `pipeline`：处理链，负责 stage 顺序处理和路由信息写入。
 - `sender`：协议输出端，负责将 packet 发送到下游。
 
@@ -30,9 +31,10 @@
 
 ## 4. 关键抽象关系
 
-`task` 是承上启下的核心对象：
+`selector + task` 共同构成热路径核心：
 
-- 上游通过 dispatch 将 packet 投递给 task。
+- 上游通过 dispatch 先按 receiver 命中 selector 快照。
+- selector 返回 task 集后再投递给 task。
 - task 内部按执行模型运行 pipeline。
 - pipeline 可修改 payload 和 metadata。
 - task 最终调用 sender fanout 发送。
@@ -47,8 +49,8 @@ flowchart LR
   Conf --> Runtime[Runtime Store]
 
   Runtime --> Recv[Receiver]
-  Recv --> Disp[Dispatch]
-  Disp --> Task[Task]
+  Recv --> Sel[Selector]
+  Sel --> Task[Task]
   Task --> Pipe[Pipeline]
   Pipe --> Send[Sender]
 
@@ -61,7 +63,7 @@ flowchart LR
 ### 数据流
 
 1. receiver 收包并构造 `packet.Packet`。
-2. runtime.dispatch 按 receiver 名字查快照，找到订阅 task。
+2. runtime.dispatch 按 receiver 名字查 selector 快照，并基于源地址/端口找到 task 集。
 3. task 执行 pipeline stage。
 4. sender 将处理结果写出。
 
@@ -74,10 +76,10 @@ flowchart LR
 
 ## 7. 适配高吞吐低延迟热更新的原因
 
-- `dispatchSubs` 使用 `atomic.Value` 保存只读快照，减少分发路径锁。
+- `dispatchSubs` 使用 `atomic.Value` 保存 receiver -> selector dispatch state 只读快照，减少分发路径锁。
 - 多订阅场景 clone packet，避免任务间共享释放竞争。
 - `task` 提供三种执行模型，允许按链路特征优化。
-- runtime 构建顺序先 sender 后 task 再 receiver，缩小切换窗口。
+- runtime 构建顺序先 sender 后 task，再编译 selector 快照，最后启动 receiver，缩小切换窗口。
 - business 配置可以增量更新，系统配置通过基线比对避免漂移。
 
 ## 8. 当前优势与局限

@@ -33,14 +33,14 @@
 
 ### 1.3 运行层
 
-- `UpdateCache` 负责编译 pipeline、构建 sender/task/receiver。
+- `UpdateCache` 负责编译 pipeline、构建 sender/task，并把 selector 编译为 receiver 维度的 dispatch 快照后再启动 receiver。
 - `Store` 保存活跃实例并提供 dispatch 快照。
 - 生命周期遵循“构建成功后切换、失败不污染现网状态”。
 
 ### 1.4 数据层
 
 - receiver 收到数据后包装为 `packet.Packet`。
-- dispatch 按 receiver 订阅映射 fan-out 到 task。
+- dispatch 按 receiver 查 selector 快照，解析源 IP / 端口后命中 task 集。
 - task 执行 pipeline，再发送到一个或多个 sender。
 
 ---
@@ -54,14 +54,14 @@
 3. runtime 编译 pipeline。
 4. runtime 构建 sender。
 5. runtime 构建 task（初始化执行模型）。
-6. runtime 构建并启动 receiver。
-7. Store 原子切换 dispatch 快照。
+6. runtime 编译 selector dispatch 快照并原子切换。
+7. runtime 构建并启动 receiver。
 8. 监听信号/文件变更，触发后续热更新。
 
 ### 2.2 单包数据路径
 
 1. receiver 生成 packet。
-2. dispatch 查快照并投递 task。
+2. dispatch 查 selector 快照并投递 task。
 3. task 按 execution_model 执行。
 4. pipeline 阶段处理；任一 stage 返回 false 则丢弃。
 5. sender fan-out 发送；单个 sender 失败不阻断其他 sender。

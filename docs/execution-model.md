@@ -14,7 +14,7 @@
 
 ```mermaid
 flowchart TD
-  Disp[Dispatch] --> Task[Task Handle]
+  Sel[Selector Match] --> Task[Task Handle]
   Task --> Mode{Model}
 
   Mode --> Fast[FastPath]
@@ -27,7 +27,7 @@ flowchart TD
   Proc --> Send[Send Fanout]
 ```
 
-以上总览图对应 `runtime.dispatch -> task.Handle -> task.processAndSend` 的统一主链路；差异点只在 `Handle` 内的执行方式。
+以上总览图对应 `runtime.dispatch(match selector) -> task.Handle -> task.processAndSend` 的统一主链路；差异点只在 `Handle` 内的执行方式。
 
 ## 3. fastpath
 

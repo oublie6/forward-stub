@@ -140,11 +140,34 @@
       }
     ]
   },
-  "tasks": {
-    "task_fastpath": {
+  "selectors": {
+    "sel_fastpath_default": {
       "receivers": [
         "rx_udp"
       ],
+      "tasks": [
+        "task_fastpath"
+      ]
+    },
+    "sel_pool_default": {
+      "receivers": [
+        "rx_tcp"
+      ],
+      "tasks": [
+        "task_pool"
+      ]
+    },
+    "sel_channel_default": {
+      "receivers": [
+        "rx_kafka"
+      ],
+      "tasks": [
+        "task_channel"
+      ]
+    }
+  },
+  "tasks": {
+    "task_fastpath": {
       "pipelines": [
         "pipe_match_replace"
       ],
@@ -158,9 +181,6 @@
       "payload_log_max_bytes": 256
     },
     "task_pool": {
-      "receivers": [
-        "rx_tcp"
-      ],
       "pipelines": [
         "pipe_route_sender"
       ],
@@ -177,9 +197,6 @@
       "payload_log_max_bytes": 256
     },
     "task_channel": {
-      "receivers": [
-        "rx_kafka"
-      ],
       "pipelines": [
         "pipe_mark_file"
       ],

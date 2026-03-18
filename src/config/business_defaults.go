@@ -11,6 +11,7 @@ func (s SystemConfig) Merge(b BusinessConfig) Config {
 		Receivers: b.Receivers,
 		Senders:   b.Senders,
 		Pipelines: b.Pipelines,
+		Selectors: b.Selectors,
 		Tasks:     b.Tasks,
 	}
 	cfg.ApplyBusinessDefaults(s.BusinessDefaults)

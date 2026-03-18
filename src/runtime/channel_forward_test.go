@@ -43,11 +43,11 @@ func TestForwardUDPToUDPWithChannelTaskModel(t *testing.T) {
 		Senders: map[string]config.SenderConfig{
 			"s1": {Type: "udp_unicast", Remote: fmt.Sprintf("127.0.0.1:%d", sendPort), LocalIP: "127.0.0.1", LocalPort: localPort},
 		},
+		Selectors: testSelector("r1", "t1"),
 		Tasks: map[string]config.TaskConfig{
 			"t1": {
 				ExecutionModel: "channel",
 				QueueSize:      128,
-				Receivers:      []string{"r1"},
 				Pipelines:      []string{"p"},
 				Senders:        []string{"s1"},
 			},

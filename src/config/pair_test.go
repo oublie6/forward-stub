@@ -14,7 +14,7 @@ func TestLoadLocalPairAppliesSystemBusinessDefaults(t *testing.T) {
 	if err := os.WriteFile(systemPath, []byte(`{"business_defaults":{"task":{"execution_model":"pool","pool_size":64},"sender":{"concurrency":3}},"logging":{"level":"info"}}`), 0o644); err != nil {
 		t.Fatalf("write system config: %v", err)
 	}
-	if err := os.WriteFile(businessPath, []byte(`{"version":2,"receivers":{"r1":{"type":"udp_gnet","listen":":1"}},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:2"}},"pipelines":{"p1":[]},"tasks":{"t1":{"receivers":["r1"],"pipelines":["p1"],"senders":["s1"]}}}`), 0o644); err != nil {
+	if err := os.WriteFile(businessPath, []byte(`{"version":2,"receivers":{"r1":{"type":"udp_gnet","listen":":1"}},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:2"}},"pipelines":{"p1":[]},"selectors":{"sel":{"receivers":["r1"],"tasks":["t1"]}},"tasks":{"t1":{"pipelines":["p1"],"senders":["s1"]}}}`), 0o644); err != nil {
 		t.Fatalf("write business config: %v", err)
 	}
 
@@ -38,7 +38,7 @@ func TestLoadLocalPairDoesNotApplyRuntimeDefaults(t *testing.T) {
 	if err := os.WriteFile(systemPath, []byte(`{"logging":{"level":"info"}}`), 0o644); err != nil {
 		t.Fatalf("write system config: %v", err)
 	}
-	if err := os.WriteFile(businessPath, []byte(`{"version":2,"receivers":{"r1":{"type":"udp_gnet","listen":":1"}},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:2"}},"pipelines":{"p1":[]},"tasks":{"t1":{"receivers":["r1"],"pipelines":["p1"],"senders":["s1"]}}}`), 0o644); err != nil {
+	if err := os.WriteFile(businessPath, []byte(`{"version":2,"receivers":{"r1":{"type":"udp_gnet","listen":":1"}},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:2"}},"pipelines":{"p1":[]},"selectors":{"sel":{"receivers":["r1"],"tasks":["t1"]}},"tasks":{"t1":{"pipelines":["p1"],"senders":["s1"]}}}`), 0o644); err != nil {
 		t.Fatalf("write business config: %v", err)
 	}
 

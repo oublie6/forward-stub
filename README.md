@@ -1,6 +1,6 @@
 # forward-stub
 
-`forward-stub` 是一个面向高吞吐、低延迟、可热更新场景的 Go 转发引擎。系统把协议接入、处理、分发统一抽象为 `receiver -> task(pipeline + sender)`，通过配置把 UDP/TCP/Kafka/SFTP 组合成可运行的数据转发链路。
+`forward-stub` 是一个面向高吞吐、低延迟、可热更新场景的 Go 转发引擎。系统把协议接入、选择、处理、分发统一抽象为 `receiver -> selector -> task(pipeline + sender)`，通过配置把 UDP/TCP/Kafka/SFTP 组合成可运行的数据转发链路。
 
 ## 1. 项目简介
 
@@ -32,8 +32,8 @@ flowchart LR
   Validate --> Runtime[Runtime Store]
 
   Runtime --> Receiver[Receiver Set]
-  Receiver --> Dispatch[Dispatch Snapshot]
-  Dispatch --> Task[Task Set]
+  Receiver --> Selector[Selector Snapshot]
+  Selector --> Task[Task Set]
   Task --> Pipeline[Pipeline Set]
   Pipeline --> Sender[Sender Set]
 
@@ -46,9 +46,9 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  In[Receiver Packet] --> Fanout[Dispatch by Receiver]
-  Fanout --> TaskA[Task A]
-  Fanout --> TaskB[Task B]
+  In[Receiver Packet] --> Match[Dispatch by Receiver + Selector]
+  Match --> TaskA[Task A]
+  Match --> TaskB[Task B]
 
   TaskA --> ModelA[Execution Model]
   ModelA --> FastA[FastPath Run]
@@ -116,7 +116,7 @@ go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
 
 - **双文件模式（推荐）**
   - `system-config`：`control`、`logging`、`business_defaults`
-  - `business-config`：`version`、`receivers`、`senders`、`pipelines`、`tasks`
+  - `business-config`：`version`、`receivers`、`senders`、`pipelines`、`selectors`、`tasks`
 - **legacy 单文件模式（兼容）**
   - 使用 `-config`，同一个 JSON 同时作为 system + business 读取。
 
@@ -316,11 +316,34 @@ go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
       }
     ]
   },
-  "tasks": {
-    "task_fastpath": {
+  "selectors": {
+    "sel_fastpath_default": {
       "receivers": [
         "rx_udp"
       ],
+      "tasks": [
+        "task_fastpath"
+      ]
+    },
+    "sel_pool_default": {
+      "receivers": [
+        "rx_tcp"
+      ],
+      "tasks": [
+        "task_pool"
+      ]
+    },
+    "sel_channel_default": {
+      "receivers": [
+        "rx_kafka"
+      ],
+      "tasks": [
+        "task_channel"
+      ]
+    }
+  },
+  "tasks": {
+    "task_fastpath": {
       "pipelines": [
         "pipe_match_replace"
       ],
@@ -334,9 +357,6 @@ go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
       "payload_log_max_bytes": 256
     },
     "task_pool": {
-      "receivers": [
-        "rx_tcp"
-      ],
       "pipelines": [
         "pipe_route_sender"
       ],
@@ -353,9 +373,6 @@ go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
       "payload_log_max_bytes": 256
     },
     "task_channel": {
-      "receivers": [
-        "rx_kafka"
-      ],
       "pipelines": [
         "pipe_mark_file"
       ],

@@ -126,8 +126,8 @@ func (st *Store) canApplyBusinessDelta() bool {
 //
 // 顺序说明：
 //  1. 先 build sender（task 依赖 sender）；
-//  2. 再 build task（建立 pipeline + sender + 订阅关系）；
-//  3. 生成 dispatch 快照后再启动 receiver，避免切换窗口漏分发。
+//  2. 再 build task（建立 pipeline + sender 执行单元）；
+//  3. 生成 selector dispatch 快照后再启动 receiver，避免切换窗口漏分发。
 func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	_ = st.StopAll(ctx)
 
@@ -144,11 +144,11 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	st.pipelines = compiled
 	st.pipelineCfg = cfg.Pipelines
 	st.pipelineStageSigs = sigsByPipeline
-	st.subs = make(map[string]map[string]struct{})
+	st.selectorCfg = cfg.Selectors
 	st.version = cfg.Version
 	st.mu.Unlock()
 	st.gcUnusedStageCache()
-	st.setDispatchSubs(map[string][]*TaskState{})
+	st.setDispatchSubs(map[string]*ReceiverSelectorDispatchState{})
 	st.setRecvPayloadLogOptions(map[string]recvPayloadLogOption{})
 
 	// 1) 构建 senders：任务阶段需要引用 sender 实例。
@@ -162,7 +162,7 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 		st.mu.Unlock()
 	}
 
-	// 2) 构建 tasks：绑定 pipeline + sender，并建立 receiver 订阅关系。
+	// 2) 构建 tasks：仅绑定 pipeline + sender，保留 task 执行单元职责。
 	for name, tc := range cfg.Tasks {
 		pipes := make([]*pipeline.Pipeline, 0, len(tc.Pipelines))
 		for _, pn := range tc.Pipelines {
@@ -205,29 +205,13 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 
 		st.mu.Lock()
 		st.tasks[name] = &TaskState{Name: name, Cfg: tc, T: tk}
-		for _, rn := range tc.Receivers {
-			if _, ok := st.subs[rn]; !ok {
-				st.subs[rn] = make(map[string]struct{})
-			}
-			st.subs[rn][name] = struct{}{}
-		}
 		st.mu.Unlock()
 	}
 
-	// 3) 先生成 dispatch 只读快照，再启动 receivers，避免热更新窗口漏转。
-	dispatchSubs := make(map[string][]*TaskState, len(st.subs))
-	st.mu.RLock()
-	for rn, sub := range st.subs {
-		tasks := make([]*TaskState, 0, len(sub))
-		for tn := range sub {
-			if ts := st.tasks[tn]; ts != nil {
-				tasks = append(tasks, ts)
-			}
-		}
-		dispatchSubs[rn] = tasks
+	// 3) 先生成 selector dispatch 只读快照，再启动 receivers，避免热更新窗口漏转。
+	if err := st.refreshDispatchSubs(); err != nil {
+		return err
 	}
-	st.mu.RUnlock()
-	st.setDispatchSubs(dispatchSubs)
 
 	// 4) 构建并启动 receivers：消息入口最终回调 dispatch。
 	startAcks := make([]<-chan struct{}, 0, len(cfg.Receivers))
@@ -245,9 +229,6 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 		}
 		st.mu.Lock()
 		st.receivers[name] = rs
-		if _, ok := st.subs[name]; !ok {
-			st.subs[name] = make(map[string]struct{})
-		}
 		st.mu.Unlock()
 		startAcks = append(startAcks, st.startReceiver(ctx, name, r))
 	}
@@ -341,7 +322,12 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 		}
 	}
 
-	st.refreshDispatchSubs()
+	st.mu.Lock()
+	st.selectorCfg = cfg.Selectors
+	st.mu.Unlock()
+	if err := st.refreshDispatchSubs(); err != nil {
+		return err
+	}
 	st.rebuildStageTaskRefs()
 	st.gcUnusedSenders()
 	st.gcUnusedStageCache()
@@ -632,9 +618,6 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 		}
 		st.mu.Lock()
 		st.receivers[name] = rs
-		if _, ok := st.subs[name]; !ok {
-			st.subs[name] = make(map[string]struct{})
-		}
 		st.mu.Unlock()
 		startAck := st.startReceiver(ctx, name, r)
 		<-startAck
@@ -649,7 +632,6 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 			continue
 		}
 		delete(st.receivers, name)
-		delete(st.subs, name)
 		go rs.Recv.Stop(ctx)
 	}
 	st.mu.Unlock()
@@ -684,8 +666,8 @@ func (st *Store) waitReceiversStartInvoked(started []<-chan struct{}) {
 //  1. 解析并绑定 pipelines；
 //  2. 绑定 senders 并增加 sender 引用计数；
 //  3. 按配置创建 task 并启动；
-//  4. 更新 task 索引、stage 引用和 receiver 订阅；
-//  5. 刷新 dispatch 快照使新 task 立即可接收流量。
+//  4. 更新 task 索引与 stage 引用；
+//  5. 刷新 selector dispatch 快照使新 task 立即可接收流量。
 func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingConfig, counter *logx.TrafficCounter) error {
 	st.mu.RLock()
 	compiled := st.pipelines
@@ -739,14 +721,10 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 	st.mu.Lock()
 	st.tasks[name] = &TaskState{Name: name, Cfg: tc, T: tk}
 	st.retainTaskStageRefsLocked(name, tc.Pipelines)
-	for _, rn := range tc.Receivers {
-		if _, ok := st.subs[rn]; !ok {
-			st.subs[rn] = make(map[string]struct{})
-		}
-		st.subs[rn][name] = struct{}{}
-	}
 	st.mu.Unlock()
-	st.refreshDispatchSubs()
+	if err := st.refreshDispatchSubs(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -760,11 +738,6 @@ func (st *Store) removeTask(name string, preserveCounter bool) *logx.TrafficCoun
 	if ts != nil {
 		delete(st.tasks, name)
 		st.releaseTaskStageRefsLocked(name, ts.Cfg.Pipelines)
-		for _, rn := range ts.Cfg.Receivers {
-			if sub, ok := st.subs[rn]; ok {
-				delete(sub, name)
-			}
-		}
 		for _, sn := range ts.Cfg.Senders {
 			if ss, ok := st.senders[sn]; ok {
 				ss.Refs--
@@ -772,7 +745,7 @@ func (st *Store) removeTask(name string, preserveCounter bool) *logx.TrafficCoun
 		}
 	}
 	st.mu.Unlock()
-	st.refreshDispatchSubs()
+	_ = st.refreshDispatchSubs()
 	var counter *logx.TrafficCounter
 	if ts != nil {
 		if preserveCounter {
@@ -876,23 +849,26 @@ func (st *Store) rebuildStageTaskRefs() {
 	}
 }
 
-// refreshDispatchSubs 重建 receiver -> task 的只读分发表快照。
+// refreshDispatchSubs 重建 receiver -> selector dispatch state 的只读分发表快照。
 //
 // dispatch 读取该快照进行无锁分发，避免热路径频繁争用 Store 主锁。
-func (st *Store) refreshDispatchSubs() {
-	dispatchSubs := make(map[string][]*TaskState)
+func (st *Store) refreshDispatchSubs() error {
 	st.mu.RLock()
-	for rn, sub := range st.subs {
-		tasks := make([]*TaskState, 0, len(sub))
-		for tn := range sub {
-			if ts := st.tasks[tn]; ts != nil {
-				tasks = append(tasks, ts)
-			}
-		}
-		dispatchSubs[rn] = tasks
+	selectors := make(map[string]config.SelectorConfig, len(st.selectorCfg))
+	for name, sc := range st.selectorCfg {
+		selectors[name] = sc
+	}
+	tasks := make(map[string]*TaskState, len(st.tasks))
+	for name, ts := range st.tasks {
+		tasks[name] = ts
 	}
 	st.mu.RUnlock()
+	dispatchSubs, err := buildSelectorDispatchSnapshot(selectors, tasks)
+	if err != nil {
+		return err
+	}
 	st.setDispatchSubs(dispatchSubs)
+	return nil
 }
 
 // gcUnusedSenders 回收当前引用计数为 0 的 sender 实例。
@@ -920,7 +896,7 @@ func (st *Store) taskSnapshot() []map[string]any {
 	for name, ts := range st.tasks {
 		out = append(out, map[string]any{
 			"task":            name,
-			"receivers":       ts.Cfg.Receivers,
+			"selectors":       st.selectorNamesForTaskLocked(name),
 			"pipelines":       ts.Cfg.Pipelines,
 			"senders":         ts.Cfg.Senders,
 			"execution_model": ts.T.ExecutionModel,
@@ -931,6 +907,20 @@ func (st *Store) taskSnapshot() []map[string]any {
 		return out[i]["task"].(string) < out[j]["task"].(string)
 	})
 	return out
+}
+
+func (st *Store) selectorNamesForTaskLocked(taskName string) []string {
+	names := make([]string, 0)
+	for selectorName, sc := range st.selectorCfg {
+		for _, tn := range sc.Tasks {
+			if tn == taskName {
+				names = append(names, selectorName)
+				break
+			}
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 // receiverConfigSnapshot 提取 receiver 配置快照，便于后续做差异比较。
@@ -958,7 +948,7 @@ func senderConfigSnapshot(m map[string]*SenderState) map[string]config.SenderCon
 //  2. 多订阅者时对每个任务都 Clone，彻底隔离任务间生命周期；
 //  3. 单订阅者直接复用原始包，减少一次额外复制。
 func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.Packet) {
-	tasks := st.getDispatchTasks(receiverName)
+	tasks := st.matchDispatchTasks(receiverName, pkt)
 	if opt, ok := st.getRecvPayloadLogOption(receiverName); ok && opt.enabled {
 		logReceiverPayload(receiverName, pkt, opt.max)
 	}

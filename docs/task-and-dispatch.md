@@ -2,15 +2,15 @@
 
 ## 1. 文档目标
 
-本文聚焦运行时最关键的编排路径：receiver 如何把数据送到 task，task 如何执行 pipeline 并发送到 sender。
+本文聚焦运行时最关键的编排路径：receiver 如何把数据送到 selector，selector 如何返回 task 集，task 如何执行 pipeline 并发送到 sender。
 
 ## 2. dispatch 职责
 
 dispatch 位于 receiver 回调之后，负责：
 
-- 根据 receiver 名字查找订阅 task 快照。
-- 在多订阅场景 clone packet。
-- 将 packet 交给 task 的 `Handle`。
+- 根据 receiver 名字查找 selector dispatch 快照。
+- 解析 `packet.Meta.Remote`，优先走精确 IP / 端口快路径，再补充 CIDR / 端口范围匹配。
+- 合并 selector 返回的 task 集，并复用现有 fan-out 语义。
 
 设计关键点：
 
@@ -20,7 +20,7 @@ dispatch 位于 receiver 回调之后，负责：
 对应实现位置：
 
 - `runtime.dispatch`
-- `Store.getDispatchTasks`
+- `Store.matchDispatchTasks`
 - `Store.getRecvPayloadLogOption`
 
 ## 3. task 职责
@@ -41,7 +41,8 @@ task 负责一条完整链路：
 
 ## 4. 实例化关系
 
-- 一个 receiver 可以被多个 task 订阅。
+- 一个 receiver 可以绑定多个 selector。
+- 一个 selector 命中后可返回多个 task。
 - 一个 task 可绑定多个 pipeline 和 sender。
 - 一个 sender 可以被多个 task 引用。
 
@@ -49,9 +50,9 @@ task 负责一条完整链路：
 
 ```mermaid
 flowchart LR
-  Recv[Receiver Callback] --> Disp[Dispatch]
-  Disp --> TaskA[Task A]
-  Disp --> TaskB[Task B]
+  Recv[Receiver Callback] --> Sel[Selector Match]
+  Sel --> TaskA[Task A]
+  Sel --> TaskB[Task B]
 
   TaskA --> PipeA[Pipeline Set]
   PipeA --> SendA[Sender Set]
@@ -78,8 +79,8 @@ flowchart LR
 
 更新时 runtime 会重建 dispatch 快照：
 
-1. 更新 `subs` 关系。
-2. 生成 `map receiver to tasks`。
+1. 编译 selector 规则到 receiver 维度的 dispatch state。
+2. 生成 `map receiver to selector dispatch state`。
 3. 原子替换为新快照。
 
 优点：
@@ -89,12 +90,12 @@ flowchart LR
 
 ## 8. 关键维护点
 
-- 新增 task 时优先检查 receiver 和 sender 引用正确性。
+- 新增 task 时优先检查 selector/task/sender 引用正确性。
 - route stage 场景需确保 sender 名称一致。
 - 长期堆积时优先检查下游 sender 性能和 task 队列参数。
 
 ## 9. 调度问题快速判断
 
-1. 若单 receiver 绑定大量 task 且吞吐下降，优先检查 clone 成本与 sender 压力。
+1. 若单 receiver 下 selector 命中大量 task 且吞吐下降，优先检查 clone 成本与 sender 压力。
 2. 若仅 pool 模型报警，优先检查 `queue_size` 与 `pool_size` 配比。
 3. 若仅 channel 模型报警，优先检查顺序链路是否超出单 worker 承载上限。

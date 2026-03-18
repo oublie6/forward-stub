@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"forward-stub/src/config"
+	"forward-stub/src/packet"
 	"forward-stub/src/pipeline"
 )
 
@@ -104,7 +105,7 @@ func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
 	oldSenders := map[string]config.SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:9001"}}
 	oldPipelines := map[string][]config.StageConfig{"p1": {{Type: "trim"}}}
 	oldTasks := map[string]config.TaskConfig{
-		"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+		"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 	}
 
 	applyReceiverOp := func(base map[string]config.ReceiverConfig, o op) map[string]config.ReceiverConfig {
@@ -147,7 +148,7 @@ func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
 		next := map[string]config.TaskConfig{"t1": base["t1"]}
 		switch o {
 		case opAdd:
-			next["t2"] = config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}}
+			next["t2"] = config.TaskConfig{Pipelines: []string{"p1"}, Senders: []string{"s1"}}
 		case opRemove:
 			delete(next, "t1")
 		case opModify:
@@ -217,9 +218,9 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
 	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
-	st.subs["r1"] = map[string]struct{}{}
+	st.selectorCfg = testSelector("r1", "t1")
 
-	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
+	if err := st.addTask("t1", config.TaskConfig{Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
 		t.Fatalf("add initial task: %v", err)
 	}
 
@@ -228,9 +229,10 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 		Receivers: map[string]config.ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":1"}},
 		Senders:   map[string]config.SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:12345"}},
 		Pipelines: map[string][]config.StageConfig{"p1": {}},
+		Selectors: testSelector("r1", "t1", "t2"),
 		Tasks: map[string]config.TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "pool", QueueSize: 1024},
-			"t2": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "pool", QueueSize: 1024},
+			"t2": {Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"},
 		},
 		Logging: config.LoggingConfig{},
 	}
@@ -249,6 +251,7 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	cfg2.Tasks = map[string]config.TaskConfig{
 		"t2": cfg.Tasks["t2"],
 	}
+	cfg2.Selectors = testSelector("r1", "t2")
 	if err := st.applyBusinessDelta(context.Background(), cfg2); err != nil {
 		t.Fatalf("apply delta remove: %v", err)
 	}
@@ -262,16 +265,17 @@ func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
 	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
+	st.selectorCfg = testSelector("r1", "t1")
 
-	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
+	if err := st.addTask("t1", config.TaskConfig{Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
 		t.Fatalf("add task: %v", err)
 	}
-	if got := len(st.getDispatchTasks("r1")); got != 1 {
+	if got := len(st.matchDispatchTasks("r1", &packet.Packet{})); got != 1 {
 		t.Fatalf("expected dispatch snapshot has 1 task, got %d", got)
 	}
 
 	_ = st.removeTask("t1", false)
-	if got := len(st.getDispatchTasks("r1")); got != 0 {
+	if got := len(st.matchDispatchTasks("r1", &packet.Packet{})); got != 0 {
 		t.Fatalf("expected dispatch snapshot has 0 task after remove, got %d", got)
 	}
 }
@@ -281,10 +285,10 @@ func TestApplyBusinessDeltaUpdatesPayloadLogOptions(t *testing.T) {
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
 	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
-	st.subs["r1"] = map[string]struct{}{}
+	st.selectorCfg = testSelector("r1", "t1")
 	st.receivers["r1"] = &ReceiverState{Name: "r1", Cfg: config.ReceiverConfig{Type: "udp_gnet", Listen: ":1"}}
 
-	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{PayloadLogMaxBytes: 128}, nil); err != nil {
+	if err := st.addTask("t1", config.TaskConfig{Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{PayloadLogMaxBytes: 128}, nil); err != nil {
 		t.Fatalf("add initial task: %v", err)
 	}
 
@@ -293,8 +297,9 @@ func TestApplyBusinessDeltaUpdatesPayloadLogOptions(t *testing.T) {
 		Receivers: map[string]config.ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":1", LogPayloadRecv: true, PayloadLogMaxBytes: 64}},
 		Senders:   map[string]config.SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:12345"}},
 		Pipelines: map[string][]config.StageConfig{"p1": {}},
+		Selectors: testSelector("r1", "t1"),
 		Tasks: map[string]config.TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath", LogPayloadSend: true, PayloadLogMaxBytes: 32},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath", LogPayloadSend: true, PayloadLogMaxBytes: 32},
 		},
 		Logging: config.LoggingConfig{PayloadLogMaxBytes: 128},
 	}

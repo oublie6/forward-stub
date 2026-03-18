@@ -38,10 +38,10 @@ type Store struct {
 	// stageCache 保存可复用 stage 实例及其被 task 使用计数。
 	stageCache map[string]*StageCacheEntry
 
-	subs map[string]map[string]struct{}
+	selectorCfg map[string]config.SelectorConfig
 
-	// dispatchSubs 保存 receiver -> tasks 的只读快照，供 dispatch 热路径无锁读取。
-	dispatchSubs atomic.Value // map[string][]*TaskState
+	// dispatchSubs 保存 receiver -> selector dispatch state 的只读快照，供 dispatch 热路径无锁读取。
+	dispatchSubs atomic.Value // map[string]*ReceiverSelectorDispatchState
 	// recvPayloadLogOptions 保存 receiver payload 日志配置只读快照，供 dispatch 热路径无锁读取。
 	recvPayloadLogOptions atomic.Value // map[string]recvPayloadLogOption
 
@@ -58,25 +58,16 @@ func NewStore() *Store {
 		pipelineCfg:       make(map[string][]config.StageConfig),
 		pipelineStageSigs: make(map[string][]string),
 		stageCache:        make(map[string]*StageCacheEntry),
-		subs:              make(map[string]map[string]struct{}),
+		selectorCfg:       make(map[string]config.SelectorConfig),
 	}
-	s.dispatchSubs.Store(map[string][]*TaskState{})
+	s.dispatchSubs.Store(map[string]*ReceiverSelectorDispatchState{})
 	s.recvPayloadLogOptions.Store(map[string]recvPayloadLogOption{})
 	return s
 }
 
 // setDispatchSubs 负责该函数对应的核心逻辑，详见实现细节。
-func (s *Store) setDispatchSubs(m map[string][]*TaskState) {
+func (s *Store) setDispatchSubs(m map[string]*ReceiverSelectorDispatchState) {
 	s.dispatchSubs.Store(m)
-}
-
-// getDispatchTasks 负责该函数对应的核心逻辑，详见实现细节。
-func (s *Store) getDispatchTasks(receiver string) []*TaskState {
-	v := s.dispatchSubs.Load()
-	if v == nil {
-		return nil
-	}
-	return v.(map[string][]*TaskState)[receiver]
 }
 
 // StopAll 停止当前 store 中已注册的全部 runtime 组件。

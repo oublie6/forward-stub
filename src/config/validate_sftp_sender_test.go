@@ -11,8 +11,9 @@ func TestValidateSFTPSenderRequiresFields(t *testing.T) {
 			"s1": {Type: "sftp", Remote: "127.0.0.1:22", Username: "u", Password: "p", RemoteDir: "/out", HostKeyFingerprint: "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"},
 		},
 		Pipelines: map[string][]StageConfig{"p1": {}},
+		Selectors: testSelectors("r1", "t1"),
 		Tasks: map[string]TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
 	if err := cfg.Validate(); err != nil {

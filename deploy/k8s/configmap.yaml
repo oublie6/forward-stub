@@ -41,12 +41,17 @@ data:
       "pipelines": {
         "default": []
       },
+      "selectors": {
+        "udp-default": {
+          "receivers": ["udp_in"],
+          "tasks": ["udp-forward"]
+        }
+      },
       "tasks": {
         "udp-forward": {
           "pool_size": 1024,
           "queue_size": 4096,
           "fast_path": true,
-          "receivers": ["udp_in"],
           "pipelines": ["default"],
           "senders": ["udp_out"]
         }

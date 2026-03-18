@@ -13,8 +13,9 @@ func kafkaSenderBaseConfig() Config {
 			"k1": {Type: "kafka", Remote: "127.0.0.1:9092", Topic: "out"},
 		},
 		Pipelines: map[string][]StageConfig{"p1": {}},
+		Selectors: testSelectors("r1", "t1"),
 		Tasks: map[string]TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"k1"}},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"k1"}},
 		},
 	}
 	cfg.ApplyDefaults()

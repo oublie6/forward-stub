@@ -44,8 +44,9 @@ func runSingleForward(t *testing.T, recv config.ReceiverConfig, sendCfg config.S
 		Logging:   config.LoggingConfig{Level: "error"},
 		Receivers: map[string]config.ReceiverConfig{"r1": recv},
 		Senders:   map[string]config.SenderConfig{"s1": sendCfg},
+		Selectors: testSelector("r1", "t1"),
 		Tasks: map[string]config.TaskConfig{
-			"t1": {PoolSize: 1, FastPath: true, Receivers: []string{"r1"}, Senders: []string{"s1"}},
+			"t1": {PoolSize: 1, FastPath: true, Senders: []string{"s1"}},
 		},
 		Pipelines: map[string][]config.StageConfig{},
 	}
@@ -190,7 +191,7 @@ func TestSimulatedDispatchAcrossProtocolCombinations(t *testing.T) {
 				defer tk.StopGraceful()
 
 				st := NewStore()
-				st.setDispatchSubs(map[string][]*TaskState{in: []*TaskState{{Name: "task", T: tk}}})
+				st.setDispatchSubs(testDispatchSnapshot(in, &TaskState{Name: "task", T: tk}))
 				pkt := &packet.Packet{Envelope: packet.Envelope{Payload: []byte(in + "->" + out)}}
 				dispatch(context.Background(), st, in, pkt)
 				if got := string(cap.Last()); got != in+"->"+out {

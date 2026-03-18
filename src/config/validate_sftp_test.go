@@ -11,8 +11,9 @@ func TestValidateSFTPReceiverRequiresFields(t *testing.T) {
 			"s1": {Type: "udp_unicast", Remote: "127.0.0.1:9000", LocalPort: 9001},
 		},
 		Pipelines: map[string][]StageConfig{"p1": {}},
+		Selectors: testSelectors("r1", "t1"),
 		Tasks: map[string]TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
 	if err := cfg.Validate(); err != nil {

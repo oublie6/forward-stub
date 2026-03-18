@@ -2,7 +2,7 @@
 
 ## 1. 文档目标
 
-本文说明系统如何从配置文件变成运行中的 receiver/task/pipeline/sender 实例，以及热更新和退出时的资源管理路径。
+本文说明系统如何从配置文件变成运行中的 receiver/selector/task/pipeline/sender 实例，以及热更新和退出时的资源管理路径。
 
 ## 2. 启动流程
 
@@ -32,8 +32,8 @@ runtime 的核心在 `runtime.UpdateCache`。
 
 1. 编译 pipeline（含 stage cache）。
 2. 构建 sender。
-3. 构建并启动 task。
-4. 生成 dispatch 快照。
+3. 构建 task（仅绑定 pipeline + sender）。
+4. 生成 selector dispatch 快照。
 5. 构建并启动 receiver。
 
 该顺序降低了“receiver 已接收但 task 未就绪”的风险。
@@ -41,8 +41,8 @@ runtime 的核心在 `runtime.UpdateCache`。
 ### 3.2 Store 关键结构
 
 - `receivers/senders/tasks/pipelines`：运行中实例索引。
-- `subs`：receiver 到 task 的订阅映射。
-- `dispatchSubs`：分发快照（`atomic.Value`）。
+- `selectorCfg`：selector 配置快照。
+- `dispatchSubs`：receiver -> selector dispatch state 快照（`atomic.Value`）。
 - `recvPayloadLogOptions`：receiver 观测策略快照。
 - `stageCache`：已编译 stage 的可复用缓存。
 
@@ -71,7 +71,7 @@ runtime 的核心在 `runtime.UpdateCache`。
 ### 创建
 
 - sender：由 `buildSender` 创建，按名字注册。
-- task：绑定 pipeline 和 sender 后 `Task.Start`。
+- task：绑定 pipeline 和 sender 后 `Task.Start`。selector 不创建 goroutine，而是编译成 dispatch 快照。
 - receiver：由 `buildReceiver` 创建并异步启动。
 
 ### 复用

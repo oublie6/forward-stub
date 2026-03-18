@@ -15,8 +15,9 @@ func TestValidateRouteStageTargetsInTaskSenders(t *testing.T) {
 		Pipelines: map[string][]StageConfig{
 			"p1": {{Type: "route_offset_bytes_sender", Offset: 0, Cases: map[string]string{"aa": "s2"}}},
 		},
+		Selectors: testSelectors("r1", "t1"),
 		Tasks: map[string]TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
 	cfg.ApplyDefaults()

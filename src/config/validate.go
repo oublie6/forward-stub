@@ -5,6 +5,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/netip"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -22,6 +25,9 @@ func (c *Config) Validate() error {
 	if c.Pipelines == nil {
 		return errors.New("pipelines missing")
 	}
+	if c.Selectors == nil {
+		return errors.New("selectors missing")
+	}
 
 	if c.Logging.PayloadPoolMaxCachedBytes < 0 {
 		return errors.New("logging payload_pool_max_cached_bytes must be >= 0")
@@ -35,12 +41,6 @@ func (c *Config) Validate() error {
 		if tn == "" {
 			return errors.New("task name empty")
 		}
-		if len(t.Receivers) == 0 {
-			return fmt.Errorf("task %s has no receivers", tn)
-		}
-		//if len(t.Pipelines) == 0 {
-		//	return fmt.Errorf("task %s has no pipelines", tn)
-		//}
 		if len(t.Senders) == 0 {
 			return fmt.Errorf("task %s has no senders", tn)
 		}
@@ -50,21 +50,18 @@ func (c *Config) Validate() error {
 		if t.ChannelQueueSize < 0 {
 			return fmt.Errorf("task %s channel_queue_size must be >= 0", tn)
 		}
-		for _, rn := range t.Receivers {
-			if _, ok := c.Receivers[rn]; !ok {
-				return fmt.Errorf("task %s receiver %s not found", tn, rn)
-			}
-		}
 		for _, pn := range t.Pipelines {
 			if _, ok := c.Pipelines[pn]; !ok {
 				return fmt.Errorf("task %s pipeline %s not found", tn, pn)
 			}
 		}
-		for _, sn := range t.Senders {
+		for _, sn := range dedupeStringsPreserveOrder(t.Senders) {
 			if _, ok := c.Senders[sn]; !ok {
 				return fmt.Errorf("task %s sender %s not found", tn, sn)
 			}
 		}
+		t.Senders = dedupeStringsPreserveOrder(t.Senders)
+		t.Pipelines = dedupeStringsPreserveOrder(t.Pipelines)
 		for _, pn := range t.Pipelines {
 			stages := c.Pipelines[pn]
 			for _, sc := range stages {
@@ -78,6 +75,17 @@ func (c *Config) Validate() error {
 				}
 			}
 		}
+		c.Tasks[tn] = t
+	}
+
+	for sn, sc := range c.Selectors {
+		if sn == "" {
+			return errors.New("selector name empty")
+		}
+		if err := normalizeAndValidateSelector(c, sn, &sc); err != nil {
+			return err
+		}
+		c.Selectors[sn] = sc
 	}
 
 	for rn, r := range c.Receivers {
@@ -182,6 +190,154 @@ func (c *Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+func normalizeAndValidateSelector(c *Config, name string, sc *SelectorConfig) error {
+	if sc == nil {
+		return fmt.Errorf("selector %s config missing", name)
+	}
+	sc.Receivers = dedupeStringsPreserveOrder(sc.Receivers)
+	sc.Tasks = dedupeStringsPreserveOrder(sc.Tasks)
+	if len(sc.Receivers) == 0 {
+		return fmt.Errorf("selector %s has no receivers", name)
+	}
+	if len(sc.Tasks) == 0 {
+		return fmt.Errorf("selector %s has no tasks", name)
+	}
+	for _, rn := range sc.Receivers {
+		if _, ok := c.Receivers[rn]; !ok {
+			return fmt.Errorf("selector %s receiver %s not found", name, rn)
+		}
+	}
+	for _, tn := range sc.Tasks {
+		if _, ok := c.Tasks[tn]; !ok {
+			return fmt.Errorf("selector %s task %s not found", name, tn)
+		}
+	}
+	if sc.Source == nil {
+		return nil
+	}
+	sc.Source.SrcCIDRs = dedupeStringsPreserveOrder(sc.Source.SrcCIDRs)
+	sc.Source.SrcPortRanges = dedupeStringsPreserveOrder(sc.Source.SrcPortRanges)
+	if len(sc.Source.SrcCIDRs) == 0 && len(sc.Source.SrcPortRanges) == 0 {
+		return fmt.Errorf("selector %s source is empty", name)
+	}
+	normalizedCIDRs := make([]string, 0, len(sc.Source.SrcCIDRs))
+	seenCIDRs := map[string]struct{}{}
+	for _, raw := range sc.Source.SrcCIDRs {
+		normalized, err := normalizeCIDROrIP(raw)
+		if err != nil {
+			return fmt.Errorf("selector %s src_cidrs %q invalid: %w", name, raw, err)
+		}
+		if _, ok := seenCIDRs[normalized]; ok {
+			continue
+		}
+		seenCIDRs[normalized] = struct{}{}
+		normalizedCIDRs = append(normalizedCIDRs, normalized)
+	}
+	normalizedPorts := make([]string, 0, len(sc.Source.SrcPortRanges))
+	seenPorts := map[string]struct{}{}
+	for _, raw := range sc.Source.SrcPortRanges {
+		normalized, err := normalizePortRange(raw)
+		if err != nil {
+			return fmt.Errorf("selector %s src_port_ranges %q invalid: %w", name, raw, err)
+		}
+		if _, ok := seenPorts[normalized]; ok {
+			continue
+		}
+		seenPorts[normalized] = struct{}{}
+		normalizedPorts = append(normalizedPorts, normalized)
+	}
+	sort.Strings(normalizedCIDRs)
+	sort.Strings(normalizedPorts)
+	sc.Source.SrcCIDRs = normalizedCIDRs
+	sc.Source.SrcPortRanges = normalizedPorts
+	return nil
+}
+
+func normalizeCIDROrIP(raw string) (string, error) {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return "", errors.New("empty cidr")
+	}
+	if strings.Contains(v, "/") {
+		prefix, err := netip.ParsePrefix(v)
+		if err != nil {
+			return "", err
+		}
+		return prefix.Masked().String(), nil
+	}
+	addr, err := netip.ParseAddr(v)
+	if err != nil {
+		return "", err
+	}
+	bits := addr.BitLen()
+	return netip.PrefixFrom(addr, bits).Masked().String(), nil
+}
+
+func normalizePortRange(raw string) (string, error) {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return "", errors.New("empty port range")
+	}
+	if !strings.Contains(v, "-") {
+		p, err := parsePort(v)
+		if err != nil {
+			return "", err
+		}
+		return strconv.Itoa(int(p)), nil
+	}
+	parts := strings.Split(v, "-")
+	if len(parts) != 2 {
+		return "", errors.New("must be single port or start-end")
+	}
+	start, err := parsePort(parts[0])
+	if err != nil {
+		return "", err
+	}
+	end, err := parsePort(parts[1])
+	if err != nil {
+		return "", err
+	}
+	if start > end {
+		return "", errors.New("range start must be <= end")
+	}
+	if start == end {
+		return strconv.Itoa(int(start)), nil
+	}
+	return fmt.Sprintf("%d-%d", start, end), nil
+}
+
+func parsePort(raw string) (uint16, error) {
+	v := strings.TrimSpace(raw)
+	p, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, err
+	}
+	if p < 1 || p > 65535 {
+		return 0, errors.New("port must be in [1,65535]")
+	}
+	return uint16(p), nil
+}
+
+func dedupeStringsPreserveOrder(items []string) []string {
+	if len(items) <= 1 {
+		return items
+	}
+	seen := make(map[string]struct{}, len(items))
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	return out
 }
 
 func validateKafkaAuth(kind, name, mechanism, username, password string) error {

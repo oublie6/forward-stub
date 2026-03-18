@@ -48,7 +48,7 @@ type Config struct {
 	// 用法：生产环境建议配置 file 与滚动参数，便于留存与排障。
 	Logging LoggingConfig `json:"logging"`
 	// Receivers 是接收端定义表，key 为实例名。
-	// 用法：task.Receivers 引用这里的 key，实例名建议稳定且具业务语义。
+	// 用法：selector.Receivers 引用这里的 key，实例名建议稳定且具业务语义。
 	Receivers map[string]ReceiverConfig `json:"receivers"`
 	// Senders 是发送端定义表，key 为实例名。
 	// 用法：task.Senders 引用这里的 key，可让多个 task 复用同一 sender 连接。
@@ -56,8 +56,11 @@ type Config struct {
 	// Pipelines 是处理流水线定义表，key 为 pipeline 名称。
 	// 用法：task.Pipelines 按顺序引用 pipeline 名称，从而编排处理链路。
 	Pipelines map[string][]StageConfig `json:"pipelines"`
+	// Selectors 是分发表定义，key 为 selector 名称。
+	// 用法：selector 负责按 receiver + source 特征匹配 task 集合。
+	Selectors map[string]SelectorConfig `json:"selectors"`
 	// Tasks 是任务定义表，key 为任务名。
-	// 用法：每个 task 绑定 receiver + pipeline + sender，构成一条可运行转发链路。
+	// 用法：每个 task 绑定 pipeline + sender，构成一条可运行执行链路。
 	Tasks map[string]TaskConfig `json:"tasks"`
 }
 
@@ -102,6 +105,7 @@ type BusinessConfig struct {
 	Receivers map[string]ReceiverConfig `json:"receivers"`
 	Senders   map[string]SenderConfig   `json:"senders"`
 	Pipelines map[string][]StageConfig  `json:"pipelines"`
+	Selectors map[string]SelectorConfig `json:"selectors"`
 	Tasks     map[string]TaskConfig     `json:"tasks"`
 }
 
@@ -413,6 +417,27 @@ type StageConfig struct {
 	DefaultSender string `json:"default_sender,omitempty"`
 }
 
+// SourceSelectorConfig 描述 selector 的来源匹配条件。
+type SourceSelectorConfig struct {
+	// SrcCIDRs 支持单 IP 或 CIDR。
+	// 用法：精确 IP 会被编译为快路径，CIDR 会保留为范围匹配。
+	SrcCIDRs []string `json:"src_cidrs,omitempty"`
+	// SrcPortRanges 支持单端口或端口范围。
+	// 用法：单端口会被编译为快路径，范围会保留为区间匹配。
+	SrcPortRanges []string `json:"src_port_ranges,omitempty"`
+}
+
+// SelectorConfig 描述 receiver 到 task 集合的匹配关系。
+type SelectorConfig struct {
+	// Receivers 是该 selector 关联的 receiver 名称列表。
+	Receivers []string `json:"receivers"`
+	// Tasks 是该 selector 命中后返回的 task 名称列表。
+	Tasks []string `json:"tasks"`
+	// Source 描述源地址/端口匹配规则。
+	// 用法：为空时表示当前 receiver 下的 default selector。
+	Source *SourceSelectorConfig `json:"source,omitempty"`
+}
+
 // TaskConfig 描述任务绑定关系与执行模型。
 type TaskConfig struct {
 	// PoolSize 是任务 worker 池大小。
@@ -430,9 +455,6 @@ type TaskConfig struct {
 	// ChannelQueueSize 是 channel 执行模型下的有界缓冲长度。
 	// 用法：仅 execution_model=channel 时生效；<=0 时默认回退到 QueueSize，确保与协程池排队上限一致。
 	ChannelQueueSize int `json:"channel_queue_size,omitempty"`
-	// Receivers 是该任务订阅的接收端名称列表。
-	// 用法：填写 Config.Receivers 中已定义 key，支持多源汇聚。
-	Receivers []string `json:"receivers"`
 	// Pipelines 是按顺序执行的 pipeline 名称列表。
 	// 用法：可串联多个 pipeline 形成分层处理链。
 	Pipelines []string `json:"pipelines"`

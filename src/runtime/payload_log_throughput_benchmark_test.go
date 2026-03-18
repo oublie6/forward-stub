@@ -41,7 +41,7 @@ func BenchmarkPayloadLogSwitchThroughput(b *testing.B) {
 					defer tk.StopGraceful()
 
 					st := NewStore()
-					st.setDispatchSubs(map[string][]*TaskState{proto: {&TaskState{Name: tk.Name, T: tk}}})
+					st.setDispatchSubs(testDispatchSnapshot(proto, &TaskState{Name: tk.Name, T: tk}))
 
 					ctx := context.Background()
 					payload := make([]byte, payloadSize)

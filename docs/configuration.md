@@ -10,14 +10,14 @@ forward-stub 支持两种加载模式：
 
 - **双文件模式（推荐）**
   - `system-config`：系统级配置（控制面、日志、业务默认值）
-  - `business-config`：业务拓扑配置（收发器、pipeline、task）
+  - `business-config`：业务拓扑配置（收发器、selector、pipeline、task）
 - **legacy 单文件模式（兼容）**
   - 使用 `-config`，同一文件同时按 `SystemConfig` 和 `BusinessConfig` 读取并合并。
 
 ## 1.2 system / business 职责边界
 
 - `SystemConfig`：`control`、`logging`、`business_defaults`。属于进程级配置，重载 business 时必须保持稳定。
-- `BusinessConfig`：`version`、`receivers`、`senders`、`pipelines`、`tasks`。支持热更新。
+- `BusinessConfig`：`version`、`receivers`、`senders`、`pipelines`、`selectors`、`tasks`。支持热更新。
 
 ## 1.3 配置加载方式
 
@@ -70,6 +70,7 @@ business-config
 ├─ receivers
 ├─ senders
 ├─ pipelines
+├─ selectors
 └─ tasks
 ```
 
@@ -85,6 +86,7 @@ config
 ├─ receivers
 ├─ senders
 ├─ pipelines
+├─ selectors
 └─ tasks
 ```
 
@@ -151,14 +153,15 @@ config
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `version` | int64 | 否 | 配置版本号，记录在启动日志和热更新日志中 |
-| `receivers` | map[string]ReceiverConfig | 是 | receiver 定义表；task 通过名字引用 |
+| `receivers` | map[string]ReceiverConfig | 是 | receiver 定义表；selector 通过名字引用 |
 | `senders` | map[string]SenderConfig | 是 | sender 定义表；task/route stage 通过名字引用 |
 | `pipelines` | map[string][]StageConfig | 是 | pipeline 定义表；task 按顺序引用 |
+| `selectors` | map[string]SelectorConfig | 是 | selector 定义表；按 receiver + source 特征返回 task 集 |
 | `tasks` | map[string]TaskConfig | 是 | 业务任务定义；至少 1 个 |
 
 ## 4.2 receivers
 
-- key 为 receiver 名称，供 `task.receivers[]` 引用。
+- key 为 receiver 名称，供 `selector.receivers[]` 引用。
 - `type` 决定其专属字段和校验逻辑。
 
 ## 4.3 senders
@@ -171,10 +174,24 @@ config
 - key 为 pipeline 名称。
 - value 为 stage 数组，按数组顺序执行。
 
-## 4.5 tasks
+## 4.5 selectors
+
+- key 为 selector 名称。
+- selector 绑定 `receivers + tasks`，可选附加 `source` 条件；命中后返回 task 集，而不是 bool。
+- `source` 为空表示对应 receiver 下的 default selector。
+- 当前支持 `source.src_cidrs`（单 IP 或 CIDR）与 `source.src_port_ranges`（单端口或范围）。
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `receivers` | []string | 是 | 不可为空，必须引用已定义 receiver |
+| `tasks` | []string | 是 | 不可为空，必须引用已定义 task |
+| `source.src_cidrs` | []string | 否 | 支持单 IP 或 CIDR；与端口条件组合时为 AND 语义 |
+| `source.src_port_ranges` | []string | 否 | 支持 `8080` 或 `8000-8999`；与 IP 条件组合时为 AND 语义 |
+
+## 4.6 tasks
 
 - key 为 task 名称。
-- 一个 task 绑定 receiver -> pipelines -> senders，并选择执行模型。
+- 一个 task 绑定 pipelines -> senders，并选择执行模型。
 
 | 字段 | 类型 | 必填 | 默认值 | 生效条件 | 备注/约束 |
 |---|---|---|---|---|---|
@@ -183,7 +200,6 @@ config
 | `execution_model` | string | 否 | `pool`（通过兼容规则） | 所有 task | 仅支持 `fastpath/pool/channel` |
 | `queue_size` | int | 否 | 8192 | pool 模型 | <=0 回退默认 |
 | `channel_queue_size` | int | 否 | 先取 `queue_size` | channel 模型 | `<0` 校验失败；`0` 则回退 |
-| `receivers` | []string | 是 | - | 所有 task | 不可为空，必须引用已定义 receiver |
 | `pipelines` | []string | 否 | 空数组 | 所有 task | 可为空（表示直通） |
 | `senders` | []string | 是 | - | 所有 task | 不可为空，必须引用已定义 sender |
 | `log_payload_send` | bool | 否 | false | task payload 发送日志 | info 级日志下可见 |
@@ -421,7 +437,8 @@ config
 
 ## 6.1 引用关系
 
-- `task.receivers[]` 必须引用已定义的 `receivers` key。
+- `selector.receivers[]` 必须引用已定义的 `receivers` key。
+- `selector.tasks[]` 必须引用已定义的 `tasks` key。
 - `task.pipelines[]` 必须引用已定义的 `pipelines` key。
 - `task.senders[]` 必须引用已定义的 `senders` key。
 

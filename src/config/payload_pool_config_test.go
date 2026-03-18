@@ -26,8 +26,9 @@ func TestValidateRejectsNegativePayloadPoolMaxCachedBytes(t *testing.T) {
 			"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:2"},
 		},
 		Pipelines: map[string][]StageConfig{"p1": {}},
+		Selectors: testSelectors("r1", "t1"),
 		Tasks: map[string]TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
 	if err := cfg.Validate(); err == nil {
