@@ -18,8 +18,8 @@ MAIN_PKG=${MAIN_PKG:-.}
 # GOFLAGS: 默认强制使用 vendor 目录，离线构建更稳定。
 GOFLAGS=${GOFLAGS:--mod=vendor}
 
-# 通过 ldflags 注入版本并裁剪符号信息，减小二进制体积。
-LDFLAGS="-s -w -X main.version=${VERSION}"
+# 统一裁剪符号信息，减小二进制体积。
+LDFLAGS="-s -w"
 
 mkdir -p "${OUT_DIR}"
 # 记录绝对路径，避免进入临时目录后输出位置变化。
@@ -45,6 +45,8 @@ for target in ${TARGETS}; do
   # 附带基础文档和示例配置，降低使用方上手成本。
   cp -f README.md "${WORK_DIR}/"
   mkdir -p "${WORK_DIR}/configs"
+  cp -f configs/system.example.json "${WORK_DIR}/configs/"
+  cp -f configs/business.example.json "${WORK_DIR}/configs/"
   cp -f configs/example.json "${WORK_DIR}/configs/"
 
   ARCHIVE_BASE="${APP_NAME}_${VERSION}_${GOOS}_${GOARCH}"

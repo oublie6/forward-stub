@@ -25,8 +25,6 @@ import (
 type Store struct {
 	mu sync.RWMutex
 
-	version int64
-
 	receivers map[string]*ReceiverState
 	senders   map[string]*SenderState
 	tasks     map[string]*TaskState

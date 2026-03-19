@@ -16,7 +16,7 @@
 3. 检查 JSON 格式。
 
 ```bash
-./bin/forward-stub -version
+./bin/forward-stub -h
 jq . ./configs/system.example.json >/dev/null
 jq . ./configs/business.example.json >/dev/null
 ```

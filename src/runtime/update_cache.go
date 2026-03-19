@@ -145,7 +145,6 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	st.pipelineCfg = cfg.Pipelines
 	st.pipelineStageSigs = sigsByPipeline
 	st.selectorCfg = cfg.Selectors
-	st.version = cfg.Version
 	st.mu.Unlock()
 	st.gcUnusedStageCache()
 	st.setDispatchSubs(map[string]*ReceiverSelectorDispatchState{})
@@ -256,10 +255,6 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	oldReceivers := receiverConfigSnapshot(st.receivers)
 	oldPipelines := st.pipelineCfg
 	st.mu.RUnlock()
-
-	st.mu.Lock()
-	st.version = cfg.Version
-	st.mu.Unlock()
 
 	plan := planBusinessDelta(oldReceivers, oldSenders, oldPipelines, oldTasks, cfg)
 	receiverAdded, receiverRemoved := plan.receiverAdded, plan.receiverRemoved

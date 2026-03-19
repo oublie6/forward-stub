@@ -10,7 +10,7 @@
 
 入口：`main.go` 调用 `bootstrap.Run`。
 
-1. 解析参数：`-system-config`、`-business-config`、`-config`、`-version`。
+1. 解析参数：`-system-config`、`-business-config`、`-config`。
 2. 通过 `config.ResolveConfigPaths` 确认配置模式。
 3. `loadConfigPair` 加载 system/business 并合并。
 4. `ApplyDefaults` 和 `Validate` 形成可运行配置。

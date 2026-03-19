@@ -18,21 +18,15 @@ import (
 )
 
 // Run 负责解析参数、加载配置并驱动运行时生命周期。
-func Run(version string, args []string) int {
+func Run(args []string) int {
 	fs := flag.NewFlagSet("forward-stub", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
 	legacyPath := fs.String("config", "", "legacy config json path (same file for system and business)")
 	systemPath := fs.String("system-config", "", "system config json path")
 	businessPath := fs.String("business-config", "", "business config json path")
-	showVersion := fs.Bool("version", false, "print version and exit")
 	if err := fs.Parse(args); err != nil {
 		return 2
-	}
-
-	if *showVersion {
-		_, _ = os.Stdout.WriteString(version + "\n")
-		return 0
 	}
 
 	sysPath, bizPath, err := config.ResolveConfigPaths(*legacyPath, *systemPath, *businessPath)
@@ -91,7 +85,7 @@ func Run(version string, args []string) int {
 	go watchConfigFile(bizPath, initialFingerprint, cfg.Control.ConfigWatchInterval, configChangeCh, watchDone)
 	defer close(watchDone)
 
-	logStartupInfo(lg, version, sysPath, bizPath, cfg)
+	logStartupInfo(lg, sysPath, bizPath, cfg)
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, supportedSignals()...)
 	defer signal.Stop(sigCh)
@@ -130,9 +124,8 @@ func Run(version string, args []string) int {
 func logStartupInfo(lg interface {
 	Infow(string, ...interface{})
 	Info(...interface{})
-}, version, systemPath, businessPath string, cfg config.Config) {
+}, systemPath, businessPath string, cfg config.Config) {
 	lg.Infow("forward-stub startup",
-		"version", version,
 		"go_version", runtime.Version(),
 		"gomaxprocs", runtime.GOMAXPROCS(0),
 		"host_cpu_cores", runtime.NumCPU(),

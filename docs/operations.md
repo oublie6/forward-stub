@@ -50,8 +50,8 @@
 ## 5. 常用运维命令
 
 ```bash
-# 版本
-./bin/forward-stub -version
+# 查看命令行参数
+./bin/forward-stub -h
 
 # 监听端口
 ss -lntup | rg forward-stub

@@ -52,3 +52,27 @@ func TestLoadLocalPairDoesNotApplyRuntimeDefaults(t *testing.T) {
 		t.Fatalf("load local pair should not apply runtime defaults, got pprof_port=%d", cfg.Control.PprofPort)
 	}
 }
+
+// TestLoadLocalPairLegacySingleFile 验证 config 包中 LoadLocalPairLegacySingleFile 的行为。
+func TestLoadLocalPairLegacySingleFile(t *testing.T) {
+	dir := t.TempDir()
+	legacyPath := filepath.Join(dir, "legacy.json")
+
+	if err := os.WriteFile(legacyPath, []byte(`{"version":7,"control":{"pprof_port":7001},"logging":{"level":"debug"},"receivers":{"r1":{"type":"udp_gnet","listen":":1"}},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:2"}},"pipelines":{"p1":[]},"selectors":{"sel":{"receivers":["r1"],"tasks":["t1"]}},"tasks":{"t1":{"pipelines":["p1"],"senders":["s1"]}}}`), 0o644); err != nil {
+		t.Fatalf("write legacy config: %v", err)
+	}
+
+	sys, biz, cfg, err := LoadLocalPair(legacyPath, legacyPath)
+	if err != nil {
+		t.Fatalf("load legacy config pair: %v", err)
+	}
+	if sys.Control.PprofPort != 7001 {
+		t.Fatalf("unexpected system control config: %+v", sys.Control)
+	}
+	if biz.Version != 7 {
+		t.Fatalf("unexpected business config: %+v", biz)
+	}
+	if cfg.Logging.Level != "debug" {
+		t.Fatalf("unexpected merged config: %+v", cfg.Logging)
+	}
+}

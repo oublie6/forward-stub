@@ -12,7 +12,6 @@ CONTAINERD_SOCK=${CONTAINERD_SOCK:-/tmp/forward-stub-containerd.sock}
 PRELOADED_IMAGE_DIR=${PRELOADED_IMAGE_DIR:-${ROOT_DIR}/deploy/images}
 
 BUILDER_IMAGE=${BUILDER_IMAGE:-golang:1.25-alpine}
-VERSION=${VERSION:-dev}
 TARGETOS=${TARGETOS:-linux}
 TARGETARCH=${TARGETARCH:-arm64}
 PULL_RETRIES=${PULL_RETRIES:-3}
@@ -210,7 +209,7 @@ fi
 
 DOCKER_HOST="${DOCKER_HOST_URI}" docker save -o "${ROOT_DIR}/docker/base-images/${BUILDER_IMAGE//[\/:]/_}.tar" "${BUILDER_IMAGE}"
 
-DOCKER_HOST="${DOCKER_HOST_URI}" docker build -t forward-stub:test --build-arg VERSION="${VERSION}" --build-arg TARGETOS="${TARGETOS}" --build-arg TARGETARCH="${TARGETARCH}" "${ROOT_DIR}"
+DOCKER_HOST="${DOCKER_HOST_URI}" docker build -t forward-stub:test --build-arg TARGETOS="${TARGETOS}" --build-arg TARGETARCH="${TARGETARCH}" "${ROOT_DIR}"
 DOCKER_HOST="${DOCKER_HOST_URI}" docker image inspect forward-stub:test --format '{{.Id}} {{.Architecture}} {{.Os}}'
 
 ls -lh "${ROOT_DIR}/docker/base-images"

@@ -6,8 +6,6 @@ FROM --platform=$TARGETOS/$TARGETARCH golang:1.25-alpine
 
 WORKDIR /app
 
-# 版本号可由流水线注入（例如 git tag / commit sha）。
-ARG VERSION=dev
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -21,7 +19,7 @@ COPY . .
 # 直接在容器镜像内编译产物，兼容老版本 docker build。
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     GOFLAGS=-mod=vendor \
-    go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /app/forward-stub .
+    go build -trimpath -ldflags "-s -w" -o /app/forward-stub .
 
 # 运行参数在 docker run / kubectl run 时显式指定。
 ENTRYPOINT ["/app/forward-stub"]

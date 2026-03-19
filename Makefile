@@ -21,7 +21,7 @@ SERVICE_ARGS ?=
 
 # build: 本机构建当前平台二进制到 bin/。
 build:
-	CGO_ENABLED=0 GOFLAGS="$(GOFLAGS)" go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o bin/$(APP_NAME) .
+	CGO_ENABLED=0 GOFLAGS="$(GOFLAGS)" go build -trimpath -ldflags "-s -w" -o bin/$(APP_NAME) .
 
 # build-linux: 调用脚本输出 linux/arm64 二进制到 dist/linux。
 build-linux:
@@ -31,10 +31,10 @@ build-linux:
 test:
 	GOFLAGS="$(GOFLAGS)" go test ./...
 
-# perf: 执行基础性能测试（runtime 笛卡尔积基准 + 本地 UDP/TCP 压测扫频）。
+# perf: 执行基础性能测试（仅使用当前仓库内维护的场景化 benchmark）。
 perf:
 	GOFLAGS="$(GOFLAGS)" go test ./src/runtime -run '^$$' -bench BenchmarkDispatchMatrix -benchmem -benchtime=2s
-	GOFLAGS="$(GOFLAGS)" go run ./cmd/bench -mode both -duration 4s -warmup 1s -payload-size 512 -workers 2 -pps-sweep 2000,4000,8000 -log-level error
+	GOFLAGS="$(GOFLAGS)" go test ./src/runtime -run '^$$' -bench BenchmarkScenarioForwarding -benchmem -benchtime=2s
 
 # verify: 每次改动建议执行（功能 + 性能）。
 verify: test perf
@@ -58,7 +58,7 @@ docker-login:
 
 # docker-build: 基于当前 Dockerfile 构建容器镜像。
 docker-build: docker-login
-	docker build --build-arg VERSION=$(VERSION) -t $(IMAGE) .
+	docker build -t $(IMAGE) .
 
 # docker-push: 推送镜像到仓库；可通过 CCR_IMAGE 覆盖目标仓库地址。
 docker-push: docker-login
