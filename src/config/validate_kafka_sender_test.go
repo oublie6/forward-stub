@@ -1,9 +1,12 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func kafkaSenderBaseConfig() Config {
-	cfg := Config{
+	cfg := attachMinimalRouting(Config{
 		Version: 1,
 		Logging: LoggingConfig{Level: "info"},
 		Receivers: map[string]ReceiverConfig{
@@ -14,9 +17,9 @@ func kafkaSenderBaseConfig() Config {
 		},
 		Pipelines: map[string][]StageConfig{"p1": {}},
 		Tasks: map[string]TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"k1"}},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"k1"}},
 		},
-	}
+	})
 	cfg.ApplyDefaults()
 	return cfg
 }
@@ -56,6 +59,37 @@ func TestValidateKafkaSenderNonIdempotentAllowsAcks1(t *testing.T) {
 	cfg.Senders["k1"] = s
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("unexpected validation error: %v", err)
+	}
+}
+
+func TestValidateKafkaSenderRejectsHashKeyPartitionerWithoutKey(t *testing.T) {
+	cfg := kafkaSenderBaseConfig()
+	s := cfg.Senders["k1"]
+	s.Partitioner = "hash_key"
+	cfg.Senders["k1"] = s
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "requires record_key or record_key_source") {
+		t.Fatalf("expected partitioner validation error, got: %v", err)
+	}
+}
+
+func TestValidateKafkaSenderRejectsUnsupportedRecordKeySource(t *testing.T) {
+	cfg := kafkaSenderBaseConfig()
+	s := cfg.Senders["k1"]
+	s.RecordKeySource = "json_path"
+	cfg.Senders["k1"] = s
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "record_key_source unsupported") {
+		t.Fatalf("expected record_key_source validation error, got: %v", err)
+	}
+}
+
+func TestValidateKafkaSenderRejectsCompressionLevelWithoutSupportedCodec(t *testing.T) {
+	cfg := kafkaSenderBaseConfig()
+	s := cfg.Senders["k1"]
+	s.Compression = "snappy"
+	s.CompressionLevel = 3
+	cfg.Senders["k1"] = s
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "compression_level requires compression") {
+		t.Fatalf("expected compression level validation error, got: %v", err)
 	}
 }
 

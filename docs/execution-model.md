@@ -1,146 +1,84 @@
-# Execution Model
+# Task 执行模型配置说明
 
-## 1. 设计目的
+## 1. 可用配置字段
 
-`Task` 负责把 packet 变成下游发送动作。为兼顾不同链路目标，系统提供三种执行模型：
+与 task 执行模型直接相关的字段有：
+
+- `execution_model`
+- `fast_path`
+- `pool_size`
+- `queue_size`
+- `channel_queue_size`
+
+## 2. 字段解释
+
+| 字段 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `execution_model` | string | 空，最终回退 `pool` | 支持 `fastpath`、`pool`、`channel`。 |
+| `fast_path` | bool | `false` | 兼容旧配置；仅在 `execution_model` 为空时生效。 |
+| `pool_size` | int | `4096` | pool 模式 worker 池大小。 |
+| `queue_size` | int | `8192` | pool 模式最大阻塞任务数。 |
+| `channel_queue_size` | int | 回退到 `queue_size` | channel 模式队列长度。 |
+
+## 3. 生效规则
+
+### 3.1 首选 `execution_model`
+
+如果 `execution_model` 已经明确配置，则直接采用：
 
 - `fastpath`
 - `pool`
 - `channel`
 
-模型由 `task.execution_model` 决定，默认值可来自 `business_defaults.task.execution_model`。
+### 3.2 `fast_path` 只是兼容旧配置
 
-## 2. 三种模型执行路径
+仅当 `execution_model` 为空时：
 
-```mermaid
-flowchart TD
-  Disp[Dispatch] --> Task[Task Handle]
-  Task --> Mode{Model}
+- `fast_path=true` -> 实际执行模型为 `fastpath`
+- `fast_path=false` -> 实际执行模型为 `pool`
 
-  Mode --> Fast[FastPath]
-  Mode --> Pool[Pool]
-  Mode --> Chan[Channel]
+## 4. 三种执行模型对比
 
-  Fast --> Proc[Process Pipeline]
-  Pool --> Proc
-  Chan --> Proc
-  Proc --> Send[Send Fanout]
-```
-
-以上总览图对应 `runtime.dispatch -> task.Handle -> task.processAndSend` 的统一主链路；差异点只在 `Handle` 内的执行方式。
-
-## 3. fastpath
-
-```mermaid
-flowchart LR
-  R[Receiver] --> D[Dispatcher]
-  D --> T[Task.Handle]
-  T --> DP[Direct Path]
-  DP --> P[Pipeline]
-  P --> S[Sender Fanout]
-```
-
-- 执行路径：`dispatch` 把 packet 交给 `Task.Handle` 后，`fastpath` 直接在当前 goroutine 执行 `processAndSend`。
-- 适用场景：链路处理轻、对端稳定、需要尽量压低端到端延迟。
-- 突出特点：路径最短、无额外排队；但下游阻塞会直接传导回 Receiver。
-
-### 机制
-
-- 当前 goroutine 直接执行 `processAndSend`。
-- 不经过额外队列和 worker。
-
-### 影响
-
-- 固定开销低，延迟路径最短。
-- 下游慢会直接反压上游 receiver。
-
-### 场景
-
-- 处理逻辑很轻。
-- 对延迟敏感，且下游稳定。
-
-## 4. pool
-
-```mermaid
-flowchart LR
-  R[Receiver] --> D[Dispatcher]
-  D --> T[Task.Handle]
-  T --> Q[Pool Submit Queue]
-  Q --> WP[Worker Pool]
-  WP --> P[Pipeline]
-  P --> S[Sender Fanout]
-```
-
-- 执行路径：`Task.Handle` 将任务提交给 ants worker pool，再由 worker 并行执行 `processAndSend`。
-- 适用场景：通用生产流量，需要吞吐、并发与隔离的平衡。
-- 突出特点：可通过 `pool_size` 和 `queue_size` 扩展并发；队列满时会丢弃并记录错误日志。
-
-### 机制
-
-- 使用 ants 池提交任务。
-- `pool_size` 控制 worker，`queue_size` 控制最大阻塞任务。
-
-### 影响
-
-- 吞吐更稳健，易横向放大并发。
-- 队列积压时尾延迟可能上升。
-- 队列满会丢包并记录告警日志。
-
-### 场景
-
-- 通用生产场景。
-- 需要平衡吞吐与隔离。
-
-## 5. channel
-
-```mermaid
-flowchart LR
-  R[Receiver] --> D[Dispatcher]
-  D --> T[Task.Handle]
-  T --> CQ[Channel Queue]
-  CQ --> C[Single Consumer]
-  C --> P[Pipeline]
-  P --> S[Sender Fanout]
-```
-
-- 执行路径：`Task.Handle` 先入有界 channel，再由单消费者 goroutine 顺序执行 `processAndSend`。
-- 适用场景：同一 task 内需要更清晰顺序语义，且峰值流量可控。
-- 突出特点：队列缓冲实现接入与处理解耦；但消费端为单 worker，吞吐上限受限。
-
-### 机制
-
-- 单 worker goroutine 读取有界 channel。
-- `channel_queue_size` 控制排队深度。
-
-### 影响
-
-- 单 task 内顺序语义清晰。
-- 峰值吞吐受单 worker 限制。
-
-### 场景
-
-- 顺序敏感链路。
-- 处理逻辑中等，流量可控。
-
-## 6. 模型对比
-
-| 维度 | fastpath | pool | channel |
+| 模型 | 配置方式 | 执行方式 | 适用场景 |
 |---|---|---|---|
-| 吞吐上限 | 中到高 | 高 | 中 |
-| 延迟 | 最低 | 中 | 中到高 |
-| 顺序性 | 取决于并发 | 弱 | 强 |
-| 隔离性 | 低 | 高 | 中 |
-| 回压位置 | 直接到上游 | 队列边界 | channel 边界 |
+| `fastpath` | `execution_model=fastpath` | 当前 goroutine 直接处理 | 极低延迟、轻量处理 |
+| `pool` | `execution_model=pool` | ants worker pool 异步处理 | 通用生产场景 |
+| `channel` | `execution_model=channel` | 单 worker + 有界 channel 顺序处理 | 顺序敏感链路 |
 
-## 7. 与 task/pipeline/sender 的关系
+## 5. 队列参数怎么理解
 
-- 模型只改变“如何执行”，不改变 pipeline/sender 业务语义。
-- 三种模型最终都走同一条 `pipeline -> sender` 逻辑。
-- route stage、生效 sender 列表、日志策略在三种模型下保持一致。
+### 5.1 `queue_size`
 
-## 8. 选型建议
+- 只对 `pool` 模式真正决定排队能力。
+- 值越大，削峰能力越强，但排队时延可能越长。
 
-1. 首选 `pool` 作为默认模型。
-2. 极低延迟链路评估 `fastpath`。
-3. 顺序敏感链路选 `channel`。
-4. 所有模型都应配合 `go test -bench` 的场景化 benchmark 做验证。
+### 5.2 `channel_queue_size`
+
+- 只对 `channel` 模式生效。
+- 未配置或 `<=0` 时自动回退到 `queue_size`。
+
+## 6. 推荐写法
+
+### 6.1 推荐
+
+```json
+{
+  "execution_model": "pool",
+  "pool_size": 4096,
+  "queue_size": 8192
+}
+```
+
+### 6.2 兼容旧写法（仍支持，但不推荐继续新增）
+
+```json
+{
+  "fast_path": true
+}
+```
+
+## 7. 什么时候选哪种模型
+
+- 默认优先选 `pool`。
+- 需要极低延迟且处理极轻时选 `fastpath`。
+- 需要在单个 task 内保持更强顺序语义时选 `channel`。

@@ -1,3 +1,4 @@
+// Package runtime 负责维护转发运行时对象及其测试辅助逻辑。
 package runtime
 
 import (
@@ -15,24 +16,32 @@ import (
 	"forward-stub/src/task"
 )
 
+// benchScenario 描述一组端到端基准场景，包括入站构包方式和下游 sender 构造策略。
 type benchScenario struct {
-	name     string
+	// name 是基准子场景名称，会直接出现在 benchmark 输出中。
+	name string
+	// receiver 是测试时写入 Store 的 receiver 名称，用于命中对应的分发表项。
 	receiver string
-	makePkt  func(seq int, payload []byte) *packet.Packet
+	// makePkt 根据序号和 payload 构造输入包，用于模拟不同协议的入站语义。
+	makePkt func(seq int, payload []byte) *packet.Packet
+	// mkSender 根据并发度和目标数构造下游 sender，用于比较不同出站模型。
 	mkSender func(concurrency, targets int) sender.Sender
 }
 
+// benchUDPDownstreamSender 模拟 UDP 下游发送端，仅做分片和目标轮询，不执行真实网络 IO。
 type benchUDPDownstreamSender struct {
-	name      string
+	testNamedSender
+	// shardMask 用于把递增序号映射到固定分片；要求并发度满足 2 的幂时效果最佳。
 	shardMask int
+	// nextShard 保存全局递增序号，供多协程并发取模分片。
 	nextShard atomic.Uint64
-	rr        []atomic.Uint64
-	targets   []string
+	// rr 为每个分片维护独立轮询计数，避免所有分片争用同一个原子变量。
+	rr []atomic.Uint64
+	// targets 保存可选下游地址，仅用于模拟多目标场景下的轮询开销。
+	targets []string
 }
 
-func (s *benchUDPDownstreamSender) Name() string                { return s.name }
-func (s *benchUDPDownstreamSender) Key() string                 { return "bench_udp|" + s.name }
-func (s *benchUDPDownstreamSender) Close(context.Context) error { return nil }
+// Send 模拟按分片轮询目标地址的计算成本，不进行真实发送。
 func (s *benchUDPDownstreamSender) Send(_ context.Context, p *packet.Packet) error {
 	idx := int(nextShardIndex(&s.nextShard, s.shardMask))
 	targetIdx := 0
@@ -44,17 +53,20 @@ func (s *benchUDPDownstreamSender) Send(_ context.Context, p *packet.Packet) err
 	return nil
 }
 
+// benchTCPDownstreamSender 模拟 TCP 下游 sender，可选是否做长度前缀封包。
 type benchTCPDownstreamSender struct {
-	name      string
-	withLen   bool
+	testNamedSender
+	// withLen 表示是否模拟 u16be 长度头编码；为 false 时等价于裸流模式。
+	withLen bool
+	// shardMask 用于把递增序号映射到固定分片；要求并发度满足 2 的幂时效果最佳。
 	shardMask int
+	// nextShard 保存全局递增序号，供多协程并发取模分片。
 	nextShard atomic.Uint64
+	// framePool 复用封包缓冲区，避免基准结果被重复分配放大。
 	framePool sync.Pool
 }
 
-func (s *benchTCPDownstreamSender) Name() string                { return s.name }
-func (s *benchTCPDownstreamSender) Key() string                 { return "bench_tcp|" + s.name }
-func (s *benchTCPDownstreamSender) Close(context.Context) error { return nil }
+// Send 模拟 TCP sender 的分片选择和可选的长度前缀封包成本。
 func (s *benchTCPDownstreamSender) Send(_ context.Context, p *packet.Packet) error {
 	_ = int(nextShardIndex(&s.nextShard, s.shardMask))
 	if !s.withLen {
@@ -76,17 +88,20 @@ func (s *benchTCPDownstreamSender) Send(_ context.Context, p *packet.Packet) err
 	return nil
 }
 
+// benchKafkaDownstreamSender 模拟 Kafka sender 的分片、topic 和 header 处理开销。
 type benchKafkaDownstreamSender struct {
-	name      string
-	topic     string
+	testNamedSender
+	// topic 保存目标 topic，仅用于模拟访问成本。
+	topic string
+	// shardMask 用于把递增序号映射到固定分片；要求并发度满足 2 的幂时效果最佳。
 	shardMask int
+	// nextShard 保存全局递增序号，供多协程并发取模分片。
 	nextShard atomic.Uint64
-	headers   [][2]string
+	// headers 保存模拟消息头，用于覆盖 header 复制/访问场景。
+	headers [][2]string
 }
 
-func (s *benchKafkaDownstreamSender) Name() string                { return s.name }
-func (s *benchKafkaDownstreamSender) Key() string                 { return "bench_kafka|" + s.name }
-func (s *benchKafkaDownstreamSender) Close(context.Context) error { return nil }
+// Send 模拟 Kafka sender 在写入前对 topic、header 与 payload 元信息的访问成本。
 func (s *benchKafkaDownstreamSender) Send(_ context.Context, p *packet.Packet) error {
 	_ = int(nextShardIndex(&s.nextShard, s.shardMask))
 	_ = s.topic
@@ -96,18 +111,22 @@ func (s *benchKafkaDownstreamSender) Send(_ context.Context, p *packet.Packet) e
 	return nil
 }
 
+// benchSFTPDownstreamSender 模拟 SFTP sender 的分块落盘过程，并维护每个传输的写入进度。
 type benchSFTPDownstreamSender struct {
-	name      string
+	testNamedSender
+	// remoteDir 是模拟远端目录，用于构造最终路径和临时文件路径。
 	remoteDir string
+	// shardMask 用于把递增序号映射到固定分片；要求并发度满足 2 的幂时效果最佳。
 	shardMask int
+	// nextShard 保存全局递增序号，供多协程并发取模分片。
 	nextShard atomic.Uint64
-	mu        sync.Mutex
-	written   map[string]int64
+	// mu 保护 written 映射，避免并发更新相同 transferID 时数据竞争。
+	mu sync.Mutex
+	// written 记录每个 transferID 已写入到的最新偏移，用于模拟续传进度。
+	written map[string]int64
 }
 
-func (s *benchSFTPDownstreamSender) Name() string                { return s.name }
-func (s *benchSFTPDownstreamSender) Key() string                 { return "bench_sftp|" + s.name }
-func (s *benchSFTPDownstreamSender) Close(context.Context) error { return nil }
+// Send 模拟 SFTP 分块写入和 EOF 清理状态的成本。
 func (s *benchSFTPDownstreamSender) Send(_ context.Context, p *packet.Packet) error {
 	_ = int(nextShardIndex(&s.nextShard, s.shardMask))
 	transferID := p.Meta.TransferID
@@ -126,6 +145,7 @@ func (s *benchSFTPDownstreamSender) Send(_ context.Context, p *packet.Packet) er
 	return nil
 }
 
+// nextShardIndex 依据递增序号和掩码选择分片索引；mask<=0 时始终返回 0。
 func nextShardIndex(next *atomic.Uint64, mask int) int {
 	if mask <= 0 {
 		return 0
@@ -134,6 +154,7 @@ func nextShardIndex(next *atomic.Uint64, mask int) int {
 	return i
 }
 
+// benchmarkTask 根据执行模型构造并启动一个基准任务，并返回对应清理函数。
 func benchmarkTask(model string, snd sender.Sender) (*task.Task, func()) {
 	tk := &task.Task{
 		Name:             "bench-task",
@@ -151,32 +172,38 @@ func benchmarkTask(model string, snd sender.Sender) (*task.Task, func()) {
 	return tk, cleanup
 }
 
+// makeDispatchStore 为单 receiver 场景构造测试 Store，避免每个子基准重复拼装快照。
 func makeDispatchStore(receiverName string, tk *task.Task) *Store {
 	st := NewStore()
 	st.setDispatchSubs(map[string][]*TaskState{receiverName: []*TaskState{{Name: "bench-task", T: tk}}})
 	return st
 }
 
+// ingestUDPDatagram 构造一个模拟 UDP 数据报输入包。
 func ingestUDPDatagram(payload []byte, remote, local string) *packet.Packet {
 	buf, rel := packet.CopyFrom(payload)
 	return &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: buf, Meta: packet.Meta{Proto: packet.ProtoUDP, Remote: remote, Local: local}}, ReleaseFn: rel}
 }
 
+// ingestTCPChunk 构造一个模拟 TCP 流分片输入包。
 func ingestTCPChunk(payload []byte, remote, local string) *packet.Packet {
 	buf, rel := packet.CopyFrom(payload)
 	return &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: buf, Meta: packet.Meta{Proto: packet.ProtoTCP, Remote: remote, Local: local}}, ReleaseFn: rel}
 }
 
+// ingestKafkaRecord 构造一个模拟 Kafka 记录输入包。
 func ingestKafkaRecord(value []byte, topic, groupID string) *packet.Packet {
 	buf, rel := packet.CopyFrom(value)
 	return &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: buf, Meta: packet.Meta{Proto: packet.ProtoKafka, Remote: topic, Local: groupID}}, ReleaseFn: rel}
 }
 
+// ingestSFTPChunk 构造一个模拟 SFTP 文件分块输入包。
 func ingestSFTPChunk(chunk []byte, transferID string, offset int64, totalSize int64, eof bool) *packet.Packet {
 	buf, rel := packet.CopyFrom(chunk)
 	return &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindFileChunk, Payload: buf, Meta: packet.Meta{Proto: packet.ProtoSFTP, Remote: "/in/file.bin", Local: "sftp:22", FileName: "file.bin", FilePath: "/in/file.bin", TransferID: transferID, Offset: offset, TotalSize: totalSize, EOF: eof}}, ReleaseFn: rel}
 }
 
+// scenarioBenchmarks 返回所有协议组合基准场景，集中维护便于扩展和复用。
 func scenarioBenchmarks() []benchScenario {
 	return []benchScenario{
 		{
@@ -190,7 +217,7 @@ func scenarioBenchmarks() []benchScenario {
 				for i := range t {
 					t[i] = "10.0.1." + strconv.Itoa(i+1) + ":9000"
 				}
-				return &benchUDPDownstreamSender{name: "udp", shardMask: concurrency - 1, targets: t, rr: make([]atomic.Uint64, concurrency)}
+				return &benchUDPDownstreamSender{testNamedSender: testNamedSender{name: "udp", key: "bench_udp|udp"}, shardMask: concurrency - 1, targets: t, rr: make([]atomic.Uint64, concurrency)}
 			},
 		},
 		{
@@ -200,7 +227,7 @@ func scenarioBenchmarks() []benchScenario {
 				return ingestUDPDatagram(payload, "10.0.0.1:12000", "10.0.0.2:13000")
 			},
 			mkSender: func(concurrency, targets int) sender.Sender {
-				return &benchTCPDownstreamSender{name: "tcp", withLen: true, shardMask: concurrency - 1, framePool: sync.Pool{New: func() any { b := make([]byte, 0, 2048); return &b }}}
+				return &benchTCPDownstreamSender{testNamedSender: testNamedSender{name: "tcp", key: "bench_tcp|tcp"}, withLen: true, shardMask: concurrency - 1, framePool: sync.Pool{New: func() any { b := make([]byte, 0, 2048); return &b }}}
 			},
 		},
 		{
@@ -214,7 +241,7 @@ func scenarioBenchmarks() []benchScenario {
 				for i := range t {
 					t[i] = "10.0.2." + strconv.Itoa(i+1) + ":9100"
 				}
-				return &benchUDPDownstreamSender{name: "udp", shardMask: concurrency - 1, targets: t, rr: make([]atomic.Uint64, concurrency)}
+				return &benchUDPDownstreamSender{testNamedSender: testNamedSender{name: "udp", key: "bench_udp|udp"}, shardMask: concurrency - 1, targets: t, rr: make([]atomic.Uint64, concurrency)}
 			},
 		},
 		{
@@ -228,7 +255,7 @@ func scenarioBenchmarks() []benchScenario {
 				for i := range t {
 					t[i] = "10.0.3." + strconv.Itoa(i+1) + ":9200"
 				}
-				return &benchUDPDownstreamSender{name: "udp", shardMask: concurrency - 1, targets: t, rr: make([]atomic.Uint64, concurrency)}
+				return &benchUDPDownstreamSender{testNamedSender: testNamedSender{name: "udp", key: "bench_udp|udp"}, shardMask: concurrency - 1, targets: t, rr: make([]atomic.Uint64, concurrency)}
 			},
 		},
 		{
@@ -238,7 +265,7 @@ func scenarioBenchmarks() []benchScenario {
 				return ingestUDPDatagram(payload, "10.2.0.1:12000", "10.2.0.2:13000")
 			},
 			mkSender: func(concurrency, targets int) sender.Sender {
-				return &benchKafkaDownstreamSender{name: "kafka", topic: "topic.out", shardMask: concurrency - 1, headers: [][2]string{{"x-scenario", "udp_to_kafka"}}}
+				return &benchKafkaDownstreamSender{testNamedSender: testNamedSender{name: "kafka", key: "bench_kafka|kafka"}, topic: "topic.out", shardMask: concurrency - 1, headers: [][2]string{{"x-scenario", "udp_to_kafka"}}}
 			},
 		},
 		{
@@ -252,7 +279,7 @@ func scenarioBenchmarks() []benchScenario {
 				return ingestSFTPChunk(payload, id, offset, total, eof)
 			},
 			mkSender: func(concurrency, targets int) sender.Sender {
-				return &benchTCPDownstreamSender{name: "tcp", withLen: true, shardMask: concurrency - 1, framePool: sync.Pool{New: func() any { b := make([]byte, 0, 2048); return &b }}}
+				return &benchTCPDownstreamSender{testNamedSender: testNamedSender{name: "tcp", key: "bench_tcp|tcp"}, withLen: true, shardMask: concurrency - 1, framePool: sync.Pool{New: func() any { b := make([]byte, 0, 2048); return &b }}}
 			},
 		},
 		{
@@ -268,12 +295,13 @@ func scenarioBenchmarks() []benchScenario {
 				return pkt
 			},
 			mkSender: func(concurrency, targets int) sender.Sender {
-				return &benchSFTPDownstreamSender{name: "sftp", remoteDir: "/out", shardMask: concurrency - 1, written: make(map[string]int64)}
+				return &benchSFTPDownstreamSender{testNamedSender: testNamedSender{name: "sftp", key: "bench_sftp|sftp"}, remoteDir: "/out", shardMask: concurrency - 1, written: make(map[string]int64)}
 			},
 		},
 	}
 }
 
+// BenchmarkScenarioForwarding 对多协议、多 payload、多并发和多目标组合做综合转发基准测试。
 func BenchmarkScenarioForwarding(b *testing.B) {
 	scenarios := scenarioBenchmarks()
 	payloadSizes := []int{64, 128, 512, 1200, 4096}

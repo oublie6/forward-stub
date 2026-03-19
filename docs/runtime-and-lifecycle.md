@@ -1,128 +1,118 @@
-# Runtime and Lifecycle
+# 运行时、默认值与生命周期
 
-## 1. 文档目标
+## 1. 启动阶段发生了什么
 
-本文说明系统如何从配置文件变成运行中的 receiver/task/pipeline/sender 实例，以及热更新和退出时的资源管理路径。
+当前启动顺序如下：
 
-## 2. 启动流程
+1. 解析 CLI 参数。
+2. 解析 system / business 配置文件路径。
+3. 读取本地配置并严格反序列化（未知字段报错）。
+4. 合并 `system + business`。
+5. 应用 `business_defaults`。
+6. 应用代码默认值。
+7. 若 `control.api` 非空，则再从控制面拉取 business 配置并重新合并、重新默认化。
+8. 执行配置校验。
+9. 初始化 logger、GC 日志、pprof。
+10. 调用 runtime `UpdateCache`，编译 pipeline / selector，构建 sender / task / receiver。
 
-入口：`main.go` 调用 `bootstrap.Run`。
+## 2. 默认值在哪一层生效
 
-1. 解析参数：`-system-config`、`-business-config`、`-config`、`-version`。
-2. 通过 `config.ResolveConfigPaths` 确认配置模式。
-3. `loadConfigPair` 加载 system/business 并合并。
-4. `ApplyDefaults` 和 `Validate` 形成可运行配置。
-5. 初始化 `logx`。
-6. 按 `control.pprof_port` 启动 pprof 服务。
-7. 创建 `app.Runtime` 并执行首次 `UpdateCache`。
-8. 记录 system 配置基线，启动文件监听和信号监听。
+### 2.1 business_defaults
 
-## 3. 运行时构建逻辑
+这是 system 配置的一部分，用来为 business 中没有显式配置的字段补系统级默认值。
 
-runtime 的核心在 `runtime.UpdateCache`。
+### 2.2 代码默认值
 
-关键入口函数：
+例如：
 
-- `app.Runtime.UpdateCache`
-- `runtime.UpdateCache`
-- `Store.replaceAll`
-- `Store.applyBusinessDelta`
+- `control.timeout_sec=5`
+- `logging.level=info`
+- `task.pool_size=4096`
+- `task.queue_size=8192`
+- Kafka timeout / backoff / partitioner 等默认值
 
-### 3.1 构建顺序
+### 2.3 运行时内部回退
 
-1. 编译 pipeline（含 stage cache）。
-2. 构建 sender。
-3. 构建并启动 task。
-4. 生成 dispatch 快照。
-5. 构建并启动 receiver。
+有些字段不是在 `ApplyDefaults()` 时统一回写，而是在对应组件创建时回退，例如：
 
-该顺序降低了“receiver 已接收但 task 未就绪”的风险。
+- SFTP receiver：`poll_interval_sec` 默认 `5` 秒。
+- SFTP receiver：`chunk_size` 默认 `65536`，最小强制为 `1024`。
+- Kafka receiver：`group_id` 未配时按 `forward-stub-<receiver_name>` 生成。
+- UDP / 组播 sender：`local_ip` 为空时回退 `0.0.0.0`。
+- UDP 组播 sender：`ttl<=0` 时回退 `1`。
+- SFTP sender：`temp_suffix` 为空时回退 `.part`。
 
-### 3.2 Store 关键结构
+## 3. 热更新会更新哪些配置块
 
-- `receivers/senders/tasks/pipelines`：运行中实例索引。
-- `subs`：receiver 到 task 的订阅映射。
-- `dispatchSubs`：分发快照（`atomic.Value`）。
-- `recvPayloadLogOptions`：receiver 观测策略快照。
-- `stageCache`：已编译 stage 的可复用缓存。
+当前 business 配置支持热更新，system 配置不支持热更新。
 
-## 4. 热更新机制
+### 3.1 business 热更新涉及的对象
 
-触发来源：
+- `receivers`
+- `selectors`
+- `task_sets`
+- `senders`
+- `pipelines`
+- `tasks`
 
-- 文件内容变化（指纹轮询）。
-- 信号触发（Unix 下 HUP/USR1）。
+### 3.2 system 配置变更的行为
 
-流程：
+如果热更新时检测到 system 配置变化，当前实现会拒绝这次重载，需要重启进程后才能生效。
 
-1. 重新加载配置。
-2. 校验 system 配置是否与基线一致。
-3. 仅当 system 稳定时更新 business 配置。
-4. runtime 尝试增量更新；无法增量时回退全量替换。
+## 4. selector 与 dispatch 在运行时的实际形态
 
-说明：
+配置层看起来是：
 
-- system 配置基线由 `SeedSystemConfig` 记录。
-- reload 时由 `CheckSystemConfigStable` 拒绝 system 漂移。
-- business 更新仍会再次经过 `ApplyDefaults + Validate`。
-
-## 5. 资源创建复用销毁路径
-
-### 创建
-
-- sender：由 `buildSender` 创建，按名字注册。
-- task：绑定 pipeline 和 sender 后 `Task.Start`。
-- receiver：由 `buildReceiver` 创建并异步启动。
-
-### 复用
-
-- sender 可被多个 task 引用，`SenderState.Refs` 追踪引用数。
-- stage 通过 signature 在 `stageCache` 复用。
-- task 重建时可复用流量统计对象。
-
-复用判定的价值：
-
-- 降低热更新期间对象重建与连接抖动。
-- 缩短配置切换窗口。
-
-### 销毁
-
-- `Store.StopAll` 并发停止 receiver 和 sender。
-- task 调用 `StopGraceful`，等待 in-flight 完成。
-- close 阶段使用 `multierr` 聚合错误。
-
-## 6. 关闭流程
-
-接收到停止信号后：
-
-1. 停止配置监听和信号监听。
-2. 调用 runtime `Stop`。
-3. 关闭 pprof 服务。
-4. 刷新并关闭日志。
-
-## 7. 生命周期图
-
-```mermaid
-flowchart TD
-  Start[Process Start] --> Load[Load Config]
-  Load --> Build[Build Runtime Objects]
-  Build --> Run[Running]
-  Run --> Reload[Reload Trigger]
-  Reload --> Apply[Apply Business Update]
-  Apply --> Run
-  Run --> Stop[Stop Signal]
-  Stop --> Drain[Graceful Drain]
-  Drain --> Exit[Process Exit]
+```text
+receiver -> selector -> task_set -> tasks
 ```
 
-## 8. 异常与待确认
+运行时热路径上则是：
 
-- 配置校验失败、sender 构建失败会阻止新配置生效。
-- 旧实例在替换路径中会先完成停止，避免资源泄漏。
-- 待确认：control API 拉取失败时是否需要更细粒度重试策略文档化。
+```text
+receiver -> compiled selector -> []*TaskState
+```
 
-## 9. 生命周期维护建议
+也就是说：
 
-1. 生产变更优先更新 business 配置，避免触发 system 漂移拒绝。
-2. 变更后检查启动日志中 `runtime cache updated` 与 task 快照输出。
-3. 若频繁全量替换，应评估是否可通过配置结构降低重建范围。
+- selector 会提前编译。
+- task_set 会在编译期展开。
+- dispatch 只做一次精确查询和 fan-out。
+
+## 5. payload 日志默认值如何回退
+
+### receiver
+
+`receiver.payload_log_max_bytes` 的回退顺序：
+
+1. receiver 局部值（`>0`）
+2. `logging.payload_log_max_bytes`
+
+### task
+
+`task.payload_log_max_bytes` 的回退顺序：
+
+1. task 局部值（`>0`）
+2. `logging.payload_log_max_bytes`
+
+## 6. 停机阶段发生了什么
+
+当前停机顺序如下：
+
+1. 收到 `TERM/INT` 等停止信号。
+2. 停止配置监听。
+3. 取消主运行 context。
+4. 停止 GC 周期日志任务。
+5. 停止 runtime（receiver / task / sender 优雅回收）。
+6. 停止 pprof 服务。
+
+## 7. 为什么某些字段文档里要写“仅某类型生效”
+
+因为 `ReceiverConfig`、`SenderConfig` 是“按协议并列复用结构体”，并不是“每个协议一个完全独立的 JSON schema”。
+
+因此必须同时关注两件事：
+
+1. 字段是否在结构体里存在。
+2. 当前代码是否真的在某个协议实现里消费它。
+
+本次文档全部按第 2 条为准，即：**只有代码实际消费的字段才会被描述为“有效”或“有行为”**。

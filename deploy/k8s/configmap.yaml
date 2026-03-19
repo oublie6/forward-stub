@@ -5,50 +5,67 @@ metadata:
 data:
   config.json: |
     {
-      "version": 5,
+      "version": 1001,
       "control": {
         "api": "",
         "timeout_sec": 5,
-        "config_watch_interval": "2s"
+        "config_watch_interval": "2s",
+        "pprof_port": -1
       },
       "logging": {
         "level": "info",
         "file": "/var/log/forward-stub/app.log",
-        "traffic_stats_interval": "5s",
-        "traffic_stats_sample_every": 1,
-        "compress": true,
         "max_size_mb": 100,
         "max_backups": 5,
-        "max_age_days": 30
+        "max_age_days": 30,
+        "compress": true,
+        "traffic_stats_interval": "5s",
+        "traffic_stats_sample_every": 1,
+        "payload_log_max_bytes": 256,
+        "payload_pool_max_cached_bytes": 0,
+        "gc_stats_log_enabled": false,
+        "gc_stats_log_interval": "1m"
       },
       "receivers": {
         "udp_in": {
           "type": "udp_gnet",
-          "listen": "udp://0.0.0.0:19000",
+          "listen": "0.0.0.0:19000",
+          "selector": "sel_udp_in",
           "multicore": true,
-          "frame": ""
+          "num_event_loop": 4
         }
+      },
+      "selectors": {
+        "sel_udp_in": {
+          "default_task_set": "ts_udp_forward"
+        }
+      },
+      "task_sets": {
+        "ts_udp_forward": [
+          "task_udp_forward"
+        ]
       },
       "senders": {
         "udp_out": {
           "type": "udp_unicast",
+          "remote": "127.0.0.1:19002",
           "local_ip": "0.0.0.0",
           "local_port": 19001,
-          "remote": "127.0.0.1:19002",
           "concurrency": 1
         }
       },
       "pipelines": {
-        "default": []
+        "pipe_passthrough": []
       },
       "tasks": {
-        "udp-forward": {
-          "pool_size": 1024,
-          "queue_size": 4096,
-          "fast_path": true,
-          "receivers": ["udp_in"],
-          "pipelines": ["default"],
-          "senders": ["udp_out"]
+        "task_udp_forward": {
+          "execution_model": "fastpath",
+          "pipelines": [
+            "pipe_passthrough"
+          ],
+          "senders": [
+            "udp_out"
+          ]
         }
       }
     }

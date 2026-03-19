@@ -1,100 +1,141 @@
-# Task and Dispatch
+# Selector、Task Set、Task 与 Dispatch
 
-## 1. 文档目标
+## 1. 配置引用链路
 
-本文聚焦运行时最关键的编排路径：receiver 如何把数据送到 task，task 如何执行 pipeline 并发送到 sender。
+当前配置引用关系固定为：
 
-## 2. dispatch 职责
-
-dispatch 位于 receiver 回调之后，负责：
-
-- 根据 receiver 名字查找订阅 task 快照。
-- 在多订阅场景 clone packet。
-- 将 packet 交给 task 的 `Handle`。
-
-设计关键点：
-
-- `dispatchSubs` 为只读快照，读路径无锁。
-- 单订阅复用原 packet，减少复制。
-
-对应实现位置：
-
-- `runtime.dispatch`
-- `Store.getDispatchTasks`
-- `Store.getRecvPayloadLogOption`
-
-## 3. task 职责
-
-task 负责一条完整链路：
-
-- 选择执行模型。
-- 顺序执行 pipeline。
-- fanout 到 sender 列表。
-- 维护 in-flight 计数与优雅停机。
-
-对应实现位置：
-
-- `Task.Start`
-- `Task.Handle`
-- `Task.processAndSend`
-- `Task.StopGraceful`
-
-## 4. 实例化关系
-
-- 一个 receiver 可以被多个 task 订阅。
-- 一个 task 可绑定多个 pipeline 和 sender。
-- 一个 sender 可以被多个 task 引用。
-
-## 5. 调度路径图
-
-```mermaid
-flowchart LR
-  Recv[Receiver Callback] --> Disp[Dispatch]
-  Disp --> TaskA[Task A]
-  Disp --> TaskB[Task B]
-
-  TaskA --> PipeA[Pipeline Set]
-  PipeA --> SendA[Sender Set]
-
-  TaskB --> PipeB[Pipeline Set]
-  PipeB --> SendB[Sender Set]
+```text
+receiver.selector -> selectors.<name>
+selector.matches/default_task_set -> task_sets.<name>
+task_sets.<name>[] -> tasks.<name>
+tasks.<name>.pipelines[] -> pipelines.<name>
+tasks.<name>.senders[] -> senders.<name>
 ```
 
-## 6. 队列缓冲回压机制
+这条链路里没有“task 直接绑定 receiver”的旧模型了。
 
-- `pool` 模型：ants 池 + `queue_size`。
-- `channel` 模型：`channel_queue_size` 有界队列。
-- `fastpath` 模型：无额外队列，回压直接作用到上游调用链。
+## 2. selector 的职责
 
-当队列满时，task 会丢包并记录错误日志。
+selector 只做：
 
-关键参数来源：
+```text
+match key -> task_set
+```
 
-- task 显式配置字段。
-- system `business_defaults.task`。
-- `ApplyDefaults` 的内置默认值。
+字段说明：
 
-## 7. 快照与热更新
+- `matches`：显式命中表。
+- `default_task_set`：未命中时的默认 task_set。
 
-更新时 runtime 会重建 dispatch 快照：
+关键规则：
 
-1. 更新 `subs` 关系。
-2. 生成 `map receiver to tasks`。
-3. 原子替换为新快照。
+- key 必须由 receiver 生成的**完整 match key**。
+- value 必须是 task_set 名称。
+- 不支持通配符、正则、优先级、表达式。
 
-优点：
+## 3. task_set 的职责
 
-- 分发路径无需持锁。
-- 切换过程边界清晰。
+task_set 只是 task 名称数组，例如：
 
-## 8. 关键维护点
+```json
+"task_sets": {
+  "ts_realtime": ["task_parse", "task_forward"]
+}
+```
 
-- 新增 task 时优先检查 receiver 和 sender 引用正确性。
-- route stage 场景需确保 sender 名称一致。
-- 长期堆积时优先检查下游 sender 性能和 task 队列参数。
+它的用途只有两个：
 
-## 9. 调度问题快速判断
+1. 让多个 match key 复用同一组 task。
+2. 让配置结构比直接在 selector 中写 task 数组更清晰。
 
-1. 若单 receiver 绑定大量 task 且吞吐下降，优先检查 clone 成本与 sender 压力。
-2. 若仅 pool 模型报警，优先检查 `queue_size` 与 `pool_size` 配比。
-3. 若仅 channel 模型报警，优先检查顺序链路是否超出单 worker 承载上限。
+### 3.1 为什么 task_set 不在热路径里保留
+
+运行时会先把：
+
+```text
+match key -> task_set_name
+```
+
+编译成：
+
+```text
+match key -> []*TaskState
+```
+
+这样 dispatch 热路径就只需要一次 map lookup，不需要再多跳一层 task_set。
+
+## 4. task 的职责
+
+task 决定的是“命中之后怎么处理”：
+
+- 执行哪些 pipeline。
+- 把结果送到哪些 sender。
+- 采用哪种 execution model。
+- 是否打印发送前 payload 摘要。
+
+### 4.1 `fast_path` 与 `execution_model`
+
+- 新配置优先使用 `execution_model`。
+- `fast_path` 只是兼容旧配置的简写开关。
+- 当 `execution_model` 已经明确填写时，`fast_path` 不再参与决策。
+
+## 5. dispatch 的真实热路径
+
+当前 runtime 热路径如下：
+
+```text
+1. receiver 收到数据
+2. receiver 构造 packet + match key
+3. dispatch 读取 receiver 当前 selector 快照
+4. 用 match key 做一次 map 精确查找
+5. 命中 task 切片后 fan-out
+```
+
+### 5.1 未命中的行为
+
+- 命中 `matches`：执行命中的 task 列表。
+- 未命中但配置了 `default_task_set`：执行默认 task 列表。
+- 未命中且没有 `default_task_set`：直接丢弃。
+
+### 5.2 多 task fan-out 的复制语义
+
+- 如果只命中 1 个 task，原始 packet 会直接复用。
+- 如果命中多个 task，runtime 会为第 2 个及之后的 task 逐个 `Clone()`，避免共享 packet 带来释放时序冲突。
+
+## 6. route sender 与 selector 的边界
+
+两者经常被混淆，但职责完全不同：
+
+### selector
+
+- 决定：**这条数据应该进入哪些 task**。
+- 输入：`packet.Meta.MatchKey`。
+- 输出：`[]*TaskState`。
+
+### route stage（`route_offset_bytes_sender`）
+
+- 决定：**当前 task 内最终选哪个 sender**。
+- 输入：payload 中某个偏移的字节内容。
+- 输出：`packet.Meta.RouteSender`。
+
+### 必须记住的约束
+
+- route stage 命中的 sender 必须已经在当前 `task.senders` 中列出。
+- route stage 不会改变 selector 的匹配结果。
+
+## 7. match key 示例
+
+| 协议 | match key 示例 |
+|---|---|
+| UDP | `udp|src_addr=10.0.0.1:9000` |
+| TCP | `tcp|src_addr=10.0.0.1:9000` |
+| Kafka | `kafka|topic=orders|partition=0` |
+| SFTP | `sftp|remote_dir=/input|file_name=orders.csv` |
+
+## 8. 配置设计建议
+
+- 用 receiver 表达**接入协议**。
+- 用 selector 表达**主路由**。
+- 用 task_set 表达**复用**。
+- 用 task 表达**处理与发送**。
+- 用 pipeline 表达**数据变换或 task 内 sender 选择**。

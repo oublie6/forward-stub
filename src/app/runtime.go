@@ -35,7 +35,7 @@ func (r *Runtime) SeedSystemConfig(cfg config.SystemConfig) error {
 	defer r.systemMu.Unlock()
 	if r.hasSystem {
 		if !reflect.DeepEqual(r.systemCfg, cfg) {
-			return fmt.Errorf("system config changed and requires restart")
+			return fmt.Errorf("系统配置已变化，需要重启服务")
 		}
 		return nil
 	}
@@ -49,10 +49,10 @@ func (r *Runtime) CheckSystemConfigStable(cfg config.SystemConfig) error {
 	r.systemMu.RLock()
 	defer r.systemMu.RUnlock()
 	if !r.hasSystem {
-		return fmt.Errorf("system config baseline not initialized")
+		return fmt.Errorf("系统配置基线尚未初始化")
 	}
 	if !reflect.DeepEqual(r.systemCfg, cfg) {
-		return fmt.Errorf("system config changed, restart service to take effect")
+		return fmt.Errorf("系统配置已变化，需要重启服务后生效")
 	}
 	return nil
 }

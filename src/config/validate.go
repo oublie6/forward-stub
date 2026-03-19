@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Validate 负责该函数对应的核心逻辑，详见实现细节。
@@ -15,6 +16,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Receivers == nil {
 		return errors.New("receivers missing")
+	}
+	if c.Selectors == nil {
+		return errors.New("selectors missing")
+	}
+	if c.TaskSets == nil {
+		return errors.New("task_sets missing")
 	}
 	if c.Senders == nil {
 		return errors.New("senders missing")
@@ -26,6 +33,12 @@ func (c *Config) Validate() error {
 	if c.Logging.PayloadPoolMaxCachedBytes < 0 {
 		return errors.New("logging payload_pool_max_cached_bytes must be >= 0")
 	}
+	if strings.TrimSpace(c.Logging.GCStatsLogInterval) != "" {
+		d, err := time.ParseDuration(c.Logging.GCStatsLogInterval)
+		if err != nil || d <= 0 {
+			return errors.New("logging gc_stats_log_interval must be a valid duration > 0")
+		}
+	}
 
 	if c.Control.PprofPort < -1 || c.Control.PprofPort > 65535 {
 		return errors.New("control pprof_port must be in [-1,65535]")
@@ -35,12 +48,6 @@ func (c *Config) Validate() error {
 		if tn == "" {
 			return errors.New("task name empty")
 		}
-		if len(t.Receivers) == 0 {
-			return fmt.Errorf("task %s has no receivers", tn)
-		}
-		//if len(t.Pipelines) == 0 {
-		//	return fmt.Errorf("task %s has no pipelines", tn)
-		//}
 		if len(t.Senders) == 0 {
 			return fmt.Errorf("task %s has no senders", tn)
 		}
@@ -49,11 +56,6 @@ func (c *Config) Validate() error {
 		}
 		if t.ChannelQueueSize < 0 {
 			return fmt.Errorf("task %s channel_queue_size must be >= 0", tn)
-		}
-		for _, rn := range t.Receivers {
-			if _, ok := c.Receivers[rn]; !ok {
-				return fmt.Errorf("task %s receiver %s not found", tn, rn)
-			}
 		}
 		for _, pn := range t.Pipelines {
 			if _, ok := c.Pipelines[pn]; !ok {
@@ -80,7 +82,52 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	for tsn, taskNames := range c.TaskSets {
+		if tsn == "" {
+			return errors.New("task set name empty")
+		}
+		if len(taskNames) == 0 {
+			return fmt.Errorf("task set %s has no tasks", tsn)
+		}
+		for _, tn := range taskNames {
+			if tn == "" {
+				return fmt.Errorf("task set %s has empty task name", tsn)
+			}
+			if _, ok := c.Tasks[tn]; !ok {
+				return fmt.Errorf("task set %s task %s not found", tsn, tn)
+			}
+		}
+	}
+
+	for sn, sc := range c.Selectors {
+		if sn == "" {
+			return errors.New("selector name empty")
+		}
+		for key, taskSetName := range sc.Matches {
+			if strings.TrimSpace(key) == "" {
+				return fmt.Errorf("selector %s has empty match key", sn)
+			}
+			if strings.TrimSpace(taskSetName) == "" {
+				return fmt.Errorf("selector %s match key %s has empty task set", sn, key)
+			}
+			if _, ok := c.TaskSets[taskSetName]; !ok {
+				return fmt.Errorf("selector %s task set %s not found", sn, taskSetName)
+			}
+		}
+		if sc.DefaultTaskSet != "" {
+			if _, ok := c.TaskSets[sc.DefaultTaskSet]; !ok {
+				return fmt.Errorf("selector %s default task set %s not found", sn, sc.DefaultTaskSet)
+			}
+		}
+	}
+
 	for rn, r := range c.Receivers {
+		if strings.TrimSpace(r.Selector) == "" {
+			return fmt.Errorf("receiver %s selector required", rn)
+		}
+		if _, ok := c.Selectors[r.Selector]; !ok {
+			return fmt.Errorf("receiver %s selector %s not found", rn, r.Selector)
+		}
 		switch r.Type {
 		case "udp_gnet", "tcp_gnet":
 		case "kafka":
@@ -92,6 +139,9 @@ func (c *Config) Validate() error {
 			}
 			if r.StartOffset != "" && r.StartOffset != "earliest" && r.StartOffset != "latest" {
 				return fmt.Errorf("receiver %s kafka start_offset must be earliest/latest", rn)
+			}
+			if err := validateKafkaReceiverOptions(rn, r); err != nil {
+				return err
 			}
 			if err := validateKafkaAuth("receiver", rn, r.SASLMechanism, r.Username, r.Password); err != nil {
 				return err
@@ -158,6 +208,9 @@ func (c *Config) Validate() error {
 			if s.MaxBufferedRecords < 0 {
 				return fmt.Errorf("sender %s kafka max_buffered_records must be >= 0", sn)
 			}
+			if err := validateKafkaSenderOptions(sn, s); err != nil {
+				return err
+			}
 			if err := validateKafkaAuth("sender", sn, s.SASLMechanism, s.Username, s.Password); err != nil {
 				return err
 			}
@@ -195,6 +248,123 @@ func validateKafkaAuth(kind, name, mechanism, username, password string) error {
 		return nil
 	}
 	return fmt.Errorf("%s %s kafka unsupported sasl_mechanism %s", kind, name, mechanism)
+}
+
+func validateKafkaReceiverOptions(name string, rc ReceiverConfig) error {
+	if err := validatePositiveDurationField("receiver", name, "dial_timeout", rc.DialTimeout); err != nil {
+		return err
+	}
+	if err := validatePositiveDurationField("receiver", name, "conn_idle_timeout", rc.ConnIdleTimeout); err != nil {
+		return err
+	}
+	if err := validatePositiveDurationField("receiver", name, "metadata_max_age", rc.MetadataMaxAge); err != nil {
+		return err
+	}
+	if err := validatePositiveDurationField("receiver", name, "retry_backoff", rc.RetryBackoff); err != nil {
+		return err
+	}
+	if err := validatePositiveDurationField("receiver", name, "session_timeout", rc.SessionTimeout); err != nil {
+		return err
+	}
+	if err := validatePositiveDurationField("receiver", name, "heartbeat_interval", rc.HeartbeatInterval); err != nil {
+		return err
+	}
+	if err := validatePositiveDurationField("receiver", name, "rebalance_timeout", rc.RebalanceTimeout); err != nil {
+		return err
+	}
+	if err := validatePositiveDurationField("receiver", name, "auto_commit_interval", rc.AutoCommitInterval); err != nil {
+		return err
+	}
+	if rc.FetchMaxPartitionBytes < 0 {
+		return fmt.Errorf("receiver %s kafka fetch_max_partition_bytes must be >= 0", name)
+	}
+	if rc.FetchMaxBytes > 0 && rc.FetchMaxPartitionBytes > 0 && rc.FetchMaxPartitionBytes > rc.FetchMaxBytes {
+		return fmt.Errorf("receiver %s kafka fetch_max_partition_bytes must be <= fetch_max_bytes", name)
+	}
+	if rc.IsolationLevel != "" && rc.IsolationLevel != "read_uncommitted" && rc.IsolationLevel != "read_committed" {
+		return fmt.Errorf("receiver %s kafka isolation_level unsupported: %s", name, rc.IsolationLevel)
+	}
+	if len(rc.Balancers) == 0 {
+		return fmt.Errorf("receiver %s kafka balancers must not be empty", name)
+	}
+	for _, balancer := range rc.Balancers {
+		switch balancer {
+		case "range", "round_robin", "cooperative_sticky":
+		default:
+			return fmt.Errorf("receiver %s kafka balancer unsupported: %s", name, balancer)
+		}
+	}
+	if rc.SessionTimeout != "" && rc.HeartbeatInterval != "" {
+		sessionTimeout, _ := time.ParseDuration(rc.SessionTimeout)
+		heartbeatInterval, _ := time.ParseDuration(rc.HeartbeatInterval)
+		if heartbeatInterval >= sessionTimeout {
+			return fmt.Errorf("receiver %s kafka heartbeat_interval must be less than session_timeout", name)
+		}
+	}
+	autoCommit := true
+	if rc.AutoCommit != nil {
+		autoCommit = *rc.AutoCommit
+	}
+	if !autoCommit && strings.TrimSpace(rc.AutoCommitInterval) != "" {
+		return fmt.Errorf("receiver %s kafka auto_commit_interval requires auto_commit=true", name)
+	}
+	return nil
+}
+
+func validateKafkaSenderOptions(name string, sc SenderConfig) error {
+	if err := validatePositiveDurationField("sender", name, "dial_timeout", sc.DialTimeout); err != nil {
+		return err
+	}
+	if err := validatePositiveDurationField("sender", name, "request_timeout", sc.RequestTimeout); err != nil {
+		return err
+	}
+	if err := validatePositiveDurationField("sender", name, "retry_timeout", sc.RetryTimeout); err != nil {
+		return err
+	}
+	if err := validatePositiveDurationField("sender", name, "retry_backoff", sc.RetryBackoff); err != nil {
+		return err
+	}
+	if err := validatePositiveDurationField("sender", name, "conn_idle_timeout", sc.ConnIdleTimeout); err != nil {
+		return err
+	}
+	if err := validatePositiveDurationField("sender", name, "metadata_max_age", sc.MetadataMaxAge); err != nil {
+		return err
+	}
+	if sc.Partitioner != "" && sc.Partitioner != "sticky" && sc.Partitioner != "round_robin" && sc.Partitioner != "hash_key" {
+		return fmt.Errorf("sender %s kafka partitioner unsupported: %s", name, sc.Partitioner)
+	}
+	if sc.RecordKey != "" && sc.RecordKeySource != "" {
+		return fmt.Errorf("sender %s kafka record_key and record_key_source are mutually exclusive", name)
+	}
+	if sc.RecordKeySource != "" {
+		switch sc.RecordKeySource {
+		case "payload", "match_key", "remote", "local", "file_name", "file_path", "transfer_id", "route_sender":
+		default:
+			return fmt.Errorf("sender %s kafka record_key_source unsupported: %s", name, sc.RecordKeySource)
+		}
+	}
+	if sc.Partitioner == "hash_key" && sc.RecordKey == "" && sc.RecordKeySource == "" {
+		return fmt.Errorf("sender %s kafka partitioner hash_key requires record_key or record_key_source", name)
+	}
+	if sc.CompressionLevel != 0 {
+		switch sc.Compression {
+		case "gzip", "lz4", "zstd":
+		default:
+			return fmt.Errorf("sender %s kafka compression_level requires compression in gzip/lz4/zstd", name)
+		}
+	}
+	return nil
+}
+
+func validatePositiveDurationField(kind, name, field, value string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil || d <= 0 {
+		return fmt.Errorf("%s %s kafka %s must be a valid duration > 0", kind, name, field)
+	}
+	return nil
 }
 
 // ValidateSSHHostKeyFingerprint 校验 SSH SHA256 主机公钥指纹格式。

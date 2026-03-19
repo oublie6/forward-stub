@@ -1,102 +1,50 @@
-# Operations
+# 运维与配置变更建议
 
-## 1. 运维目标
+## 1. 推荐使用双配置模式
 
-本文面向值班和维护人员，提供日常操作、巡检、变更和风险控制建议。
-
-## 2. 启动与停止
-
-### 启动
+生产环境建议始终使用：
 
 ```bash
 ./bin/forward-stub -system-config ./configs/system.example.json -business-config ./configs/business.example.json
 ```
 
-### 停止
+原因：
 
-- 前台运行直接 `Ctrl+C`。
-- 后台运行发送停止信号（TERM/INT）。
+- `system` 配置通常需要重启生效。
+- `business` 配置支持热更新。
+- 分离后更适合做变更审计和风险隔离。
 
-停止时 runtime 会执行优雅下线，等待 task in-flight 完成。
+## 2. 变更前检查清单
 
-## 3. 配置变更操作
-
-- 修改 business 配置后，等待文件监听触发或发送重载信号。
-- 若误改 system 配置，reload 会被拒绝，需重启生效。
-
-建议流程：
-
-1. 备份当前 business 文件。
-2. 预检查 JSON 格式。
-3. 应用并观察日志。
-4. 验证吞吐与错误率。
-
-## 4. 日志使用方式
-
-关键日志类别：
-
-- 启动与配置加载日志。
-- task 队列满丢包日志。
-- sender 发送异常日志。
-- 流量聚合统计日志。
-
-建议：
-
-- 生产默认 `info` 或 `warn`。
-- 排障窗口短时启用更高日志级别。
-
-## 5. 常用运维命令
+### 2.1 JSON 结构检查
 
 ```bash
-# 版本
-./bin/forward-stub -version
-
-# 监听端口
-ss -lntup | rg forward-stub
-
-# 触发重载
-kill -HUP <pid>
-
-# 查看最近日志
-journalctl -u forward-stub -n 200 --no-pager
+jq . ./configs/system.example.json >/dev/null
+jq . ./configs/business.example.json >/dev/null
 ```
 
-## 6. 巡检建议
+### 2.2 强约束检查
 
-每个巡检周期建议确认：
+重点确认：
 
-- 进程存活和端口状态。
-- 错误日志是否突增。
-- 流量统计是否偏离基线。
-- 下游链路可达性是否稳定。
+- receiver / selector / task_set / task / sender / pipeline 引用链是否完整。
+- Kafka duration 字段是否都是合法正 duration。
+- `concurrency` 若显式配置为正数，是否是 2 的幂。
+- `control.pprof_port` 是否符合 `-1/0/1~65535` 语义。
 
-## 7. benchmark 入口与运维意义
+## 3. 热更新时哪些配置不能改
 
-场景化 benchmark 可用于：
+当前不建议通过热更新修改 system 配置，包括：
 
-- 上线前容量评估。
-- 版本升级回归。
-- 参数调优对比。
+- `control`
+- `logging`
+- `business_defaults`
 
-示例：
+这些变更会被当作 system 配置变化，需要重启进程后才能生效。
 
-```bash
-go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
-```
+## 4. 变更后重点观察什么
 
-如需做模型或参数对比，请固定同一机器、同一命令模板，参考 `docs/benchmark.md`。
-
-## 8. pprof 与运行诊断
-
-若 `control.pprof_port` 开启，可执行：
-
-```bash
-go tool pprof http://127.0.0.1:6060/debug/pprof/profile?seconds=30
-go tool pprof http://127.0.0.1:6060/debug/pprof/heap
-```
-
-## 9. 常见操作风险
-
-- 长期开启 payload 日志会影响吞吐并放大日志体积。
-- 队列参数盲目调大可能造成内存压力。
-- 未验证的 route sender 配置会导致转发丢失。
+- 是否出现 `配置校验失败`。
+- receiver / sender 是否成功启动。
+- 流量统计是否恢复到预期。
+- task 是否出现队列满或 channel 入队失败日志。

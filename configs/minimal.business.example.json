@@ -1,0 +1,42 @@
+{
+  "version": 1001,
+  "receivers": {
+    "rx_udp": {
+      "type": "udp_gnet",
+      "listen": "0.0.0.0:19000",
+      "selector": "sel_default"
+    }
+  },
+  "selectors": {
+    "sel_default": {
+      "default_task_set": "ts_forward"
+    }
+  },
+  "task_sets": {
+    "ts_forward": [
+      "task_forward"
+    ]
+  },
+  "senders": {
+    "tx_udp": {
+      "type": "udp_unicast",
+      "remote": "127.0.0.1:21000",
+      "local_ip": "0.0.0.0",
+      "local_port": 20000
+    }
+  },
+  "pipelines": {
+    "pipe_passthrough": []
+  },
+  "tasks": {
+    "task_forward": {
+      "pipelines": [
+        "pipe_passthrough"
+      ],
+      "senders": [
+        "tx_udp"
+      ],
+      "execution_model": "fastpath"
+    }
+  }
+}

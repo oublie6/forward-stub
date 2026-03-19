@@ -40,7 +40,7 @@
 ### 1.4 数据层
 
 - receiver 收到数据后包装为 `packet.Packet`。
-- dispatch 按 receiver 订阅映射 fan-out 到 task。
+- dispatch 按 receiver 当前绑定的 selector 精确匹配到 task 列表并 fan-out。
 - task 执行 pipeline，再发送到一个或多个 sender。
 
 ---
@@ -55,7 +55,7 @@
 4. runtime 构建 sender。
 5. runtime 构建 task（初始化执行模型）。
 6. runtime 构建并启动 receiver。
-7. Store 原子切换 dispatch 快照。
+7. Store 原子切换 selector 与 dispatch 快照。
 8. 监听信号/文件变更，触发后续热更新。
 
 ### 2.2 单包数据路径
@@ -119,9 +119,10 @@
 
 ## 7. 运维与可观测
 
-- `traffic stats summary` 提供任务维度吞吐统计。
+- `流量统计摘要` 提供任务维度吞吐统计。
+- GC 周期日志提供 goroutine、heap、stack 与 GC 抖动观测。
 - payload 观测支持按任务开关，避免日志放大。
-- runtime 更新日志包含 updating/updated + cost，便于定位配置发布风险。
+- runtime 更新日志包含开始/完成/耗时，便于定位配置发布风险。
 
 ---
 

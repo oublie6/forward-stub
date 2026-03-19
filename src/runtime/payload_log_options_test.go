@@ -1,3 +1,4 @@
+// Package runtime 负责维护转发运行时对象及其测试辅助逻辑。
 package runtime
 
 import (
@@ -6,6 +7,7 @@ import (
 	"forward-stub/src/config"
 )
 
+// TestBuildTaskPayloadLogOptions 验证任务级 payload 日志开关与截断上限的优先级规则。
 func TestBuildTaskPayloadLogOptions(t *testing.T) {
 	lc := config.LoggingConfig{
 		PayloadLogMaxBytes: 128,
