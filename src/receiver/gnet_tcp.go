@@ -35,7 +35,7 @@ type GnetTCP struct {
 func NewGnetTCP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, framer Framer, gnetLogLevel string) *GnetTCP {
 	return &GnetTCP{
 		name:             name,
-		listen:           listen,
+		listen:           normalizeGnetListen("tcp", listen),
 		multicore:        multicore,
 		numEventLoop:     numEventLoop,
 		readBufferCap:    readBufferCap,
@@ -144,14 +144,16 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 		}
 		payload, rel := packet.CopyFrom(cs.buf)
 		cs.buf = cs.buf[:0]
+		matchKey := BuildMatchKey("tcp", MatchKeyField{Name: "src_addr", Value: cs.remote})
 		h.recv.onPacket(&packet.Packet{
 			Envelope: packet.Envelope{
 				Kind:    packet.PayloadKindStream,
 				Payload: payload,
 				Meta: packet.Meta{
-					Proto:  packet.ProtoTCP,
-					Remote: cs.remote,
-					Local:  cs.local,
+					Proto:    packet.ProtoTCP,
+					Remote:   cs.remote,
+					Local:    cs.local,
+					MatchKey: matchKey,
 				},
 			},
 			ReleaseFn: rel,
@@ -170,14 +172,16 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 			stats.AddBytes(len(fr))
 		}
 		payload, rel := packet.CopyFrom(fr)
+		matchKey := BuildMatchKey("tcp", MatchKeyField{Name: "src_addr", Value: cs.remote})
 		h.recv.onPacket(&packet.Packet{
 			Envelope: packet.Envelope{
 				Kind:    packet.PayloadKindStream,
 				Payload: payload,
 				Meta: packet.Meta{
-					Proto:  packet.ProtoTCP,
-					Remote: cs.remote,
-					Local:  cs.local,
+					Proto:    packet.ProtoTCP,
+					Remote:   cs.remote,
+					Local:    cs.local,
+					MatchKey: matchKey,
 				},
 			},
 			ReleaseFn: rel,

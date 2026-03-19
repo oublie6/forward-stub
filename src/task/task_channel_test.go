@@ -11,13 +11,12 @@ import (
 )
 
 type captureSender struct {
+	testNamedSender
+
 	mu    sync.Mutex
 	items []uint32
 }
 
-func (s *captureSender) Name() string                { return "capture" }
-func (s *captureSender) Key() string                 { return "capture" }
-func (s *captureSender) Close(context.Context) error { return nil }
 func (s *captureSender) Send(_ context.Context, p *packet.Packet) error {
 	v := binary.BigEndian.Uint32(p.Payload)
 	s.mu.Lock()
@@ -42,7 +41,7 @@ func pktNum(v uint32) *packet.Packet {
 }
 
 func TestChannelExecutionModelKeepsOrder(t *testing.T) {
-	cap := &captureSender{}
+	cap := &captureSender{testNamedSender: testNamedSender{name: "capture"}}
 	tk := &Task{Name: "ch", ExecutionModel: ExecutionModelChannel, QueueSize: 64, Senders: []sender.Sender{cap}}
 	if err := tk.Start(); err != nil {
 		t.Fatalf("start task: %v", err)

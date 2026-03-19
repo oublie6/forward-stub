@@ -1,95 +1,86 @@
-# Architecture
+# 架构说明
 
-## 1. 系统定位
+## 1. 当前核心拓扑
 
-`forward-stub` 是一个配置驱动的转发引擎。核心目标不是提供复杂业务计算，而是稳定地完成多协议接入、轻量数据处理和多下游分发。
+系统当前采用：
 
-系统的基础抽象由四个对象组成：
-
-- `receiver`：协议输入端，负责把外部数据转成 `packet.Packet`。
-- `task`：执行单元，负责调度 pipeline 和 sender。
-- `pipeline`：处理链，负责 stage 顺序处理和路由信息写入。
-- `sender`：协议输出端，负责将 packet 发送到下游。
-
-## 2. 核心设计目标
-
-1. **吞吐优先**：热路径减少锁竞争与对象分配。
-2. **延迟可控**：支持 fastpath 同步执行和 pool/channel 异步执行。
-3. **热更新可运维**：业务拓扑支持在线更新，系统配置保持边界。
-4. **模块可演进**：receiver/sender/stage 均可通过接口扩展。
-
-## 3. 架构分层
-
-- **入口与控制层**：`src/bootstrap`、`src/app`、`src/control`
-- **配置层**：`src/config`
-- **运行时编排层**：`src/runtime`、`src/task`
-- **协议接入层**：`src/receiver`
-- **处理层**：`src/pipeline`
-- **协议发送层**：`src/sender`
-- **观测层**：`src/logx`
-
-## 4. 关键抽象关系
-
-`task` 是承上启下的核心对象：
-
-- 上游通过 dispatch 将 packet 投递给 task。
-- task 内部按执行模型运行 pipeline。
-- pipeline 可修改 payload 和 metadata。
-- task 最终调用 sender fanout 发送。
-
-这使得 receiver 与 sender 解耦，新增协议实现时不会侵入核心调度路径。
-
-## 5. 架构图
-
-```mermaid
-flowchart LR
-  Boot[Bootstrap] --> Conf[Config]
-  Conf --> Runtime[Runtime Store]
-
-  Runtime --> Recv[Receiver]
-  Recv --> Disp[Dispatch]
-  Disp --> Task[Task]
-  Task --> Pipe[Pipeline]
-  Pipe --> Send[Sender]
-
-  CfgApi[Control API] --> Conf
-  Logs[Logx] --> Runtime
+```text
+receiver -> selector -> task(pipeline + sender)
 ```
 
-## 6. 数据流与控制流
+旧架构里 `task` 直接绑定 `receiver`，接入和路由耦合在一起。重构后，路由职责被收敛到极简 selector 层。
 
-### 数据流
+## 2. 四层职责边界
 
-1. receiver 收包并构造 `packet.Packet`。
-2. runtime.dispatch 按 receiver 名字查快照，找到订阅 task。
-3. task 执行 pipeline stage。
-4. sender 将处理结果写出。
+### receiver
 
-### 控制流
+负责：
 
-1. bootstrap 解析参数并加载配置。
-2. config 应用默认值并校验。
-3. runtime 按配置构建 sender/task/receiver。
-4. 热更新触发后重走编译与替换流程。
+- 接收不同协议的数据。
+- 构造 `packet.Packet`。
+- 依据本协议固定规则生成唯一 `match key`。
 
-## 7. 适配高吞吐低延迟热更新的原因
+不负责：
 
-- `dispatchSubs` 使用 `atomic.Value` 保存只读快照，减少分发路径锁。
-- 多订阅场景 clone packet，避免任务间共享释放竞争。
-- `task` 提供三种执行模型，允许按链路特征优化。
-- runtime 构建顺序先 sender 后 task 再 receiver，缩小切换窗口。
-- business 配置可以增量更新，系统配置通过基线比对避免漂移。
+- 任务选择。
+- 规则遍历。
+- 解释其他协议字段。
 
-## 8. 当前优势与局限
+### selector
 
-### 优势
+负责：
 
-- 拓扑可配置且模块边界清晰。
-- 协议覆盖已包含网络流、消息总线和文件通道。
-- 运维入口完整，具备日志、pprof、benchmark。
+- `match key -> task set` 精确匹配。
 
-### 局限
+不负责：
 
-- 待确认：缺少内建 Prometheus 指标导出端点。
-- route stage 仅支持固定偏移字节匹配，不支持复杂表达式。
-- 更复杂的可靠性策略主要依赖下游协议能力与外部编排。
+- 解析协议。
+- 猜测字段语义。
+- 从 `Meta.Remote` 推断 topic/path/address。
+
+### task set
+
+负责：
+
+- 做配置复用。
+- 让多个 match key 共享同一组 task 名称。
+
+不负责：
+
+- 参与热路径额外跳转。
+
+### runtime / dispatch
+
+负责：
+
+- 串联 receiver、selector、task。
+- fanout 到最终命中的 task slice。
+
+不负责：
+
+- 协议解析。
+- 模板式复杂框架。
+- 多级 fallback 规则引擎。
+
+## 3. 热路径设计
+
+热路径只做三件事：
+
+1. receiver 生成唯一 `match key`
+2. selector 对 `match key` 做一次 map lookup
+3. runtime fanout 到 `[]*TaskState`
+
+复杂性全部前置到：
+
+- 配置校验期
+- 编译期 / `UpdateCache`
+- receiver 自己的 key 构造逻辑
+
+## 4. match key 示例
+
+- UDP：`udp|src_addr=1.1.1.1:9000`
+- TCP：`tcp|src_addr=1.1.1.1:9000`
+- Kafka：`kafka|topic=order|partition=3`
+- SFTP：`sftp|remote_dir=/input|file_name=a.txt`
+
+所有 key 都遵循同一原则：**协议前缀明确、字段顺序固定、分隔符固定、由 receiver 显式构造**。

@@ -17,7 +17,7 @@ func decodeJSONStrict(data []byte, v interface{}) error {
 	}
 	var trailing struct{}
 	if err := dec.Decode(&trailing); err == nil {
-		return fmt.Errorf("invalid json: trailing data")
+		return fmt.Errorf("JSON格式非法: 存在多余内容")
 	} else if err != io.EOF {
 		return err
 	}

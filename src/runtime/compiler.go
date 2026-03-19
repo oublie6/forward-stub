@@ -1,4 +1,4 @@
-// compiler.go 负责把配置编译为 receiver/pipeline/task/sender 运行对象。
+// Package runtime 负责把配置编译为运行时对象并维护热更新所需的缓存结构。
 package runtime
 
 import (
@@ -11,7 +11,10 @@ import (
 	"forward-stub/src/pipeline"
 )
 
-// CompilePipelines 负责该函数对应的核心逻辑，详见实现细节。
+// CompilePipelines 将配置中的 pipeline 定义编译为可直接执行的运行时对象。
+//
+// 该函数主要用于冷启动或独立测试场景，不依赖 Store 内的 stage 复用缓存；
+// 若某个 stage 配置非法，会立即返回错误并终止整个编译过程。
 func CompilePipelines(cfg map[string][]config.StageConfig) (map[string]*CompiledPipeline, error) {
 	out := make(map[string]*CompiledPipeline, len(cfg))
 	for name, stagesCfg := range cfg {
@@ -30,6 +33,8 @@ func CompilePipelines(cfg map[string][]config.StageConfig) (map[string]*Compiled
 	}
 	return out, nil
 }
+
+// stageSignature 为单个 stage 配置生成稳定签名，用于在热更新时识别可复用的 stage。
 func stageSignature(sc config.StageConfig) (string, error) {
 	b, err := json.Marshal(sc)
 	if err != nil {
@@ -38,6 +43,10 @@ func stageSignature(sc config.StageConfig) (string, error) {
 	return string(b), nil
 }
 
+// compilePipelinesWithStageCache 编译 pipeline，并尽量复用 Store 中已有的 stage 函数实例。
+//
+// 返回值中的第二个 map 记录每条 pipeline 的 stage 签名顺序，后续 task 引用计数、
+// 缓存清理和全量纠偏都会依赖这份映射。
 func (st *Store) compilePipelinesWithStageCache(cfg map[string][]config.StageConfig) (map[string]*CompiledPipeline, map[string][]string, error) {
 	out := make(map[string]*CompiledPipeline, len(cfg))
 	sigsByPipeline := make(map[string][]string, len(cfg))
@@ -80,7 +89,9 @@ func (st *Store) compilePipelinesWithStageCache(cfg map[string][]config.StageCon
 	return out, sigsByPipeline, nil
 }
 
-// compileStage 负责该函数对应的核心逻辑，详见实现细节。
+// compileStage 将单个 stage 配置转换为真正执行的函数。
+//
+// 该函数只负责“配置到函数”的编译，不处理 stage 复用；调用方需要自行决定是否缓存返回值。
 func compileStage(sc config.StageConfig) (pipeline.StageFunc, error) {
 	switch sc.Type {
 	case "match_offset_bytes":
