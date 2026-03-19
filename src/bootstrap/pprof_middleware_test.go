@@ -40,7 +40,7 @@ func TestWithPprofRequestLogRecordsRequestDetails(t *testing.T) {
 
 	h.ServeHTTP(rr, req)
 
-	if lg.msg != "pprof request completed" {
+	if lg.msg != "pprof 请求完成" {
 		t.Fatalf("unexpected log message: %s", lg.msg)
 	}
 	if got := lg.fields["method"]; got != http.MethodGet {

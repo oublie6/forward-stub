@@ -25,6 +25,10 @@ func (l *testStepLogger) Warnw(msg string, keysAndValues ...interface{}) {
 	l.record(msg, keysAndValues...)
 }
 
+func (l *testStepLogger) Errorw(msg string, keysAndValues ...interface{}) {
+	l.record(msg, keysAndValues...)
+}
+
 func (l *testStepLogger) record(msg string, keysAndValues ...interface{}) {
 	line := formatBootstrapLogLine("TEST", msg, keysAndValues...)
 	l.mu.Lock()
@@ -68,10 +72,10 @@ func TestStartGCStatsLoggerDisabled(t *testing.T) {
 	stop := startGCStatsLogger(lg, false, time.Minute)
 	stop()
 
-	if !lg.contains("step=gc_stats_logger_start state=disabled") {
+	if !lg.contains("GC 周期日志未启用") {
 		t.Fatalf("expected disabled gc stats logger log, got %+v", lg.entries)
 	}
-	if lg.contains("gc stats") {
+	if lg.contains("GC 周期统计") {
 		t.Fatalf("disabled gc stats logger should not emit stats logs")
 	}
 }
@@ -82,9 +86,9 @@ func TestStartGCStatsLoggerEnabledAndStops(t *testing.T) {
 	stop := startGCStatsLogger(lg, true, 10*time.Millisecond)
 	defer stop()
 
-	waitForLogContains(t, lg, "step=gc_stats_logger_start state=enabled")
-	waitForLogContains(t, lg, "gc stats")
+	waitForLogContains(t, lg, "GC 周期日志已启用")
+	waitForLogContains(t, lg, "GC 周期统计")
 
 	stop()
-	waitForLogContains(t, lg, "step=gc_stats_logger_stop")
+	waitForLogContains(t, lg, "GC 周期日志已停止")
 }

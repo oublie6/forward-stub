@@ -28,40 +28,42 @@ func Run(args []string) int {
 	systemPath := fs.String("system-config", "", "system config json path")
 	businessPath := fs.String("business-config", "", "business config json path")
 	prelog := stderrBootstrapLogger{out: os.Stderr}
-	logBootstrapStepDone(prelog, "process_start", "pid", os.Getpid(), "args_count", len(args))
+	logBootstrapStepDone(prelog, "进程启动", "pid", os.Getpid(), "args_count", len(args))
+	logBootstrapStepStart(prelog, "解析命令行参数")
 	if err := fs.Parse(args); err != nil {
+		logBootstrapStepFailed(prelog, "解析命令行参数", "error", err)
 		return 2
 	}
-	logBootstrapStepDone(prelog, "cli_parse", "legacy_config", emptyAsUnset(*legacyPath), "system_config", emptyAsUnset(*systemPath), "business_config", emptyAsUnset(*businessPath))
+	logBootstrapStepDone(prelog, "解析命令行参数", "legacy_config", emptyAsUnset(*legacyPath), "system_config", emptyAsUnset(*systemPath), "business_config", emptyAsUnset(*businessPath))
 
-	logBootstrapStepStart(prelog, "resolve_config_paths")
+	logBootstrapStepStart(prelog, "解析配置路径")
 	sysPath, bizPath, err := config.ResolveConfigPaths(*legacyPath, *systemPath, *businessPath)
 	if err != nil {
-		logBootstrapStepFailed(prelog, "resolve_config_paths", "error", err)
+		logBootstrapStepFailed(prelog, "解析配置路径", "error", err)
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
 		return 1
 	}
-	logBootstrapStepDone(prelog, "resolve_config_paths", "system_config", sysPath, "business_config", bizPath)
+	logBootstrapStepDone(prelog, "解析配置路径", "system_config", sysPath, "business_config", bizPath)
 
-	logBootstrapStepStart(prelog, "load_config_pair", "system_config", sysPath, "business_config", bizPath)
 	sysCfg, _, cfg, err := loadConfigPair(context.Background(), sysPath, bizPath, prelog)
 	if err != nil {
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
 		return 1
 	}
-	logBootstrapStepDone(prelog, "load_config_pair", "config_version", cfg.Version)
 
 	trafficStatsInterval, err := time.ParseDuration(cfg.Logging.TrafficStatsInterval)
 	if err != nil {
-		_, _ = os.Stderr.WriteString("invalid traffic_stats_interval: " + err.Error() + "\n")
+		logBootstrapStepFailed(prelog, "解析 traffic_stats_interval", "error", err)
+		_, _ = os.Stderr.WriteString("解析 traffic_stats_interval 失败: " + err.Error() + "\n")
 		return 1
 	}
 	gcStatsInterval, err := time.ParseDuration(cfg.Logging.GCStatsInterval)
 	if err != nil {
-		_, _ = os.Stderr.WriteString("invalid gc_stats_interval: " + err.Error() + "\n")
+		logBootstrapStepFailed(prelog, "解析 gc_stats_interval", "error", err)
+		_, _ = os.Stderr.WriteString("解析 gc_stats_interval 失败: " + err.Error() + "\n")
 		return 1
 	}
-	logBootstrapStepStart(prelog, "logger_init", "level", cfg.Logging.Level, "file", emptyAsUnset(cfg.Logging.File))
+	logBootstrapStepStart(prelog, "初始化日志系统", "level", cfg.Logging.Level, "file", emptyAsUnset(cfg.Logging.File))
 	if err := logx.Init(logx.Options{
 		Level:                   cfg.Logging.Level,
 		File:                    cfg.Logging.File,
@@ -72,69 +74,71 @@ func Run(args []string) int {
 		TrafficStatsInterval:    trafficStatsInterval,
 		TrafficStatsSampleEvery: cfg.Logging.TrafficStatsSampleEvery,
 	}); err != nil {
-		_, _ = os.Stderr.WriteString("init logger error: " + err.Error() + "\n")
+		logBootstrapStepFailed(prelog, "初始化日志系统", "error", err)
+		_, _ = os.Stderr.WriteString("初始化日志系统失败: " + err.Error() + "\n")
 		return 1
 	}
 	defer func() { _ = logx.Sync() }()
 	lg := logx.L()
-	logBootstrapStepDone(lg, "logger_init", "level", cfg.Logging.Level, "file", emptyAsUnset(cfg.Logging.File))
+	logBootstrapStepDone(lg, "初始化日志系统", "level", cfg.Logging.Level, "file", emptyAsUnset(cfg.Logging.File))
 
 	stopGCStatsLogger := startGCStatsLogger(lg, cfg.Logging.GCStatsEnabled, gcStatsInterval)
 	defer stopGCStatsLogger()
 
-	logBootstrapStepStart(lg, "pprof_init", "port", cfg.Control.PprofPort)
+	logBootstrapStepStart(lg, "启动 pprof 服务", "port", cfg.Control.PprofPort)
 	pprofSrv := startPprofServer(lg, cfg.Control.PprofPort)
 
-	logBootstrapStepStart(lg, "runtime_create")
+	logBootstrapStepStart(lg, "创建 runtime 实例")
 	rt := app.NewRuntime()
-	logBootstrapStepDone(lg, "runtime_create")
+	logBootstrapStepDone(lg, "创建 runtime 实例")
 
-	logBootstrapStepStart(lg, "runtime_update_cache", "config_version", cfg.Version)
+	logBootstrapStepStart(lg, "执行 UpdateCache", "config_version", cfg.Version, "source", "startup")
 	if err := rt.UpdateCache(context.Background(), cfg); err != nil {
-		logBootstrapStepFailed(lg, "runtime_update_cache", "config_version", cfg.Version, "error", err)
-		lg.Errorf("UpdateCache error: %v", err)
+		logBootstrapStepFailed(lg, "执行 UpdateCache", "config_version", cfg.Version, "source", "startup", "error", err)
+		lg.Errorw("UpdateCache 阶段执行失败", "config_version", cfg.Version, "source", "startup", "error", err)
 		return 1
 	}
-	logBootstrapStepDone(lg, "runtime_update_cache", "config_version", cfg.Version)
+	logBootstrapStepDone(lg, "执行 UpdateCache", "config_version", cfg.Version, "source", "startup")
 
-	logBootstrapStepStart(lg, "seed_system_config")
+	logBootstrapStepStart(lg, "写入系统配置基线")
 	if err := rt.SeedSystemConfig(sysCfg); err != nil {
-		logBootstrapStepFailed(lg, "seed_system_config", "error", err)
-		lg.Errorf("seed system config error: %v", err)
+		logBootstrapStepFailed(lg, "写入系统配置基线", "error", err)
+		lg.Errorw("写入系统配置基线失败", "error", err)
 		return 1
 	}
-	logBootstrapStepDone(lg, "seed_system_config")
+	logBootstrapStepDone(lg, "写入系统配置基线")
 
 	initialFingerprint, err := readConfigFingerprint(bizPath)
 	if err != nil {
-		logBootstrapStepFailed(lg, "business_fingerprint_init", "config", bizPath, "error", err)
-		lg.Errorw("init business config fingerprint failed", "config", bizPath, "error", err)
+		logBootstrapStepFailed(lg, "初始化业务配置指纹", "config", bizPath, "error", err)
+		lg.Errorw("初始化业务配置指纹失败", "config", bizPath, "error", err)
 		return 1
 	}
-	logBootstrapStepDone(lg, "business_fingerprint_init", "config", bizPath, "fingerprint", initialFingerprint)
+	logBootstrapStepDone(lg, "初始化业务配置指纹", "config", bizPath, "fingerprint", initialFingerprint)
 
 	configChangeCh := make(chan struct{}, 1)
 	watchDone := make(chan struct{})
-	logBootstrapStepStart(lg, "config_watcher_start", "config", bizPath, "interval", cfg.Control.ConfigWatchInterval)
+	logBootstrapStepStart(lg, "启动配置文件监听", "config", bizPath, "interval", cfg.Control.ConfigWatchInterval)
 	go watchConfigFile(bizPath, initialFingerprint, cfg.Control.ConfigWatchInterval, configChangeCh, watchDone)
 	defer close(watchDone)
-	logBootstrapStepDone(lg, "config_watcher_start", "config", bizPath, "interval", cfg.Control.ConfigWatchInterval)
+	logBootstrapStepDone(lg, "启动配置文件监听", "config", bizPath, "interval", cfg.Control.ConfigWatchInterval)
 
 	logStartupInfo(lg, sysPath, bizPath, cfg)
 	sigCh := make(chan os.Signal, 1)
 	signals := supportedSignals()
+	logBootstrapStepStart(lg, "注册信号监听", "signals", signalNames(signals))
 	signal.Notify(sigCh, signals...)
 	defer signal.Stop(sigCh)
-	logBootstrapStepDone(lg, "signal_listener_register", "signals", signalNames(signals))
-	logBootstrapStepDone(lg, "startup_ready", "config_version", cfg.Version)
+	logBootstrapStepDone(lg, "注册信号监听", "signals", signalNames(signals))
+	logBootstrapStepDone(lg, "服务启动完成，进入主循环", "config_version", cfg.Version)
 
 	for {
 		select {
 		case s := <-sigCh:
 			if isReloadSignal(s) {
-				lg.Infow("received reload signal", "signal", s.String())
+				lg.Infow("收到重载信号", "signal", s.String())
 				if next, ok := reloadAndApplyBusinessConfig(context.Background(), rt, sysPath, bizPath, "signal", s.String()); ok {
-					lg.Infow("reload business config success", "signal", s.String(), "version", next.Version)
+					lg.Infow("业务配置热更新完成", "signal", s.String(), "version", next.Version)
 				}
 				continue
 			}
@@ -142,18 +146,18 @@ func Run(args []string) int {
 			if isStopSignal(s) {
 				_ = rt.Stop(context.Background())
 				shutdownPprofServer(pprofSrv, lg)
-				lg.Info("forward-stub stopped.")
+				lg.Info("forward-stub 已停止。")
 				return 0
 			}
 
-			lg.Infow("received unsupported signal", "signal", s.String())
+			lg.Infow("收到未处理信号", "signal", s.String())
 		case <-configChangeCh:
-			lg.Infow("detected business config file change", "config", bizPath)
+			lg.Infow("检测到业务配置文件变更", "config", bizPath)
 			next, ok := reloadAndApplyBusinessConfig(context.Background(), rt, sysPath, bizPath, "source", "file-watch")
 			if !ok {
 				continue
 			}
-			lg.Infow("reload business config success", "source", "file-watch", "version", next.Version)
+			lg.Infow("业务配置热更新完成", "source", "file-watch", "version", next.Version)
 		}
 	}
 }
@@ -163,7 +167,7 @@ func logStartupInfo(lg interface {
 	Infow(string, ...interface{})
 	Info(...interface{})
 }, systemPath, businessPath string, cfg config.Config) {
-	lg.Infow("forward-stub startup",
+	lg.Infow("forward-stub 启动信息",
 		"go_version", runtime.Version(),
 		"gomaxprocs", runtime.GOMAXPROCS(0),
 		"host_cpu_cores", runtime.NumCPU(),
@@ -172,7 +176,7 @@ func logStartupInfo(lg interface {
 		"business_config", businessPath,
 		"config_version", cfg.Version,
 	)
-	lg.Info("forward-stub startup completed, entering main loop. Press Ctrl+C to stop.")
+	lg.Info("服务启动完成，进入主循环。按 Ctrl+C 可停止进程。")
 }
 
 // pprofResponseRecorder 是供 run.go 使用的包内辅助结构。
@@ -208,7 +212,7 @@ func withPprofRequestLog(next http.Handler, lg interface{ Infow(string, ...inter
 		if status == 0 {
 			status = http.StatusOK
 		}
-		lg.Infow("pprof request completed",
+		lg.Infow("pprof 请求完成",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"query", r.URL.RawQuery,
@@ -222,12 +226,9 @@ func withPprofRequestLog(next http.Handler, lg interface{ Infow(string, ...inter
 }
 
 // startPprofServer 是供 run.go 使用的包内辅助函数。
-func startPprofServer(lg interface {
-	Infow(string, ...interface{})
-	Warnw(string, ...interface{})
-}, port int) *http.Server {
+func startPprofServer(lg bootstrapStepLogger, port int) *http.Server {
 	if port <= 0 {
-		logBootstrapStepDone(lg, "pprof_init", "state", "disabled", "port", port)
+		lg.Infow("pprof 未启用", "port", port)
 		return nil
 	}
 	addr := fmt.Sprintf(":%d", port)
@@ -240,10 +241,11 @@ func startPprofServer(lg interface {
 	srv := &http.Server{Addr: addr, Handler: withPprofRequestLog(mux, lg)}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			lg.Warnw("pprof http server exited unexpectedly", "addr", addr, "error", err)
+			lg.Warnw("pprof 服务异常退出", "addr", addr, "error", err)
 		}
 	}()
-	logBootstrapStepDone(lg, "pprof_init", "state", "enabled", "addr", addr)
+	logBootstrapStepDone(lg, "启动 pprof 服务", "state", "enabled", "addr", addr)
+	lg.Infow("pprof 服务启动完成", "addr", addr)
 	return srv
 }
 
@@ -255,7 +257,7 @@ func shutdownPprofServer(srv *http.Server, lg interface{ Warnw(string, ...interf
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		lg.Warnw("shutdown pprof http server failed", "addr", srv.Addr, "error", err)
+		lg.Warnw("关闭 pprof 服务失败", "addr", srv.Addr, "error", err)
 	}
 }
 
@@ -265,7 +267,7 @@ func watchConfigFile(path, initialFingerprint, watchInterval string, notifyCh ch
 	currentFingerprint := initialFingerprint
 	interval, err := time.ParseDuration(watchInterval)
 	if err != nil || interval <= 0 {
-		lg.Warnw("invalid config_watch_interval, fallback to default", "value", watchInterval, "default", config.DefaultConfigWatchInterval, "error", err)
+		lg.Warnw("配置文件监听周期非法，回退到默认值", "value", watchInterval, "default", config.DefaultConfigWatchInterval, "error", err)
 		interval, _ = time.ParseDuration(config.DefaultConfigWatchInterval)
 	}
 	ticker := time.NewTicker(interval)
@@ -278,7 +280,7 @@ func watchConfigFile(path, initialFingerprint, watchInterval string, notifyCh ch
 		case <-ticker.C:
 			nextFingerprint, err := readConfigFingerprint(path)
 			if err != nil {
-				lg.Warnw("watch config file failed", "config", path, "error", err)
+				lg.Warnw("读取业务配置指纹失败", "config", path, "error", err)
 				continue
 			}
 			if nextFingerprint == currentFingerprint {
@@ -298,57 +300,61 @@ func reloadAndApplyBusinessConfig(ctx context.Context, rt *app.Runtime, systemPa
 	lg := logx.L()
 	systemCfg, _, next, err := loadConfigPair(ctx, systemPath, businessPath, lg)
 	if err != nil {
-		lg.Errorw("reload config failed", sourceKey, sourceValue, "error", err)
+		lg.Errorw("重新加载配置失败", sourceKey, sourceValue, "error", err)
 		return config.Config{}, false
 	}
 	if err := rt.CheckSystemConfigStable(systemCfg); err != nil {
-		lg.Errorw("reject business reload due to system config change", sourceKey, sourceValue, "error", err)
+		lg.Errorw("拒绝应用业务配置热更新：系统配置发生变化", sourceKey, sourceValue, "error", err)
 		return config.Config{}, false
 	}
+	logBootstrapStepStart(lg, "执行 UpdateCache", "config_version", next.Version, sourceKey, sourceValue)
 	if err := rt.UpdateCache(ctx, next); err != nil {
-		lg.Errorw("apply reloaded config failed", sourceKey, sourceValue, "error", err)
+		logBootstrapStepFailed(lg, "执行 UpdateCache", "config_version", next.Version, sourceKey, sourceValue, "error", err)
+		lg.Errorw("UpdateCache 阶段执行失败", "config_version", next.Version, sourceKey, sourceValue, "error", err)
 		return config.Config{}, false
 	}
+	logBootstrapStepDone(lg, "执行 UpdateCache", "config_version", next.Version, sourceKey, sourceValue)
 	return next, true
 }
 
 // loadConfigPair 是供 run.go 使用的包内辅助函数。
 func loadConfigPair(ctx context.Context, systemPath, businessPath string, progress bootstrapStepLogger) (config.SystemConfig, config.BusinessConfig, config.Config, error) {
-	logBootstrapStepStart(progress, "config_local_load", "system_config", systemPath, "business_config", businessPath)
+	logBootstrapStepStart(progress, "加载本地 system/business 配置", "system_config", systemPath, "business_config", businessPath)
 	sys, biz, cfg, err := config.LoadLocalPair(systemPath, businessPath)
 	if err != nil {
-		logBootstrapStepFailed(progress, "config_local_load", "error", err)
+		logBootstrapStepFailed(progress, "加载本地 system/business 配置", "error", err)
 		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, err
 	}
-	logBootstrapStepDone(progress, "config_local_load", "system_config", systemPath, "business_config", businessPath, "config_version", cfg.Version)
+	logBootstrapStepDone(progress, "加载本地 system/business 配置", "system_config", systemPath, "business_config", businessPath, "config_version", cfg.Version)
 	if cfg.Control.API != "" {
-		logBootstrapStepStart(progress, "control_api_fetch", "api", cfg.Control.API, "timeout_sec", cfg.Control.TimeoutSec)
+		logBootstrapStepStart(progress, "从控制面拉取业务配置", "api", cfg.Control.API, "timeout_sec", cfg.Control.TimeoutSec)
 		cli := control.NewConfigAPIClient(cfg.Control.API, cfg.Control.TimeoutSec)
 		biz, err = cli.FetchBusinessConfig(ctx)
 		if err != nil {
-			logBootstrapStepFailed(progress, "control_api_fetch", "api", cfg.Control.API, "error", err)
-			return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("fetch business config from api error: %w", err)
+			logBootstrapStepFailed(progress, "从控制面拉取业务配置", "api", cfg.Control.API, "error", err)
+			return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("从控制面拉取业务配置失败: %w", err)
 		}
 		cfg = sys.Merge(biz)
-		logBootstrapStepDone(progress, "control_api_fetch", "api", cfg.Control.API, "config_version", cfg.Version)
+		logBootstrapStepDone(progress, "从控制面拉取业务配置", "api", cfg.Control.API, "config_version", cfg.Version)
 	} else {
-		logBootstrapStepDone(progress, "control_api_fetch", "state", "disabled")
+		logBootstrapInfo(progress, "控制面业务配置拉取未启用", "state", "disabled")
 	}
-	logBootstrapStepStart(progress, "config_apply_defaults")
+	logBootstrapStepStart(progress, "应用默认值")
 	cfg.ApplyDefaults()
-	logBootstrapStepDone(progress, "config_apply_defaults", "pprof_port", cfg.Control.PprofPort, "gc_stats_enabled", cfg.Logging.GCStatsEnabled, "gc_stats_interval", cfg.Logging.GCStatsInterval)
-	logBootstrapStepStart(progress, "config_validate")
+	logBootstrapStepDone(progress, "应用默认值", "pprof_port", cfg.Control.PprofPort, "gc_stats_enabled", cfg.Logging.GCStatsEnabled, "gc_stats_interval", cfg.Logging.GCStatsInterval)
+	logBootstrapStepStart(progress, "执行配置校验")
 	if err := cfg.Validate(); err != nil {
-		logBootstrapStepFailed(progress, "config_validate", "error", err)
-		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("config validate error: %w", err)
+		logBootstrapStepFailed(progress, "执行配置校验", "error", err)
+		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("配置校验失败: %w", err)
 	}
-	logBootstrapStepDone(progress, "config_validate", "receivers", len(cfg.Receivers), "tasks", len(cfg.Tasks), "senders", len(cfg.Senders))
+	logBootstrapStepDone(progress, "执行配置校验", "receivers", len(cfg.Receivers), "tasks", len(cfg.Tasks), "senders", len(cfg.Senders))
 	return sys, biz, cfg, nil
 }
 
 type bootstrapStepLogger interface {
 	Infow(string, ...interface{})
 	Warnw(string, ...interface{})
+	Errorw(string, ...interface{})
 }
 
 type stderrBootstrapLogger struct {
@@ -361,6 +367,10 @@ func (l stderrBootstrapLogger) Infow(msg string, keysAndValues ...interface{}) {
 
 func (l stderrBootstrapLogger) Warnw(msg string, keysAndValues ...interface{}) {
 	writeBootstrapLogLine(l.out, "WARN", msg, keysAndValues...)
+}
+
+func (l stderrBootstrapLogger) Errorw(msg string, keysAndValues ...interface{}) {
+	writeBootstrapLogLine(l.out, "ERROR", msg, keysAndValues...)
 }
 
 func writeBootstrapLogLine(out io.Writer, level, msg string, keysAndValues ...interface{}) {
@@ -392,26 +402,33 @@ func logBootstrapStepStart(l bootstrapStepLogger, step string, keysAndValues ...
 	if l == nil {
 		return
 	}
-	l.Infow("bootstrap step starting", append([]interface{}{"step", step}, keysAndValues...)...)
+	l.Infow("启动阶段开始", append([]interface{}{"step", step}, keysAndValues...)...)
+}
+
+func logBootstrapInfo(l bootstrapStepLogger, msg string, keysAndValues ...interface{}) {
+	if l == nil {
+		return
+	}
+	l.Infow(msg, keysAndValues...)
 }
 
 func logBootstrapStepDone(l bootstrapStepLogger, step string, keysAndValues ...interface{}) {
 	if l == nil {
 		return
 	}
-	l.Infow("bootstrap step completed", append([]interface{}{"step", step}, keysAndValues...)...)
+	l.Infow("启动阶段完成", append([]interface{}{"step", step}, keysAndValues...)...)
 }
 
 func logBootstrapStepFailed(l bootstrapStepLogger, step string, keysAndValues ...interface{}) {
 	if l == nil {
 		return
 	}
-	l.Warnw("bootstrap step failed", append([]interface{}{"step", step}, keysAndValues...)...)
+	l.Errorw("启动阶段失败", append([]interface{}{"step", step}, keysAndValues...)...)
 }
 
 func emptyAsUnset(v string) string {
 	if strings.TrimSpace(v) == "" {
-		return "unset"
+		return "未设置"
 	}
 	return v
 }
@@ -426,10 +443,10 @@ func signalNames(signals []os.Signal) string {
 
 func startGCStatsLogger(lg bootstrapStepLogger, enabled bool, interval time.Duration) func() {
 	if !enabled {
-		logBootstrapStepDone(lg, "gc_stats_logger_start", "state", "disabled")
+		lg.Infow("GC 周期日志未启用", "state", "disabled")
 		return func() {}
 	}
-	logBootstrapStepStart(lg, "gc_stats_logger_start", "interval", interval.String())
+	logBootstrapStepStart(lg, "启动 GC 周期日志", "interval", interval.String())
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
@@ -439,12 +456,13 @@ func startGCStatsLogger(lg bootstrapStepLogger, enabled bool, interval time.Dura
 
 		var prev runtime.MemStats
 		runtime.ReadMemStats(&prev)
-		logBootstrapStepDone(lg, "gc_stats_logger_start", "state", "enabled", "interval", interval.String())
+		logBootstrapStepDone(lg, "启动 GC 周期日志", "state", "enabled", "interval", interval.String())
+		lg.Infow("GC 周期日志已启用", "interval", interval.String())
 
 		for {
 			select {
 			case <-ctx.Done():
-				logBootstrapStepDone(lg, "gc_stats_logger_stop")
+				lg.Infow("GC 周期日志已停止")
 				return
 			case <-ticker.C:
 				var cur runtime.MemStats
@@ -464,7 +482,7 @@ func startGCStatsLogger(lg bootstrapStepLogger, enabled bool, interval time.Dura
 				if cur.LastGC > 0 {
 					fields = append(fields, "last_gc", time.Unix(0, int64(cur.LastGC)).UTC().Format(time.RFC3339Nano))
 				}
-				lg.Infow("gc stats", fields...)
+				lg.Infow("GC 周期统计", fields...)
 				prev = cur
 			}
 		}

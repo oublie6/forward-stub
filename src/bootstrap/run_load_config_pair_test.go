@@ -34,6 +34,39 @@ func TestLoadConfigPairAppliesDefaultsWithoutAPI(t *testing.T) {
 	}
 }
 
+// TestLoadConfigPairRecordsChineseProgressLogs 验证 bootstrap 包中 LoadConfigPairRecordsChineseProgressLogs 的行为。
+func TestLoadConfigPairRecordsChineseProgressLogs(t *testing.T) {
+	dir := t.TempDir()
+	systemPath := filepath.Join(dir, "system.json")
+	businessPath := filepath.Join(dir, "business.json")
+
+	if err := os.WriteFile(systemPath, []byte(`{"logging":{"level":"warn"}}`), 0o644); err != nil {
+		t.Fatalf("write system config: %v", err)
+	}
+	if err := os.WriteFile(businessPath, []byte(`{"version":2,"receivers":{"r1":{"type":"udp_gnet","listen":":9001"}},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:9002"}},"pipelines":{"p1":[]},"selectors":{"sel":{"receivers":["r1"],"tasks":["t1"]}},"tasks":{"t1":{"pipelines":["p1"],"senders":["s1"]}}}`), 0o644); err != nil {
+		t.Fatalf("write business config: %v", err)
+	}
+
+	lg := newTestStepLogger()
+	if _, _, _, err := loadConfigPair(context.Background(), systemPath, businessPath, lg); err != nil {
+		t.Fatalf("load config pair: %v", err)
+	}
+
+	for _, want := range []string{
+		"启动阶段开始 step=加载本地 system/business 配置",
+		"启动阶段完成 step=加载本地 system/business 配置",
+		"控制面业务配置拉取未启用",
+		"启动阶段开始 step=应用默认值",
+		"启动阶段完成 step=应用默认值",
+		"启动阶段开始 step=执行配置校验",
+		"启动阶段完成 step=执行配置校验",
+	} {
+		if !lg.contains(want) {
+			t.Fatalf("expected progress log containing %q, got %+v", want, lg.entries)
+		}
+	}
+}
+
 // TestLoadConfigPairAppliesDefaultsAfterAPIOverride 验证 bootstrap 包中 LoadConfigPairAppliesDefaultsAfterAPIOverride 的行为。
 func TestLoadConfigPairAppliesDefaultsAfterAPIOverride(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

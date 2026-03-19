@@ -20,7 +20,7 @@
 8. 创建 `app.Runtime` 并执行首次 `UpdateCache`。
 9. 记录 system 配置基线，启动文件监听和信号监听。
 
-启动阶段会按 step start / step completed 风格打印关键里程碑，便于定位“卡在配置加载、控制面拉取、校验、logger、pprof、runtime 初始化”等具体阶段。
+启动阶段会按“启动阶段开始 / 启动阶段完成 / 启动阶段失败”的中文日志风格打印关键里程碑，便于定位“卡在配置加载、控制面拉取、校验、logger、pprof、runtime 初始化、UpdateCache”等具体阶段。
 
 ## 3. 运行时构建逻辑
 

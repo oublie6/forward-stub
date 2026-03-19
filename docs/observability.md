@@ -7,7 +7,7 @@
 当前仓库中可用的观测入口：
 
 - `src/logx` 结构化日志。
-- 启动阶段分步日志。
+- 启动阶段中文分步日志。
 - 流量聚合统计日志。
 - GC 周期统计日志。
 - payload 摘要日志。
@@ -21,7 +21,7 @@
 - 记录启动、配置加载、更新、错误、停止事件。
 - 记录 sender/receiver 异常。
 - 记录 task 队列满导致的丢包。
-- 记录启动阶段已经完成的关键步骤，便于定位卡点。
+- 记录启动阶段已经完成的关键步骤，统一使用中文消息体，便于定位卡点。
 
 ### 配置点
 
@@ -80,7 +80,7 @@ receiver/task 支持 payload 摘要输出：
 - `next_gc`
 - `gc_cpu_fraction`
 
-该能力默认关闭，关闭时会明确打印 disabled 日志；启用后在独立 goroutine 中按 ticker 读取标准库 `runtime.MemStats`，不会进入收包/转发热路径。
+该能力默认关闭，关闭时会明确打印“GC 周期日志未启用”；启用后在独立 goroutine 中按 ticker 读取标准库 `runtime.MemStats`，不会进入收包/转发热路径。
 
 ## 7. benchmark
 
