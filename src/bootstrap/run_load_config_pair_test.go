@@ -63,6 +63,37 @@ func TestLoadConfigPairAppliesDefaultsAfterAPIOverride(t *testing.T) {
 	}
 }
 
+func TestLoadConfigPairAppliesControlDefaultsBeforeAPIFetch(t *testing.T) {
+	var gotTimeoutHeader string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotTimeoutHeader = r.Header.Get("X-Test-Timeout")
+		_, _ = w.Write([]byte(`{"version":3,"receivers":{"r1":{"type":"udp_gnet","listen":":9001","selector":"sel1"}},"selectors":{"sel1":{"default_task_set":"ts1"}},"task_sets":{"ts1":["t1"]},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:9002"}},"pipelines":{"p1":[]},"tasks":{"t1":{"pipelines":["p1"],"senders":["s1"]}}}`))
+	}))
+	defer ts.Close()
+
+	dir := t.TempDir()
+	systemPath := filepath.Join(dir, "system.json")
+	businessPath := filepath.Join(dir, "business.json")
+
+	if err := os.WriteFile(systemPath, []byte(`{"control":{"api":"`+ts.URL+`"},"logging":{"level":"info"}}`), 0o644); err != nil {
+		t.Fatalf("write system config: %v", err)
+	}
+	if err := os.WriteFile(businessPath, []byte(`{"version":1,"receivers":{"r1":{"type":"udp_gnet","listen":":9001","selector":"sel1"}},"selectors":{"sel1":{"default_task_set":"ts1"}},"task_sets":{"ts1":["t1"]},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:9002"}},"pipelines":{"p1":[]},"tasks":{"t1":{"pipelines":["p1"],"senders":["s1"]}}}`), 0o644); err != nil {
+		t.Fatalf("write business config: %v", err)
+	}
+
+	_, _, cfg, err := loadConfigPair(context.Background(), systemPath, businessPath)
+	if err != nil {
+		t.Fatalf("load config pair: %v", err)
+	}
+	if cfg.Control.TimeoutSec != config.DefaultControlTimeoutSec {
+		t.Fatalf("unexpected timeout default after api fetch: %d", cfg.Control.TimeoutSec)
+	}
+	if gotTimeoutHeader != "" {
+		t.Fatalf("unexpected test header leak: %q", gotTimeoutHeader)
+	}
+}
+
 func TestLoadConfigPairAPIOnlyBusinessAndMergeSystem(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"version":9,"receivers":{"r1":{"type":"udp_gnet","listen":":9001","selector":"sel1"}},"selectors":{"sel1":{"default_task_set":"ts1"}},"task_sets":{"ts1":["t1"]},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:9002"}},"pipelines":{"p1":[]},"tasks":{"t1":{"pipelines":["p1"],"senders":["s1"]}},"control":{"pprof_port":9999}}`))

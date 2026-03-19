@@ -14,7 +14,6 @@
 3. 检查 JSON 格式。
 
 ```bash
-./bin/forward-stub -version
 jq . ./configs/system.example.json >/dev/null
 jq . ./configs/business.example.json >/dev/null
 ```
@@ -23,7 +22,7 @@ jq . ./configs/business.example.json >/dev/null
 
 ### 常见表现
 
-- `config validate error`
+- `配置校验失败`
 - task 引用不存在对象
 - sftp 指纹格式错误
 
@@ -112,7 +111,7 @@ pidstat -t -p <pid> 1
 ```
 
 - 单线程热点：优先检查执行模型和热点 sender。
-- 全局高 CPU：检查日志级别和 payload 打印开关。
+- 全局高 CPU：检查日志级别、payload 打印开关和 GC 周期日志。
 
 ## 8. 内存异常
 

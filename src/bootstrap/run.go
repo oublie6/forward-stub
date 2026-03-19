@@ -23,11 +23,11 @@ const shutdownTimeout = 10 * time.Second
 // Run 负责解析参数、加载配置并驱动运行时生命周期。
 func Run(args []string) int {
 	bootLog := newStageLogger()
-	bootLog.Info("process_start", "forward-stub process starting",
-		"pid", os.Getpid(),
-		"go_version", goruntime.Version(),
-		"gomaxprocs", goruntime.GOMAXPROCS(0),
-		"host_cpu_cores", goruntime.NumCPU(),
+	bootLog.Info("process_start", "进程启动",
+		"进程ID", os.Getpid(),
+		"Go版本", goruntime.Version(),
+		"GOMAXPROCS", goruntime.GOMAXPROCS(0),
+		"主机CPU核心数", goruntime.NumCPU(),
 	)
 
 	fs := flag.NewFlagSet("forward-stub", flag.ContinueOnError)
@@ -36,30 +36,30 @@ func Run(args []string) int {
 	systemPath := fs.String("system-config", "", "system config json path")
 	businessPath := fs.String("business-config", "", "business config json path")
 	if err := fs.Parse(args); err != nil {
-		bootLog.Error("args_parse", "parse cli args failed", err)
+		bootLog.Error("args_parse", "参数解析失败", err)
 		return 2
 	}
-	bootLog.Info("args_parse", "cli args parsed", "legacy_mode", *legacyPath != "", "arg_count", len(args))
+	bootLog.Info("args_parse", "参数解析完成", "兼容单文件模式", *legacyPath != "", "参数数量", len(args))
 
 	sysPath, bizPath, err := config.ResolveConfigPaths(*legacyPath, *systemPath, *businessPath)
 	if err != nil {
-		bootLog.Error("config_path_resolve", "resolve config paths failed", err)
+		bootLog.Error("config_path_resolve", "配置文件路径解析失败", err)
 		return 1
 	}
-	bootLog.Info("config_path_resolve", "config paths resolved", "system_config", sysPath, "business_config", bizPath)
+	bootLog.Info("config_path_resolve", "配置文件路径解析完成", "系统配置文件", sysPath, "业务配置文件", bizPath)
 
-	bootLog.Info("config_load", "loading config files")
+	bootLog.Info("config_load", "开始加载配置文件")
 	sysCfg, _, cfg, err := loadConfigPair(context.Background(), sysPath, bizPath)
 	if err != nil {
-		bootLog.Error("config_load", "load config failed", err, "system_config", sysPath, "business_config", bizPath)
+		bootLog.Error("config_load", "配置文件加载失败", err, "系统配置文件", sysPath, "业务配置文件", bizPath)
 		return 1
 	}
-	bootLog.Info("config_load", "config files loaded")
-	bootLog.Info("config_validate", "config validated", "config_version", cfg.Version)
+	bootLog.Info("config_load", "配置文件加载完成")
+	bootLog.Info("config_validate", "配置校验完成", "配置版本", cfg.Version)
 
 	trafficStatsInterval, err := time.ParseDuration(cfg.Logging.TrafficStatsInterval)
 	if err != nil {
-		bootLog.Error("logger_init", "parse traffic stats interval failed", err, "value", cfg.Logging.TrafficStatsInterval)
+		bootLog.Error("logger_init", "日志器初始化失败：流量统计间隔解析失败", err, "配置值", cfg.Logging.TrafficStatsInterval)
 		return 1
 	}
 	if err := logx.Init(logx.Options{
@@ -72,12 +72,12 @@ func Run(args []string) int {
 		TrafficStatsInterval:    trafficStatsInterval,
 		TrafficStatsSampleEvery: cfg.Logging.TrafficStatsSampleEvery,
 	}); err != nil {
-		bootLog.Error("logger_init", "init logger failed", err)
+		bootLog.Error("logger_init", "日志器初始化失败", err)
 		return 1
 	}
 	defer func() { _ = logx.Sync() }()
 	bootLog.Attach(logx.L())
-	bootLog.Info("logger_init", "logger initialized", "level", cfg.Logging.Level, "file", cfg.Logging.File)
+	bootLog.Info("logger_init", "日志器初始化完成", "日志级别", cfg.Logging.Level, "日志文件", cfg.Logging.File)
 	logConfigSummary(bootLog, sysPath, bizPath, cfg)
 
 	runCtx, cancelRun := context.WithCancel(context.Background())
@@ -89,31 +89,31 @@ func Run(args []string) int {
 	stopGC := func() { stopGCOnce.Do(stopGCStats) }
 	defer stopGC()
 
-	bootLog.Info("pprof_init", "initializing pprof server", "port", cfg.Control.PprofPort)
+	bootLog.Info("pprof_init", "开始初始化pprof服务", "监听端口", cfg.Control.PprofPort)
 	pprofSrv := startPprofServer(logx.L(), cfg.Control.PprofPort)
 	var stopPprofOnce sync.Once
 	stopPprof := func() { stopPprofOnce.Do(func() { shutdownPprofServer(pprofSrv, logx.L()) }) }
 	defer stopPprof()
 
 	rt := app.NewRuntime()
-	bootLog.Info("runtime_init", "seeding system config baseline")
+	bootLog.Info("runtime_init", "开始初始化运行时系统配置基线")
 	if err := rt.SeedSystemConfig(sysCfg); err != nil {
-		bootLog.Error("runtime_init", "seed system config failed", err)
+		bootLog.Error("runtime_init", "运行时系统配置基线初始化失败", err)
 		return 1
 	}
-	bootLog.Info("runtime_init", "system config baseline seeded")
+	bootLog.Info("runtime_init", "运行时系统配置基线初始化完成")
 
-	bootLog.Info("runtime_init", "initializing runtime cache", "config_version", cfg.Version)
+	bootLog.Info("runtime_init", "开始初始化运行时组件", "配置版本", cfg.Version)
 	if err := rt.UpdateCache(runCtx, cfg); err != nil {
-		bootLog.Error("runtime_init", "runtime cache initialization failed", err)
+		bootLog.Error("runtime_init", "运行时组件初始化失败", err)
 		shutdownRuntime(rt, bootLog)
 		return 1
 	}
-	bootLog.Info("runtime_init", "runtime cache initialized", "config_version", cfg.Version)
+	bootLog.Info("runtime_init", "运行时组件初始化完成", "配置版本", cfg.Version)
 
 	initialFingerprint, err := readConfigFingerprint(bizPath)
 	if err != nil {
-		bootLog.Error("config_watch", "read initial business config fingerprint failed", err, "config", bizPath)
+		bootLog.Error("config_watch", "业务配置指纹初始化失败", err, "业务配置文件", bizPath)
 		shutdownRuntime(rt, bootLog)
 		return 1
 	}
@@ -121,45 +121,45 @@ func Run(args []string) int {
 	configChangeCh := make(chan struct{}, 1)
 	watchCtx, cancelWatch := context.WithCancel(runCtx)
 	defer cancelWatch()
-	bootLog.Info("config_watch", "starting config file watcher", "config", bizPath, "interval", cfg.Control.ConfigWatchInterval)
+	bootLog.Info("config_watch", "开始初始化业务配置监听任务", "业务配置文件", bizPath, "检查间隔", cfg.Control.ConfigWatchInterval)
 	go watchConfigFile(watchCtx, bizPath, initialFingerprint, cfg.Control.ConfigWatchInterval, configChangeCh, bootLog)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, supportedSignals()...)
 	defer signal.Stop(sigCh)
-	bootLog.Info("signal_init", "signal handlers registered")
-	bootLog.Info("service_start", "forward-stub service started", "system_config", sysPath, "business_config", bizPath, "config_version", cfg.Version)
+	bootLog.Info("signal_init", "信号处理器注册完成")
+	bootLog.Info("service_start", "服务启动成功，开始接收流量", "系统配置文件", sysPath, "业务配置文件", bizPath, "配置版本", cfg.Version)
 
 	for {
 		select {
 		case s := <-sigCh:
 			if isReloadSignal(s) {
-				bootLog.Info("reload_begin", "received reload signal", "signal", s.String())
+				bootLog.Info("reload_begin", "收到配置重载信号", "信号", s.String())
 				if next, ok := reloadAndApplyBusinessConfig(runCtx, rt, sysPath, bizPath, bootLog, "signal", s.String()); ok {
-					bootLog.Info("reload_done", "reload business config succeeded", "signal", s.String(), "config_version", next.Version)
+					bootLog.Info("reload_done", "业务配置重载完成", "信号", s.String(), "配置版本", next.Version)
 				}
 				continue
 			}
 
 			if isStopSignal(s) {
-				bootLog.Info("shutdown_begin", "graceful shutdown starting", "signal", s.String())
+				bootLog.Info("shutdown_begin", "开始优雅停机", "信号", s.String())
 				cancelWatch()
 				cancelRun()
 				stopGC()
 				shutdownRuntime(rt, bootLog)
 				stopPprof()
-				bootLog.Info("shutdown_done", "graceful shutdown completed", "signal", s.String())
+				bootLog.Info("shutdown_done", "优雅停机完成", "信号", s.String())
 				return 0
 			}
 
-			bootLog.Warn("signal_unhandled", "received unsupported signal", "signal", s.String())
+			bootLog.Warn("signal_unhandled", "收到未处理信号", "信号", s.String())
 		case <-configChangeCh:
-			bootLog.Info("reload_begin", "detected business config file change", "config", bizPath)
+			bootLog.Info("reload_begin", "检测到业务配置文件变更", "业务配置文件", bizPath)
 			next, ok := reloadAndApplyBusinessConfig(runCtx, rt, sysPath, bizPath, bootLog, "source", "file-watch")
 			if !ok {
 				continue
 			}
-			bootLog.Info("reload_done", "reload business config succeeded", "source", "file-watch", "config_version", next.Version)
+			bootLog.Info("reload_done", "业务配置重载完成", "来源", "file-watch", "配置版本", next.Version)
 		}
 	}
 }
@@ -193,15 +193,15 @@ func withPprofRequestLog(next http.Handler, lg interface{ Infow(string, ...inter
 		if status == 0 {
 			status = http.StatusOK
 		}
-		lg.Infow("pprof request completed",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"query", r.URL.RawQuery,
-			"remote_addr", r.RemoteAddr,
-			"user_agent", r.UserAgent(),
-			"status", status,
-			"response_bytes", rw.size,
-			"duration", time.Since(start).String(),
+		lg.Infow("pprof请求处理完成",
+			"方法", r.Method,
+			"路径", r.URL.Path,
+			"查询串", r.URL.RawQuery,
+			"远端地址", r.RemoteAddr,
+			"客户端", r.UserAgent(),
+			"状态码", status,
+			"响应字节数", rw.size,
+			"耗时", time.Since(start).String(),
 		)
 	})
 }
@@ -211,7 +211,7 @@ func startPprofServer(lg interface {
 	Warnw(string, ...interface{})
 }, port int) *http.Server {
 	if port <= 0 {
-		lg.Infow("pprof http server disabled", "port", port)
+		lg.Infow("pprof服务未启用", "监听端口", port)
 		return nil
 	}
 	addr := fmt.Sprintf(":%d", port)
@@ -224,10 +224,10 @@ func startPprofServer(lg interface {
 	srv := &http.Server{Addr: addr, Handler: withPprofRequestLog(mux, lg)}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			lg.Warnw("pprof http server exited unexpectedly", "addr", addr, "error", err)
+			lg.Warnw("pprof服务异常退出", "监听地址", addr, "错误", err)
 		}
 	}()
-	lg.Infow("pprof http server enabled", "addr", addr)
+	lg.Infow("pprof服务初始化完成", "监听地址", addr)
 	return srv
 }
 
@@ -241,23 +241,23 @@ func shutdownPprofServer(srv *http.Server, lg interface {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		lg.Warnw("shutdown pprof http server failed", "addr", srv.Addr, "error", err)
+		lg.Warnw("pprof服务停止失败", "监听地址", srv.Addr, "错误", err)
 		return
 	}
-	lg.Infow("pprof http server stopped", "addr", srv.Addr)
+	lg.Infow("pprof服务已停止", "监听地址", srv.Addr)
 }
 
 func watchConfigFile(ctx context.Context, path, initialFingerprint, watchInterval string, notifyCh chan<- struct{}, bootLog *stageLogger) {
 	currentFingerprint := initialFingerprint
 	interval, err := time.ParseDuration(watchInterval)
 	if err != nil || interval <= 0 {
-		bootLog.Warn("config_watch", "invalid config watch interval, fallback to default", "value", watchInterval, "default", config.DefaultConfigWatchInterval, "error", err)
+		bootLog.Warn("config_watch", "业务配置监听间隔无效，已回退到默认值", "配置值", watchInterval, "默认值", config.DefaultConfigWatchInterval, "错误", err)
 		interval, _ = time.ParseDuration(config.DefaultConfigWatchInterval)
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	bootLog.Info("config_watch", "config file watcher started", "config", path, "interval", interval.String())
-	defer bootLog.Info("config_watch", "config file watcher stopped", "config", path)
+	bootLog.Info("config_watch", "业务配置监听任务已启动", "业务配置文件", path, "检查间隔", interval.String())
+	defer bootLog.Info("config_watch", "业务配置监听任务已停止", "业务配置文件", path)
 
 	for {
 		select {
@@ -266,7 +266,7 @@ func watchConfigFile(ctx context.Context, path, initialFingerprint, watchInterva
 		case <-ticker.C:
 			nextFingerprint, err := readConfigFingerprint(path)
 			if err != nil {
-				bootLog.Warn("config_watch", "watch config file failed", "config", path, "error", err)
+				bootLog.Warn("config_watch", "业务配置监听失败", "业务配置文件", path, "错误", err)
 				continue
 			}
 			if nextFingerprint == currentFingerprint {
@@ -284,18 +284,18 @@ func watchConfigFile(ctx context.Context, path, initialFingerprint, watchInterva
 func reloadAndApplyBusinessConfig(ctx context.Context, rt *app.Runtime, systemPath, businessPath string, bootLog *stageLogger, sourceKey, sourceValue string) (config.Config, bool) {
 	systemCfg, _, next, err := loadConfigPair(ctx, systemPath, businessPath)
 	if err != nil {
-		bootLog.Error("reload_config", "reload config failed", err, sourceKey, sourceValue)
+		bootLog.Error("reload_config", "业务配置重载失败：重新加载配置失败", err, sourceKey, sourceValue)
 		return config.Config{}, false
 	}
 	if err := rt.CheckSystemConfigStable(systemCfg); err != nil {
-		bootLog.Error("reload_config", "reject business reload due to system config change", err, sourceKey, sourceValue)
+		bootLog.Error("reload_config", "业务配置重载被拒绝：系统配置发生变化", err, sourceKey, sourceValue)
 		return config.Config{}, false
 	}
 	if err := rt.UpdateCache(ctx, next); err != nil {
-		bootLog.Error("reload_config", "apply reloaded config failed", err, sourceKey, sourceValue)
+		bootLog.Error("reload_config", "业务配置重载失败：运行时应用新配置失败", err, sourceKey, sourceValue)
 		return config.Config{}, false
 	}
-	bootLog.Info("reload_config", "reloaded config applied", sourceKey, sourceValue, "config_version", next.Version)
+	bootLog.Info("reload_config", "业务配置重载已生效", sourceKey, sourceValue, "配置版本", next.Version)
 	return next, true
 }
 
@@ -304,17 +304,18 @@ func loadConfigPair(ctx context.Context, systemPath, businessPath string) (confi
 	if err != nil {
 		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, err
 	}
+	cfg.ApplyDefaults()
 	if cfg.Control.API != "" {
 		cli := control.NewConfigAPIClient(cfg.Control.API, cfg.Control.TimeoutSec)
 		biz, err = cli.FetchBusinessConfig(ctx)
 		if err != nil {
-			return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("fetch business config from api error: %w", err)
+			return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("通过配置中心拉取业务配置失败: %w", err)
 		}
 		cfg = sys.Merge(biz)
 	}
 	cfg.ApplyDefaults()
 	if err := cfg.Validate(); err != nil {
-		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("config validate error: %w", err)
+		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("配置校验失败: %w", err)
 	}
 	return sys, biz, cfg, nil
 }
@@ -323,8 +324,8 @@ func shutdownRuntime(rt *app.Runtime, bootLog *stageLogger) {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := rt.Stop(ctx); err != nil {
-		bootLog.Error("shutdown_runtime", "runtime stop failed", err, "timeout", shutdownTimeout.String())
+		bootLog.Error("shutdown_runtime", "运行时停止失败", err, "超时时间", shutdownTimeout.String())
 		return
 	}
-	bootLog.Info("shutdown_runtime", "runtime stopped", "timeout", shutdownTimeout.String())
+	bootLog.Info("shutdown_runtime", "运行时已停止", "超时时间", shutdownTimeout.String())
 }

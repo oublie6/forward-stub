@@ -16,7 +16,9 @@
     "traffic_stats_interval": "1s",
     "traffic_stats_sample_every": 1,
     "payload_log_max_bytes": 256,
-    "payload_pool_max_cached_bytes": 0
+    "payload_pool_max_cached_bytes": 0,
+    "gc_stats_log_enabled": false,
+    "gc_stats_log_interval": "1m"
   },
   "receivers": {
     "rx_udp": {
@@ -53,8 +55,13 @@
     }
   },
   "task_sets": {
-    "ts_realtime": ["task_forward", "task_notify"],
-    "ts_archive": ["task_archive"]
+    "ts_realtime": [
+      "task_forward",
+      "task_notify"
+    ],
+    "ts_archive": [
+      "task_archive"
+    ]
   },
   "senders": {
     "tx_udp": {
@@ -78,23 +85,37 @@
   },
   "pipelines": {
     "pipe_replace": [
-      {"type": "replace_offset_bytes", "offset": 0, "hex": "aabb"}
+      {
+        "type": "replace_offset_bytes",
+        "offset": 0,
+        "hex": "aabb"
+      }
     ]
   },
   "tasks": {
     "task_forward": {
-      "pipelines": ["pipe_replace"],
-      "senders": ["tx_udp"],
+      "pipelines": [
+        "pipe_replace"
+      ],
+      "senders": [
+        "tx_udp"
+      ],
       "execution_model": "fastpath"
     },
     "task_notify": {
       "pipelines": [],
-      "senders": ["tx_kafka"],
+      "senders": [
+        "tx_kafka"
+      ],
       "execution_model": "fastpath"
     },
     "task_archive": {
-      "pipelines": ["pipe_replace"],
-      "senders": ["tx_kafka"],
+      "pipelines": [
+        "pipe_replace"
+      ],
+      "senders": [
+        "tx_kafka"
+      ],
       "execution_model": "channel",
       "channel_queue_size": 1024
     }

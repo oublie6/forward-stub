@@ -22,7 +22,20 @@
 - `pipelines`
 - `tasks`
 
-## 2. receivers
+## 2. logging
+
+与本次可观测性增强直接相关的配置项：
+
+- `traffic_stats_interval`：流量统计日志周期
+- `traffic_stats_sample_every`：流量统计采样倍率
+- `payload_log_max_bytes`：payload 摘要默认截断长度
+- `payload_pool_max_cached_bytes`：payload 池最大缓存字节数
+- `gc_stats_log_enabled`：是否开启 GC 周期日志
+- `gc_stats_log_interval`：GC 周期日志输出间隔，必须是大于 0 的合法 `time.ParseDuration` 字符串
+
+推荐：生产默认关闭 GC 周期日志，排障或容量评估窗口再开启。
+
+## 3. receivers
 
 每个 receiver 都必须显式绑定一个 selector：
 
@@ -41,7 +54,7 @@
 - `selector` 是 receiver 到 selector 的唯一绑定。
 - receiver 不再由 task 反向引用。
 
-## 3. selectors
+## 4. selectors
 
 selector 只支持完整字符串精确匹配：
 
@@ -63,7 +76,7 @@ selector 只支持完整字符串精确匹配：
 - `default_task_set`：未命中时回退
 - 不支持通配符、表达式、字段推断、规则优先级系统
 
-## 4. task_sets
+## 5. task_sets
 
 ```json
 "task_sets": {
@@ -78,7 +91,7 @@ selector 只支持完整字符串精确匹配：
 - 空 task set 不允许。
 - 运行时会直接展开成 `match key -> []*TaskState`。
 
-## 5. tasks
+## 6. tasks
 
 `task` 只定义执行逻辑：
 
@@ -94,7 +107,7 @@ selector 只支持完整字符串精确匹配：
 
 现在 task 不再承担 receiver 绑定职责。
 
-## 6. 配置校验规则
+## 7. 配置校验规则
 
 系统会在加载后校验：
 
@@ -104,8 +117,9 @@ selector 只支持完整字符串精确匹配：
 - task 的 pipeline / sender 是否存在
 - execution model 是否合法
 - sender / receiver 协议字段是否完整
+- `gc_stats_log_interval` 是否为合法正数时长
 
-## 7. 推荐实践
+## 8. 推荐实践
 
 - 用 receiver 表达协议接入。
 - 用 selector 表达固定 key 路由。

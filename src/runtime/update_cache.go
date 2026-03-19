@@ -71,7 +71,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	lg := logx.L()
 	start := time.Now()
 	if logx.Enabled(zapcore.InfoLevel) {
-		lg.Infow("updating runtime cache", "version", cfg.Version, "receivers", len(cfg.Receivers), "tasks", len(cfg.Tasks), "senders", len(cfg.Senders))
+		lg.Infow("开始更新运行时缓存", "配置版本", cfg.Version, "接收端数量", len(cfg.Receivers), "任务数量", len(cfg.Tasks), "发送端数量", len(cfg.Senders))
 	}
 
 	if st.canApplyBusinessDelta() {
@@ -85,11 +85,11 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	}
 
 	if logx.Enabled(zapcore.InfoLevel) {
-		lg.Infow("active tasks snapshot", "tasks", st.taskSnapshot())
+		lg.Infow("运行时任务快照", "任务列表", st.taskSnapshot())
 	}
 
 	if logx.Enabled(zapcore.InfoLevel) {
-		lg.Infow("runtime cache updated", "version", cfg.Version, "cost", time.Since(start))
+		lg.Infow("运行时缓存更新完成", "配置版本", cfg.Version, "耗时", time.Since(start))
 	}
 	return nil
 }
@@ -129,11 +129,17 @@ func (st *Store) canApplyBusinessDelta() bool {
 //  2. 再 build task（建立 pipeline + sender + 订阅关系）；
 //  3. 生成 dispatch 快照后再启动 receiver，避免切换窗口漏分发。
 func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("开始全量重建运行时组件")
+	}
 	_ = st.StopAll(ctx)
 
 	compiled, sigsByPipeline, err := st.compilePipelinesWithStageCache(cfg.Pipelines)
 	if err != nil {
 		return err
+	}
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("流水线编译完成", "流水线数量", len(compiled))
 	}
 
 	// 一次性替换 store 内部索引，确保新配置以完整快照生效。
@@ -150,6 +156,9 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	st.gcUnusedStageCache()
 
 	// 1) 构建 senders：任务阶段需要引用 sender 实例。
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("开始初始化发送端", "发送端数量", len(cfg.Senders))
+	}
 	for name, sc := range cfg.Senders {
 		s, err := buildSender(name, sc, cfg.Logging.Level)
 		if err != nil {
@@ -159,19 +168,34 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 		st.senders[name] = &SenderState{Name: name, Cfg: sc, S: s, Refs: 0}
 		st.mu.Unlock()
 	}
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("发送端初始化完成", "发送端数量", len(cfg.Senders))
+	}
 
 	// 2) 构建 tasks：绑定 pipeline + sender。
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("开始初始化任务", "任务数量", len(cfg.Tasks))
+	}
 	for name, tc := range cfg.Tasks {
 		if err := st.addTask(name, tc, cfg.Logging, nil); err != nil {
 			return err
 		}
 	}
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("任务初始化完成", "任务数量", len(cfg.Tasks))
+	}
 
 	if err := st.rebuildReceiverSelectors(); err != nil {
 		return err
 	}
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("选择器编译完成", "选择器数量", len(cfg.Selectors), "任务集数量", len(cfg.TaskSets))
+	}
 
 	// 3) 构建 receivers 并挂载 selector。
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("开始初始化接收端", "接收端数量", len(cfg.Receivers))
+	}
 	receiverStates := make([]*ReceiverState, 0, len(cfg.Receivers))
 	for name, rc := range cfg.Receivers {
 		r, err := buildReceiver(name, rc, cfg.Logging.Level)
@@ -195,11 +219,17 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 		return err
 	}
 	// 4) 启动 receivers：消息入口最终回调 dispatch。
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("开始启动接收端", "接收端数量", len(receiverStates))
+	}
 	startAcks := make([]<-chan struct{}, 0, len(receiverStates))
 	for _, rs := range receiverStates {
 		startAcks = append(startAcks, st.startReceiver(ctx, rs))
 	}
 	st.waitReceiversStartInvoked(startAcks)
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("接收端启动完成", "接收端数量", len(receiverStates))
+	}
 	return nil
 }
 
@@ -305,20 +335,20 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	}
 	if logx.Enabled(zapcore.InfoLevel) {
 		logx.L().Infow(
-			"runtime business delta applied",
-			"version", cfg.Version,
-			"receiver_added", receiverAdded,
-			"receiver_removed", receiverRemoved,
-			"selector_added", selectorAdded,
-			"selector_removed", selectorRemoved,
-			"task_set_added", taskSetAdded,
-			"task_set_removed", taskSetRemoved,
-			"sender_added", senderAdded,
-			"sender_removed", senderRemoved,
-			"pipeline_added", pipelineAdded,
-			"pipeline_removed", pipelineRemoved,
-			"task_added", taskAdded,
-			"task_removed", taskRemoved,
+			"业务配置增量更新完成",
+			"配置版本", cfg.Version,
+			"新增接收端", receiverAdded,
+			"删除接收端", receiverRemoved,
+			"新增选择器", selectorAdded,
+			"删除选择器", selectorRemoved,
+			"新增任务集", taskSetAdded,
+			"删除任务集", taskSetRemoved,
+			"新增发送端", senderAdded,
+			"删除发送端", senderRemoved,
+			"新增流水线", pipelineAdded,
+			"删除流水线", pipelineRemoved,
+			"新增任务", taskAdded,
+			"删除任务", taskRemoved,
 		)
 	}
 	return nil
@@ -639,7 +669,7 @@ func (st *Store) startReceiver(ctx context.Context, rs *ReceiverState) <-chan st
 		close(ack)
 		err := state.Recv.Start(ctx, func(pkt *packet.Packet) { dispatchToSelector(ctx, state, pkt) })
 		if err != nil {
-			logx.L().Errorw("receiver stopped with error", "receiver", state.Name, "error", err)
+			logx.L().Errorw("接收端异常退出", "组件名称", state.Name, "错误", err)
 		}
 	}(rs, started)
 	return started
@@ -1021,15 +1051,15 @@ func logReceiverPayload(receiver string, pkt *packet.Packet, maxBytes int) {
 	if pkt == nil || !logx.Enabled(zapcore.InfoLevel) {
 		return
 	}
-	logx.L().Infow("receiver payload recv",
-		"receiver", receiver,
-		"kind", pkt.Kind,
-		"payload_len", len(pkt.Payload),
-		"payload_hex", payloadHex(pkt.Payload, maxBytes),
-		"transfer_id", pkt.Meta.TransferID,
-		"offset", pkt.Meta.Offset,
-		"total_size", pkt.Meta.TotalSize,
-		"eof", pkt.Meta.EOF,
+	logx.L().Infow("接收端接收Payload摘要",
+		"组件名称", receiver,
+		"载荷类型", pkt.Kind,
+		"Payload长度", len(pkt.Payload),
+		"Payload十六进制", payloadHex(pkt.Payload, maxBytes),
+		"传输ID", pkt.Meta.TransferID,
+		"偏移量", pkt.Meta.Offset,
+		"总大小", pkt.Meta.TotalSize,
+		"是否EOF", pkt.Meta.EOF,
 	)
 }
 
@@ -1042,7 +1072,7 @@ func payloadHex(b []byte, max int) string {
 		max = config.DefaultPayloadLogMaxBytes
 	}
 	if len(b) > max {
-		return hex.EncodeToString(b[:max]) + "...(truncated)"
+		return hex.EncodeToString(b[:max]) + "...(已截断)"
 	}
 	return hex.EncodeToString(b)
 }

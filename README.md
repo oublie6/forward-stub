@@ -8,6 +8,8 @@ receiver -> selector -> task(pipeline + sender)
 
 核心目标只有三个：**职责边界明确、热路径极简、配置可维护**。
 
+同时，当前版本补齐了**阶段化中文启动日志**、**可开关的 GC 周期日志**和**更完整的运行时配置摘要**，便于上线检查与故障定位。
+
 ## 架构摘要
 
 ### 1. 新职责划分
@@ -56,6 +58,26 @@ go build -mod=vendor -o bin/forward-stub .
 ```bash
 ./bin/forward-stub -config ./configs/example.json
 ```
+
+## 启动日志与 GC 日志
+
+启动阶段会按固定顺序输出中文日志：
+
+- 进程启动
+- 参数解析完成
+- 配置文件加载完成
+- 配置校验完成
+- 日志器初始化完成
+- 运行时组件初始化开始/完成
+- 服务启动成功，开始接收流量
+- 优雅停机开始/完成
+
+`logging` 额外支持两个 GC 周期日志配置项：
+
+- `gc_stats_log_enabled`：是否开启 GC 周期日志
+- `gc_stats_log_interval`：日志输出周期，例如 `1m`
+
+GC 周期日志会输出 goroutine 数量、heap alloc、heap inuse、heap sys、stack inuse、next gc、GC 次数、最近一次 GC 暂停时间和 `gc_cpu_fraction`。
 
 ## 配置总览
 

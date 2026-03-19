@@ -35,7 +35,7 @@ type GnetTCP struct {
 func NewGnetTCP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, framer Framer, gnetLogLevel string) *GnetTCP {
 	return &GnetTCP{
 		name:             name,
-		listen:           listen,
+		listen:           normalizeGnetListen("tcp", listen),
 		multicore:        multicore,
 		numEventLoop:     numEventLoop,
 		readBufferCap:    readBufferCap,

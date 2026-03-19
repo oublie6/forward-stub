@@ -33,7 +33,7 @@ func (l *stageLogger) Attach(lg structuredLogger) {
 }
 
 func (l *stageLogger) Info(stage, msg string, kv ...interface{}) {
-	fields := append([]interface{}{"stage", stage}, kv...)
+	fields := append([]interface{}{"阶段", stage}, kv...)
 	l.mu.RLock()
 	logger := l.lg
 	l.mu.RUnlock()
@@ -45,7 +45,7 @@ func (l *stageLogger) Info(stage, msg string, kv ...interface{}) {
 }
 
 func (l *stageLogger) Warn(stage, msg string, kv ...interface{}) {
-	fields := append([]interface{}{"stage", stage}, kv...)
+	fields := append([]interface{}{"阶段", stage}, kv...)
 	l.mu.RLock()
 	logger := l.lg
 	l.mu.RUnlock()
@@ -58,9 +58,9 @@ func (l *stageLogger) Warn(stage, msg string, kv ...interface{}) {
 
 func (l *stageLogger) Error(stage, msg string, err error, kv ...interface{}) {
 	if err != nil {
-		kv = append(kv, "error", err.Error())
+		kv = append(kv, "错误", err.Error())
 	}
-	fields := append([]interface{}{"stage", stage}, kv...)
+	fields := append([]interface{}{"阶段", stage}, kv...)
 	l.mu.RLock()
 	logger := l.lg
 	l.mu.RUnlock()
@@ -95,94 +95,94 @@ func strconvQuote(v string) string {
 }
 
 func logConfigSummary(l *stageLogger, systemPath, businessPath string, cfg config.Config) {
-	l.Info("config_summary", "runtime config summary",
-		"system_config", systemPath,
-		"business_config", businessPath,
-		"config_version", cfg.Version,
-		"receivers", len(cfg.Receivers),
-		"selectors", len(cfg.Selectors),
-		"task_sets", len(cfg.TaskSets),
-		"tasks", len(cfg.Tasks),
-		"senders", len(cfg.Senders),
-		"pipelines", len(cfg.Pipelines),
-		"gc_stats_log_enabled", config.BoolValue(cfg.Logging.GCStatsLogEnabled),
-		"gc_stats_log_interval", cfg.Logging.GCStatsLogInterval,
+	l.Info("config_summary", "配置摘要已确认",
+		"系统配置文件", systemPath,
+		"业务配置文件", businessPath,
+		"配置版本", cfg.Version,
+		"接收端数量", len(cfg.Receivers),
+		"选择器数量", len(cfg.Selectors),
+		"任务集数量", len(cfg.TaskSets),
+		"任务数量", len(cfg.Tasks),
+		"发送端数量", len(cfg.Senders),
+		"流水线数量", len(cfg.Pipelines),
+		"GC周期日志启用", config.BoolValue(cfg.Logging.GCStatsLogEnabled),
+		"GC周期日志间隔", cfg.Logging.GCStatsLogInterval,
 	)
 
 	receiverNames := sortedReceiverNames(cfg.Receivers)
 	for _, name := range receiverNames {
 		rc := cfg.Receivers[name]
-		l.Info("receiver_config", "receiver config ready",
-			"name", name,
-			"type", rc.Type,
-			"listen", rc.Listen,
-			"selector", rc.Selector,
-			"frame", rc.Frame,
-			"event_loops", rc.NumEventLoop,
-			"read_buffer_cap", rc.ReadBufferCap,
-			"socket_recv_buffer", rc.SocketRecvBuffer,
-			"topic", rc.Topic,
-			"group_id", rc.GroupID,
-			"remote_dir", rc.RemoteDir,
-			"chunk_size", rc.ChunkSize,
-			"poll_interval_sec", rc.PollIntervalSec,
-			"tls", rc.TLS,
-			"auth_enabled", rc.Username != "" || rc.Password != "",
-			"host_key_fingerprint_set", rc.HostKeyFingerprint != "",
-			"log_payload_recv", rc.LogPayloadRecv,
+		l.Info("receiver_config", "接收端配置已确认",
+			"组件名称", name,
+			"协议类型", rc.Type,
+			"监听地址", rc.Listen,
+			"选择器", rc.Selector,
+			"分帧模式", rc.Frame,
+			"event_loop数量", rc.NumEventLoop,
+			"读缓冲上限", rc.ReadBufferCap,
+			"socket接收缓冲", rc.SocketRecvBuffer,
+			"Topic", rc.Topic,
+			"消费组", rc.GroupID,
+			"远端目录", rc.RemoteDir,
+			"分块大小", rc.ChunkSize,
+			"轮询间隔秒", rc.PollIntervalSec,
+			"TLS启用", rc.TLS,
+			"鉴权已配置", rc.Username != "" || rc.Password != "",
+			"主机指纹已配置", rc.HostKeyFingerprint != "",
+			"接收Payload日志", rc.LogPayloadRecv,
 		)
 	}
 
 	senderNames := sortedSenderNames(cfg.Senders)
 	for _, name := range senderNames {
 		sc := cfg.Senders[name]
-		l.Info("sender_config", "sender config ready",
-			"name", name,
-			"type", sc.Type,
-			"remote", sc.Remote,
-			"frame", sc.Frame,
-			"concurrency", sc.Concurrency,
-			"socket_send_buffer", sc.SocketSendBuffer,
-			"topic", sc.Topic,
-			"remote_dir", sc.RemoteDir,
-			"local_ip", sc.LocalIP,
-			"local_port", sc.LocalPort,
-			"iface", sc.Iface,
-			"tls", sc.TLS,
-			"auth_enabled", sc.Username != "" || sc.Password != "",
-			"host_key_fingerprint_set", sc.HostKeyFingerprint != "",
+		l.Info("sender_config", "发送端配置已确认",
+			"组件名称", name,
+			"协议类型", sc.Type,
+			"目标地址", sc.Remote,
+			"分帧模式", sc.Frame,
+			"并发度", sc.Concurrency,
+			"socket发送缓冲", sc.SocketSendBuffer,
+			"Topic", sc.Topic,
+			"远端目录", sc.RemoteDir,
+			"本地IP", sc.LocalIP,
+			"本地端口", sc.LocalPort,
+			"网卡", sc.Iface,
+			"TLS启用", sc.TLS,
+			"鉴权已配置", sc.Username != "" || sc.Password != "",
+			"主机指纹已配置", sc.HostKeyFingerprint != "",
 		)
 	}
 
 	selectorNames := sortedSelectorNames(cfg.Selectors)
 	for _, name := range selectorNames {
 		sc := cfg.Selectors[name]
-		l.Info("selector_config", "selector config ready",
-			"name", name,
-			"match_count", len(sc.Matches),
-			"default_task_set", sc.DefaultTaskSet,
+		l.Info("selector_config", "选择器配置已确认",
+			"组件名称", name,
+			"匹配规则数量", len(sc.Matches),
+			"默认任务集", sc.DefaultTaskSet,
 		)
 	}
 
 	taskSetNames := sortedTaskSetNames(cfg.TaskSets)
 	for _, name := range taskSetNames {
-		l.Info("task_set_config", "task set config ready",
-			"name", name,
-			"tasks", strings.Join(cfg.TaskSets[name], ","),
+		l.Info("task_set_config", "任务集配置已确认",
+			"组件名称", name,
+			"任务列表", strings.Join(cfg.TaskSets[name], ","),
 		)
 	}
 
 	taskNames := sortedTaskNames(cfg.Tasks)
 	for _, name := range taskNames {
 		tc := cfg.Tasks[name]
-		l.Info("task_config", "task config ready",
-			"name", name,
-			"execution_model", tc.ExecutionModel,
-			"pool_size", tc.PoolSize,
-			"queue_size", tc.QueueSize,
-			"channel_queue_size", tc.ChannelQueueSize,
-			"pipelines", strings.Join(tc.Pipelines, ","),
-			"senders", strings.Join(tc.Senders, ","),
+		l.Info("task_config", "任务配置已确认",
+			"组件名称", name,
+			"执行模型", tc.ExecutionModel,
+			"协程池大小", tc.PoolSize,
+			"排队长度", tc.QueueSize,
+			"channel队列长度", tc.ChannelQueueSize,
+			"流水线列表", strings.Join(tc.Pipelines, ","),
+			"发送端列表", strings.Join(tc.Senders, ","),
 		)
 	}
 }

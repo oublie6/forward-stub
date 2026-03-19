@@ -19,12 +19,14 @@ data:
         "compress": true,
         "max_size_mb": 100,
         "max_backups": 5,
-        "max_age_days": 30
+        "max_age_days": 30,
+        "gc_stats_log_enabled": false,
+        "gc_stats_log_interval": "1m"
       },
       "receivers": {
         "udp_in": {
           "type": "udp_gnet",
-          "listen": "udp://0.0.0.0:19000",
+          "listen": "0.0.0.0:19000",
           "selector": "sel_udp_in",
           "multicore": true,
           "frame": ""
@@ -54,7 +56,7 @@ data:
         "udp-forward": {
           "pool_size": 1024,
           "queue_size": 4096,
-          "fast_path": true,
+          "execution_model": "fastpath",
           "pipelines": ["default"],
           "senders": ["udp_out"]
         }

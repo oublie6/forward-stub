@@ -38,6 +38,7 @@
 - 启动与配置加载日志。
 - task 队列满丢包日志。
 - sender 发送异常日志。
+- GC 周期日志。
 - 流量聚合统计日志。
 
 建议：
@@ -48,9 +49,6 @@
 ## 5. 常用运维命令
 
 ```bash
-# 版本
-./bin/forward-stub -version
-
 # 监听端口
 ss -lntup | rg forward-stub
 
@@ -60,6 +58,8 @@ kill -HUP <pid>
 # 查看最近日志
 journalctl -u forward-stub -n 200 --no-pager
 ```
+
+如需核对启动链路，可重点检索：`进程启动`、`配置文件加载完成`、`日志器初始化完成`、`服务启动成功，开始接收流量`、`开始优雅停机`。
 
 ## 6. 巡检建议
 

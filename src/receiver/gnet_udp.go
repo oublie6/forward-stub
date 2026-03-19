@@ -34,7 +34,7 @@ type GnetUDP struct {
 func NewGnetUDP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, gnetLogLevel string) *GnetUDP {
 	return &GnetUDP{
 		name:             name,
-		listen:           listen,
+		listen:           normalizeGnetListen("udp", listen),
 		multicore:        multicore,
 		numEventLoop:     numEventLoop,
 		readBufferCap:    readBufferCap,

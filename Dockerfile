@@ -6,8 +6,6 @@ FROM --platform=$TARGETOS/$TARGETARCH golang:1.25-alpine
 
 WORKDIR /app
 
-# 版本号可由流水线注入（例如 git tag / commit sha）。
-ARG VERSION=dev
 ARG TARGETOS
 ARG TARGETARCH
 

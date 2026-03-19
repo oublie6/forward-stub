@@ -2,6 +2,8 @@
 
 ## 1. 启动阶段
 
+bootstrap 会先输出阶段化中文日志，再调用 `UpdateCache` 初始化运行时组件。
+
 `UpdateCache` 的核心步骤：
 
 1. 编译 pipelines。
@@ -25,7 +27,19 @@ packet.MatchKey -> selector map lookup -> []*TaskState -> fanout
 - 不做反射。
 - 不做协议二次解析。
 
-## 3. 热更新
+## 3. GC 周期日志生命周期
+
+GC 周期日志任务在日志器初始化完成后启动，关闭顺序与主运行时一致：
+
+1. 收到退出信号
+2. 取消主运行 context
+3. 停止 GC 周期日志任务
+4. 停止 runtime
+5. 停止 pprof
+
+这样可以保证 GC 日志任务不泄漏 goroutine，也不会在停机后继续输出。
+
+## 4. 热更新
 
 热更新时会：
 
@@ -34,7 +48,7 @@ packet.MatchKey -> selector map lookup -> []*TaskState -> fanout
 - 把 task set 重新展开到新的 task slice。
 - 保证 receiver 入口和 selector 快照保持一致。
 
-## 4. 为什么 task set 不进入热路径
+## 5. 为什么 task set 不进入热路径
 
 `task_set` 只是配置层概念。运行时会直接把：
 
