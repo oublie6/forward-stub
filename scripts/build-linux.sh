@@ -21,7 +21,7 @@ OUT_DIR=${OUT_DIR:-dist/linux}
 BINARY_NAME=${BINARY_NAME:-${APP_NAME}}
 
 # 默认优化参数：去符号并注入版本信息。
-LDFLAGS=${LDFLAGS:-"-s -w -X main.version=${VERSION}"}
+LDFLAGS=${LDFLAGS:-"-s -w"}
 
 mkdir -p "${OUT_DIR}"
 OUT_FILE="${OUT_DIR}/${BINARY_NAME}"

@@ -19,7 +19,7 @@ MAIN_PKG=${MAIN_PKG:-.}
 GOFLAGS=${GOFLAGS:--mod=vendor}
 
 # 通过 ldflags 注入版本并裁剪符号信息，减小二进制体积。
-LDFLAGS="-s -w -X main.version=${VERSION}"
+LDFLAGS="-s -w"
 
 mkdir -p "${OUT_DIR}"
 # 记录绝对路径，避免进入临时目录后输出位置变化。

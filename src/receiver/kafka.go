@@ -20,11 +20,10 @@ import (
 )
 
 type KafkaReceiver struct {
-	name     string
-	selector string
-	brokers  []string
-	topic    string
-	groupID  string
+	name    string
+	brokers []string
+	topic   string
+	groupID string
 
 	onPacket func(*packet.Packet)
 
@@ -79,11 +78,10 @@ func NewKafkaReceiver(name string, rc config.ReceiverConfig) (*KafkaReceiver, er
 	if err != nil {
 		return nil, err
 	}
-	return &KafkaReceiver{name: name, selector: rc.Selector, brokers: brs, topic: rc.Topic, groupID: groupID, client: cli}, nil
+	return &KafkaReceiver{name: name, brokers: brs, topic: rc.Topic, groupID: groupID, client: cli}, nil
 }
 
-func (r *KafkaReceiver) Name() string     { return r.name }
-func (r *KafkaReceiver) Selector() string { return r.selector }
+func (r *KafkaReceiver) Name() string { return r.name }
 
 func (r *KafkaReceiver) Key() string {
 	return "kafka|" + strings.Join(r.brokers, ",") + "|" + r.groupID + "|" + r.topic

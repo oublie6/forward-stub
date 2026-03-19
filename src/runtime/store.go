@@ -5,7 +5,6 @@ import (
 	"context"
 	"forward-stub/src/config"
 	"sync"
-	"sync/atomic"
 
 	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
@@ -13,19 +12,12 @@ import (
 
 // Store 持有运行时对象的全集快照。
 
-type recvPayloadLogOption struct {
-	enabled bool
-	max     int
-}
-
 // 设计说明：
 //  1. 通过单把互斥锁保护元数据 map，避免复杂的细粒度锁导致状态不一致；
 //  2. UpdateCache 在重建时整体替换 map，Store 提供“快照后异步处理”的能力；
 //  3. 停机阶段使用并发关闭，缩短 receiver/sender 数量较多场景下的整体停机耗时。
 type Store struct {
 	mu sync.RWMutex
-
-	version int64
 
 	receivers map[string]*ReceiverState
 	selectors map[string]config.SelectorConfig
@@ -39,9 +31,6 @@ type Store struct {
 	pipelineStageSigs map[string][]string
 	// stageCache 保存可复用 stage 实例及其被 task 使用计数。
 	stageCache map[string]*StageCacheEntry
-
-	// recvPayloadLogOptions 保存 receiver payload 日志配置只读快照，供 dispatch 热路径无锁读取。
-	recvPayloadLogOptions atomic.Value // map[string]recvPayloadLogOption
 
 	payloadLogDefaultMax int
 }
@@ -59,7 +48,6 @@ func NewStore() *Store {
 		pipelineStageSigs: make(map[string][]string),
 		stageCache:        make(map[string]*StageCacheEntry),
 	}
-	s.recvPayloadLogOptions.Store(map[string]recvPayloadLogOption{})
 	return s
 }
 
@@ -159,19 +147,4 @@ func (s *Store) StopAll(ctx context.Context) error {
 	_ = sg.Wait()
 
 	return errs
-}
-
-// setRecvPayloadLogOptions 负责该函数对应的核心逻辑，详见实现细节。
-func (s *Store) setRecvPayloadLogOptions(m map[string]recvPayloadLogOption) {
-	s.recvPayloadLogOptions.Store(m)
-}
-
-// getRecvPayloadLogOption 负责该函数对应的核心逻辑，详见实现细节。
-func (s *Store) getRecvPayloadLogOption(receiver string) (recvPayloadLogOption, bool) {
-	v := s.recvPayloadLogOptions.Load()
-	if v == nil {
-		return recvPayloadLogOption{}, false
-	}
-	opt, ok := v.(map[string]recvPayloadLogOption)[receiver]
-	return opt, ok
 }

@@ -146,10 +146,8 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	st.pipelines = compiled
 	st.pipelineCfg = cfg.Pipelines
 	st.pipelineStageSigs = sigsByPipeline
-	st.version = cfg.Version
 	st.mu.Unlock()
 	st.gcUnusedStageCache()
-	st.setRecvPayloadLogOptions(map[string]recvPayloadLogOption{})
 
 	// 1) 构建 senders：任务阶段需要引用 sender 实例。
 	for name, sc := range cfg.Senders {
@@ -202,8 +200,6 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 		startAcks = append(startAcks, st.startReceiver(ctx, rs))
 	}
 	st.waitReceiversStartInvoked(startAcks)
-	st.refreshRecvPayloadLogOptions()
-
 	return nil
 }
 
@@ -227,10 +223,6 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	oldTaskSets := cloneTaskSetMap(st.taskSets)
 	oldPipelines := st.pipelineCfg
 	st.mu.RUnlock()
-
-	st.mu.Lock()
-	st.version = cfg.Version
-	st.mu.Unlock()
 
 	plan := planBusinessDelta(oldReceivers, oldSelectors, oldTaskSets, oldSenders, oldPipelines, oldTasks, cfg)
 	receiverAdded, receiverRemoved := plan.receiverAdded, plan.receiverRemoved
@@ -635,7 +627,6 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 		go rs.Recv.Stop(ctx)
 	}
 	st.mu.Unlock()
-	st.refreshRecvPayloadLogOptions()
 	return nil
 }
 
@@ -1021,19 +1012,6 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 	dispatchToSelector(ctx, rs, pkt)
 }
 
-func (st *Store) refreshRecvPayloadLogOptions() {
-	snapshot := make(map[string]recvPayloadLogOption)
-	st.mu.RLock()
-	for name, rs := range st.receivers {
-		if rs == nil {
-			continue
-		}
-		snapshot[name] = recvPayloadLogOption{enabled: rs.LogPayloadRecv, max: rs.PayloadLogMax}
-	}
-	st.mu.RUnlock()
-	st.setRecvPayloadLogOptions(snapshot)
-}
-
 // logReceiverPayload 按 receiver 侧日志策略输出 payload 观测日志。
 //
 // 注意：
@@ -1081,7 +1059,7 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 	}
 	switch rc.Type {
 	case "udp_gnet":
-		return receiver.NewGnetUDP(name, rc.Selector, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, rc.SocketRecvBuffer, gnetLogLevel), nil
+		return receiver.NewGnetUDP(name, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, rc.SocketRecvBuffer, gnetLogLevel), nil
 	case "tcp_gnet":
 		var fr receiver.Framer
 		switch rc.Frame {
@@ -1092,7 +1070,7 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 		default:
 			return nil, fmt.Errorf("receiver %s unknown frame %s", name, rc.Frame)
 		}
-		return receiver.NewGnetTCP(name, rc.Selector, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, rc.SocketRecvBuffer, fr, gnetLogLevel), nil
+		return receiver.NewGnetTCP(name, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, rc.SocketRecvBuffer, fr, gnetLogLevel), nil
 	case "kafka":
 		return receiver.NewKafkaReceiver(name, rc)
 	case "sftp":

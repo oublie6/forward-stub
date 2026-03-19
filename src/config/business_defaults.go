@@ -94,6 +94,13 @@ func (c *Config) ApplyDefaults() {
 		v := DefaultLogRotateCompress
 		c.Logging.Compress = &v
 	}
+	if c.Logging.GCStatsLogEnabled == nil {
+		v := DefaultGCStatsLogEnabled
+		c.Logging.GCStatsLogEnabled = &v
+	}
+	if c.Logging.GCStatsLogInterval == "" {
+		c.Logging.GCStatsLogInterval = DefaultGCStatsLogInterval
+	}
 	if c.Logging.TrafficStatsInterval == "" {
 		c.Logging.TrafficStatsInterval = DefaultTrafficStatsInterval
 	}

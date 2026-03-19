@@ -10,7 +10,6 @@ import (
 type Receiver interface {
 	Name() string
 	Key() string
-	Selector() string
 	Start(ctx context.Context, onPacket func(*packet.Packet)) error
 	Stop(ctx context.Context) error
 }

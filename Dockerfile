@@ -21,7 +21,7 @@ COPY . .
 # 直接在容器镜像内编译产物，兼容老版本 docker build。
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     GOFLAGS=-mod=vendor \
-    go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /app/forward-stub .
+    go build -trimpath -ldflags "-s -w" -o /app/forward-stub .
 
 # 运行参数在 docker run / kubectl run 时显式指定。
 ENTRYPOINT ["/app/forward-stub"]

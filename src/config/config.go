@@ -19,6 +19,8 @@ const (
 	DefaultLogRotateMaxBackups       = 5
 	DefaultLogRotateMaxAgeDays       = 30
 	DefaultLogRotateCompress         = true
+	DefaultGCStatsLogEnabled         = false
+	DefaultGCStatsLogInterval        = "1m"
 	DefaultPayloadLogMaxBytes        = 256
 	DefaultReceiverMulticore         = true
 	DefaultReceiverNumEventLoop      = 8
@@ -63,7 +65,7 @@ type Config struct {
 	// 用法：task.Pipelines 按顺序引用 pipeline 名称，从而编排处理链路。
 	Pipelines map[string][]StageConfig `json:"pipelines"`
 	// Tasks 是任务定义表，key 为任务名。
-	// 用法：每个 task 绑定 receiver + pipeline + sender，构成一条可运行转发链路。
+	// 用法：每个 task 定义 pipeline + sender + execution_model，由 selector 决定何时命中。
 	Tasks map[string]TaskConfig `json:"tasks"`
 }
 
@@ -161,6 +163,12 @@ type LoggingConfig struct {
 	// PayloadPoolMaxCachedBytes 控制 payload 内存池可缓存的总字节上限。
 	// 用法：<=0 表示不限制（默认）；>0 可限制缓存内存占用峰值。
 	PayloadPoolMaxCachedBytes int64 `json:"payload_pool_max_cached_bytes,omitempty"`
+	// GCStatsLogEnabled 控制是否开启周期性 GC / 内存 / goroutine 信息日志。
+	// 用法：排障或容量评估时开启；常规生产环境可按需关闭。
+	GCStatsLogEnabled *bool `json:"gc_stats_log_enabled,omitempty"`
+	// GCStatsLogInterval 控制 GC 统计日志周期，如 "1m"。
+	// 用法：仅在 gc_stats_log_enabled=true 时生效，必须能被 time.ParseDuration 解析且 >0。
+	GCStatsLogInterval string `json:"gc_stats_log_interval,omitempty"`
 }
 
 // ReceiverConfig 描述单个接收端实例。
@@ -451,9 +459,6 @@ type TaskConfig struct {
 	// ChannelQueueSize 是 channel 执行模型下的有界缓冲长度。
 	// 用法：仅 execution_model=channel 时生效；<=0 时默认回退到 QueueSize，确保与协程池排队上限一致。
 	ChannelQueueSize int `json:"channel_queue_size,omitempty"`
-	// Receivers 为兼容旧配置保留，但运行时不再使用该字段做绑定关系。
-	// 用法：新配置应改为在 receiver 上显式绑定 selector。
-	Receivers []string `json:"receivers,omitempty"`
 	// Pipelines 是按顺序执行的 pipeline 名称列表。
 	// 用法：可串联多个 pipeline 形成分层处理链。
 	Pipelines []string `json:"pipelines"`

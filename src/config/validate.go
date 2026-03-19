@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Validate 负责该函数对应的核心逻辑，详见实现细节。
@@ -31,6 +32,12 @@ func (c *Config) Validate() error {
 
 	if c.Logging.PayloadPoolMaxCachedBytes < 0 {
 		return errors.New("logging payload_pool_max_cached_bytes must be >= 0")
+	}
+	if strings.TrimSpace(c.Logging.GCStatsLogInterval) != "" {
+		d, err := time.ParseDuration(c.Logging.GCStatsLogInterval)
+		if err != nil || d <= 0 {
+			return errors.New("logging gc_stats_log_interval must be a valid duration > 0")
+		}
 	}
 
 	if c.Control.PprofPort < -1 || c.Control.PprofPort > 65535 {

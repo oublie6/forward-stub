@@ -9,8 +9,6 @@ import (
 	_ "go.uber.org/automaxprocs/maxprocs"
 )
 
-var version = "dev"
-
 func main() {
-	os.Exit(bootstrap.Run(version, os.Args[1:]))
+	os.Exit(bootstrap.Run(os.Args[1:]))
 }

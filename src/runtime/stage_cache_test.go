@@ -36,7 +36,7 @@ func TestStageCacheTaskRefsTrackAddAndRemove(t *testing.T) {
 	st.stageCache[sig] = &StageCacheEntry{Sig: sig, Tasks: make(map[string]struct{})}
 	st.pipelineStageSigs["p1"] = []string{sig}
 
-	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
+	if err := st.addTask("t1", config.TaskConfig{Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
 		t.Fatalf("add task failed: %v", err)
 	}
 	entry := st.stageCache[sig]

@@ -16,7 +16,6 @@ import (
 
 type GnetTCP struct {
 	name             string
-	selector         string
 	listen           string
 	multicore        bool
 	numEventLoop     int
@@ -33,10 +32,9 @@ type GnetTCP struct {
 }
 
 // NewGnetTCP 负责该函数对应的核心逻辑，详见实现细节。
-func NewGnetTCP(name, selector, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, framer Framer, gnetLogLevel string) *GnetTCP {
+func NewGnetTCP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, framer Framer, gnetLogLevel string) *GnetTCP {
 	return &GnetTCP{
 		name:             name,
-		selector:         selector,
 		listen:           listen,
 		multicore:        multicore,
 		numEventLoop:     numEventLoop,
@@ -52,8 +50,6 @@ func (r *GnetTCP) Name() string { return r.name }
 
 // Key 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetTCP) Key() string { return "tcp_gnet|" + r.listen }
-
-func (r *GnetTCP) Selector() string { return r.selector }
 
 // Start 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {

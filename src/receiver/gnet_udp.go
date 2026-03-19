@@ -16,7 +16,6 @@ import (
 
 type GnetUDP struct {
 	name             string
-	selector         string
 	listen           string
 	multicore        bool
 	numEventLoop     int
@@ -32,10 +31,9 @@ type GnetUDP struct {
 }
 
 // NewGnetUDP 负责该函数对应的核心逻辑，详见实现细节。
-func NewGnetUDP(name, selector, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, gnetLogLevel string) *GnetUDP {
+func NewGnetUDP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, gnetLogLevel string) *GnetUDP {
 	return &GnetUDP{
 		name:             name,
-		selector:         selector,
 		listen:           listen,
 		multicore:        multicore,
 		numEventLoop:     numEventLoop,
@@ -50,8 +48,6 @@ func (r *GnetUDP) Name() string { return r.name }
 
 // Key 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetUDP) Key() string { return "udp_gnet|" + r.listen }
-
-func (r *GnetUDP) Selector() string { return r.selector }
 
 // Start 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetUDP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
