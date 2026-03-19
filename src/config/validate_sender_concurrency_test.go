@@ -16,9 +16,10 @@ func TestValidateSenderConcurrencyMustBePowerOfTwo(t *testing.T) {
 		},
 		Pipelines: map[string][]StageConfig{"p1": {}},
 		Tasks: map[string]TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
+	cfg = attachMinimalRouting(cfg)
 
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "power of two") {
 		t.Fatalf("expected power-of-two concurrency error, got: %v", err)
@@ -36,9 +37,10 @@ func TestValidateSenderConcurrencyAcceptsPowerOfTwo(t *testing.T) {
 		},
 		Pipelines: map[string][]StageConfig{"p1": {}},
 		Tasks: map[string]TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
+	cfg = attachMinimalRouting(cfg)
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected valid config, got: %v", err)

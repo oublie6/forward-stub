@@ -31,13 +31,12 @@ func TestStageCacheTaskRefsTrackAddAndRemove(t *testing.T) {
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
 	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
-	st.subs["r1"] = map[string]struct{}{}
 
 	sig := `{"type":"clear_file_meta"}`
 	st.stageCache[sig] = &StageCacheEntry{Sig: sig, Tasks: make(map[string]struct{})}
 	st.pipelineStageSigs["p1"] = []string{sig}
 
-	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
+	if err := st.addTask("t1", config.TaskConfig{Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
 		t.Fatalf("add task failed: %v", err)
 	}
 	entry := st.stageCache[sig]

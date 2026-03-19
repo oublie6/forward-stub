@@ -137,7 +137,7 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 			t.inflight.Done()
 			t.inflightCount.Add(-1)
 			pkt.Release()
-			logx.L().Errorw("task dropped packet due to full worker pool queue", "task", t.Name, "pool_size", t.PoolSize, "queue_size", t.QueueSize, "error", err)
+			logx.L().Errorw("任务丢弃数据包：协程池队列已满", "任务名称", t.Name, "协程池大小", t.PoolSize, "排队长度", t.QueueSize, "错误", err)
 			return
 		}
 		return
@@ -149,14 +149,14 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 			t.inflight.Done()
 			t.inflightCount.Add(-1)
 			pkt.Release()
-			logx.L().Warnw("task dropped packet due to canceled context while enqueueing channel task", "task", t.Name, "queue_size", t.ChannelQueueSize, "error", ctx.Err())
+			logx.L().Warnw("任务丢弃数据包：channel入队时上下文已取消", "任务名称", t.Name, "channel队列长度", t.ChannelQueueSize, "错误", ctx.Err())
 			return
 		}
 	default:
 		t.inflight.Done()
 		t.inflightCount.Add(-1)
 		pkt.Release()
-		logx.L().Errorw("task dropped packet due to unknown execution model", "task", t.Name, "execution_model", t.ExecutionModel)
+		logx.L().Errorw("任务丢弃数据包：执行模型无效", "任务名称", t.Name, "执行模型", t.ExecutionModel)
 		return
 	}
 }
@@ -251,7 +251,7 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 			t.sendToSender(ctx, pkt, s)
 			return
 		}
-		logx.L().Warnw("route sender not found in task", "task", t.Name, "route_sender", pkt.Meta.RouteSender)
+		logx.L().Warnw("路由发送端未命中任务内发送端", "任务名称", t.Name, "路由发送端", pkt.Meta.RouteSender)
 		return
 	}
 	for _, s := range t.Senders {
@@ -267,7 +267,7 @@ func payloadHex(b []byte, max int) string {
 		max = 256
 	}
 	if len(b) > max {
-		return hex.EncodeToString(b[:max]) + "...(truncated)"
+		return hex.EncodeToString(b[:max]) + "...(已截断)"
 	}
 	return hex.EncodeToString(b)
 }
@@ -325,19 +325,19 @@ func (t *Task) sendToSender(ctx context.Context, pkt *packet.Packet, s sender.Se
 		t.sendStats.AddBytes(len(pkt.Payload))
 	}
 	if t.LogPayloadSend && logx.Enabled(zapcore.InfoLevel) {
-		logx.L().Infow("task payload send",
-			"task", t.Name,
-			"sender", s.Name(),
-			"kind", pkt.Kind,
-			"payload_len", len(pkt.Payload),
-			"payload_hex", payloadHex(pkt.Payload, t.PayloadLogMax),
-			"transfer_id", pkt.Meta.TransferID,
-			"offset", pkt.Meta.Offset,
-			"total_size", pkt.Meta.TotalSize,
-			"eof", pkt.Meta.EOF,
+		logx.L().Infow("任务发送Payload摘要",
+			"任务名称", t.Name,
+			"发送端", s.Name(),
+			"载荷类型", pkt.Kind,
+			"Payload长度", len(pkt.Payload),
+			"Payload十六进制", payloadHex(pkt.Payload, t.PayloadLogMax),
+			"传输ID", pkt.Meta.TransferID,
+			"偏移量", pkt.Meta.Offset,
+			"总大小", pkt.Meta.TotalSize,
+			"是否EOF", pkt.Meta.EOF,
 		)
 	}
 	if err := s.Send(ctx, pkt); err != nil {
-		logx.L().Errorw("sender send error", "task", t.Name, "sender", s.Name(), "error", err)
+		logx.L().Errorw("发送端发送失败", "任务名称", t.Name, "发送端", s.Name(), "错误", err)
 	}
 }

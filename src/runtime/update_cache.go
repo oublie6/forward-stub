@@ -71,7 +71,7 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	lg := logx.L()
 	start := time.Now()
 	if logx.Enabled(zapcore.InfoLevel) {
-		lg.Infow("updating runtime cache", "version", cfg.Version, "receivers", len(cfg.Receivers), "tasks", len(cfg.Tasks), "senders", len(cfg.Senders))
+		lg.Infow("开始更新运行时缓存", "配置版本", cfg.Version, "接收端数量", len(cfg.Receivers), "任务数量", len(cfg.Tasks), "发送端数量", len(cfg.Senders))
 	}
 
 	if st.canApplyBusinessDelta() {
@@ -85,11 +85,11 @@ func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
 	}
 
 	if logx.Enabled(zapcore.InfoLevel) {
-		lg.Infow("active tasks snapshot", "tasks", st.taskSnapshot())
+		lg.Infow("运行时任务快照", "任务列表", st.taskSnapshot())
 	}
 
 	if logx.Enabled(zapcore.InfoLevel) {
-		lg.Infow("runtime cache updated", "version", cfg.Version, "cost", time.Since(start))
+		lg.Infow("运行时缓存更新完成", "配置版本", cfg.Version, "耗时", time.Since(start))
 	}
 	return nil
 }
@@ -129,29 +129,36 @@ func (st *Store) canApplyBusinessDelta() bool {
 //  2. 再 build task（建立 pipeline + sender + 订阅关系）；
 //  3. 生成 dispatch 快照后再启动 receiver，避免切换窗口漏分发。
 func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("开始全量重建运行时组件")
+	}
 	_ = st.StopAll(ctx)
 
 	compiled, sigsByPipeline, err := st.compilePipelinesWithStageCache(cfg.Pipelines)
 	if err != nil {
 		return err
 	}
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("流水线编译完成", "流水线数量", len(compiled))
+	}
 
 	// 一次性替换 store 内部索引，确保新配置以完整快照生效。
 	st.mu.Lock()
 	st.receivers = make(map[string]*ReceiverState)
+	st.selectors = cloneSelectorConfigMap(cfg.Selectors)
+	st.taskSets = cloneTaskSetMap(cfg.TaskSets)
 	st.senders = make(map[string]*SenderState)
 	st.tasks = make(map[string]*TaskState)
 	st.pipelines = compiled
 	st.pipelineCfg = cfg.Pipelines
 	st.pipelineStageSigs = sigsByPipeline
-	st.subs = make(map[string]map[string]struct{})
-	st.version = cfg.Version
 	st.mu.Unlock()
 	st.gcUnusedStageCache()
-	st.setDispatchSubs(map[string][]*TaskState{})
-	st.setRecvPayloadLogOptions(map[string]recvPayloadLogOption{})
 
 	// 1) 构建 senders：任务阶段需要引用 sender 实例。
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("开始初始化发送端", "发送端数量", len(cfg.Senders))
+	}
 	for name, sc := range cfg.Senders {
 		s, err := buildSender(name, sc, cfg.Logging.Level)
 		if err != nil {
@@ -161,76 +168,35 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 		st.senders[name] = &SenderState{Name: name, Cfg: sc, S: s, Refs: 0}
 		st.mu.Unlock()
 	}
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("发送端初始化完成", "发送端数量", len(cfg.Senders))
+	}
 
-	// 2) 构建 tasks：绑定 pipeline + sender，并建立 receiver 订阅关系。
+	// 2) 构建 tasks：绑定 pipeline + sender。
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("开始初始化任务", "任务数量", len(cfg.Tasks))
+	}
 	for name, tc := range cfg.Tasks {
-		pipes := make([]*pipeline.Pipeline, 0, len(tc.Pipelines))
-		for _, pn := range tc.Pipelines {
-			cp, ok := compiled[pn]
-			if !ok {
-				return fmt.Errorf("task %s pipeline %s not found", name, pn)
-			}
-			pipes = append(pipes, cp.P)
-		}
-
-		sends := make([]sender.Sender, 0, len(tc.Senders))
-		st.mu.Lock()
-		for _, sn := range tc.Senders {
-			ss, ok := st.senders[sn]
-			if !ok {
-				st.mu.Unlock()
-				return fmt.Errorf("task %s sender %s not found", name, sn)
-			}
-			ss.Refs++
-			sends = append(sends, ss.S)
-		}
-		st.mu.Unlock()
-
-		logOpts := buildTaskPayloadLogOptions(tc, cfg.Logging)
-		tk := &task.Task{
-			Name:             name,
-			Pipelines:        pipes,
-			Senders:          sends,
-			PoolSize:         tc.PoolSize,
-			FastPath:         tc.FastPath,
-			ExecutionModel:   tc.ExecutionModel,
-			QueueSize:        tc.QueueSize,
-			ChannelQueueSize: tc.ChannelQueueSize,
-			LogPayloadSend:   logOpts.send,
-			PayloadLogMax:    logOpts.max,
-		}
-		if err := tk.Start(); err != nil {
+		if err := st.addTask(name, tc, cfg.Logging, nil); err != nil {
 			return err
 		}
-
-		st.mu.Lock()
-		st.tasks[name] = &TaskState{Name: name, Cfg: tc, T: tk}
-		for _, rn := range tc.Receivers {
-			if _, ok := st.subs[rn]; !ok {
-				st.subs[rn] = make(map[string]struct{})
-			}
-			st.subs[rn][name] = struct{}{}
-		}
-		st.mu.Unlock()
+	}
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("任务初始化完成", "任务数量", len(cfg.Tasks))
 	}
 
-	// 3) 先生成 dispatch 只读快照，再启动 receivers，避免热更新窗口漏转。
-	dispatchSubs := make(map[string][]*TaskState, len(st.subs))
-	st.mu.RLock()
-	for rn, sub := range st.subs {
-		tasks := make([]*TaskState, 0, len(sub))
-		for tn := range sub {
-			if ts := st.tasks[tn]; ts != nil {
-				tasks = append(tasks, ts)
-			}
-		}
-		dispatchSubs[rn] = tasks
+	if err := st.rebuildReceiverSelectors(); err != nil {
+		return err
 	}
-	st.mu.RUnlock()
-	st.setDispatchSubs(dispatchSubs)
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("选择器编译完成", "选择器数量", len(cfg.Selectors), "任务集数量", len(cfg.TaskSets))
+	}
 
-	// 4) 构建并启动 receivers：消息入口最终回调 dispatch。
-	startAcks := make([]<-chan struct{}, 0, len(cfg.Receivers))
+	// 3) 构建 receivers 并挂载 selector。
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("开始初始化接收端", "接收端数量", len(cfg.Receivers))
+	}
+	receiverStates := make([]*ReceiverState, 0, len(cfg.Receivers))
 	for name, rc := range cfg.Receivers {
 		r, err := buildReceiver(name, rc, cfg.Logging.Level)
 		if err != nil {
@@ -242,18 +208,28 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 			Recv:           r,
 			LogPayloadRecv: rc.LogPayloadRecv,
 			PayloadLogMax:  payloadLogMaxBytes(rc.PayloadLogMaxBytes, cfg.Logging.PayloadLogMaxBytes),
+			SelectorName:   rc.Selector,
 		}
 		st.mu.Lock()
 		st.receivers[name] = rs
-		if _, ok := st.subs[name]; !ok {
-			st.subs[name] = make(map[string]struct{})
-		}
 		st.mu.Unlock()
-		startAcks = append(startAcks, st.startReceiver(ctx, name, r))
+		receiverStates = append(receiverStates, rs)
+	}
+	if err := st.rebuildReceiverSelectors(); err != nil {
+		return err
+	}
+	// 4) 启动 receivers：消息入口最终回调 dispatch。
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("开始启动接收端", "接收端数量", len(receiverStates))
+	}
+	startAcks := make([]<-chan struct{}, 0, len(receiverStates))
+	for _, rs := range receiverStates {
+		startAcks = append(startAcks, st.startReceiver(ctx, rs))
 	}
 	st.waitReceiversStartInvoked(startAcks)
-	st.refreshRecvPayloadLogOptions()
-
+	if logx.Enabled(zapcore.InfoLevel) {
+		logx.L().Infow("接收端启动完成", "接收端数量", len(receiverStates))
+	}
 	return nil
 }
 
@@ -273,20 +249,22 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	}
 	oldSenders := senderConfigSnapshot(st.senders)
 	oldReceivers := receiverConfigSnapshot(st.receivers)
+	oldSelectors := cloneSelectorConfigMap(st.selectors)
+	oldTaskSets := cloneTaskSetMap(st.taskSets)
 	oldPipelines := st.pipelineCfg
 	st.mu.RUnlock()
 
-	st.mu.Lock()
-	st.version = cfg.Version
-	st.mu.Unlock()
-
-	plan := planBusinessDelta(oldReceivers, oldSenders, oldPipelines, oldTasks, cfg)
+	plan := planBusinessDelta(oldReceivers, oldSelectors, oldTaskSets, oldSenders, oldPipelines, oldTasks, cfg)
 	receiverAdded, receiverRemoved := plan.receiverAdded, plan.receiverRemoved
+	selectorAdded, selectorRemoved := plan.selectorAdded, plan.selectorRemoved
+	taskSetAdded, taskSetRemoved := plan.taskSetAdded, plan.taskSetRemoved
 	senderAdded, senderRemoved := plan.senderAdded, plan.senderRemoved
 	pipelineAdded, pipelineRemoved := plan.pipelineAdded, plan.pipelineRemoved
 	taskAdded, taskRemoved := plan.taskAdded, plan.taskRemoved
 
 	receiverChanged := len(receiverAdded) > 0 || len(receiverRemoved) > 0
+	selectorChanged := len(selectorAdded) > 0 || len(selectorRemoved) > 0
+	taskSetChanged := len(taskSetAdded) > 0 || len(taskSetRemoved) > 0
 	senderChanged := len(senderAdded) > 0 || len(senderRemoved) > 0
 	pipelineChanged := len(pipelineAdded) > 0 || len(pipelineRemoved) > 0
 
@@ -307,6 +285,12 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 		if err := st.applyReceiverDelta(ctx, cfg.Receivers, cfg.Logging.Level); err != nil {
 			return err
 		}
+	}
+	if selectorChanged || taskSetChanged {
+		st.mu.Lock()
+		st.selectors = cloneSelectorConfigMap(cfg.Selectors)
+		st.taskSets = cloneTaskSetMap(cfg.TaskSets)
+		st.mu.Unlock()
 	}
 	if senderChanged {
 		if err := st.applySenderDelta(cfg.Senders, cfg.Logging.Level); err != nil {
@@ -341,22 +325,30 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 		}
 	}
 
-	st.refreshDispatchSubs()
 	st.rebuildStageTaskRefs()
 	st.gcUnusedSenders()
 	st.gcUnusedStageCache()
+	if selectorChanged || taskSetChanged || receiverChanged || len(taskAdded) > 0 || len(taskRemoved) > 0 {
+		if err := st.rebuildReceiverSelectors(); err != nil {
+			return err
+		}
+	}
 	if logx.Enabled(zapcore.InfoLevel) {
 		logx.L().Infow(
-			"runtime business delta applied",
-			"version", cfg.Version,
-			"receiver_added", receiverAdded,
-			"receiver_removed", receiverRemoved,
-			"sender_added", senderAdded,
-			"sender_removed", senderRemoved,
-			"pipeline_added", pipelineAdded,
-			"pipeline_removed", pipelineRemoved,
-			"task_added", taskAdded,
-			"task_removed", taskRemoved,
+			"业务配置增量更新完成",
+			"配置版本", cfg.Version,
+			"新增接收端", receiverAdded,
+			"删除接收端", receiverRemoved,
+			"新增选择器", selectorAdded,
+			"删除选择器", selectorRemoved,
+			"新增任务集", taskSetAdded,
+			"删除任务集", taskSetRemoved,
+			"新增发送端", senderAdded,
+			"删除发送端", senderRemoved,
+			"新增流水线", pipelineAdded,
+			"删除流水线", pipelineRemoved,
+			"新增任务", taskAdded,
+			"删除任务", taskRemoved,
 		)
 	}
 	return nil
@@ -365,6 +357,10 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 type businessDeltaPlan struct {
 	receiverAdded   []string
 	receiverRemoved []string
+	selectorAdded   []string
+	selectorRemoved []string
+	taskSetAdded    []string
+	taskSetRemoved  []string
 	senderAdded     []string
 	senderRemoved   []string
 	pipelineAdded   []string
@@ -375,12 +371,16 @@ type businessDeltaPlan struct {
 
 func planBusinessDelta(
 	oldReceivers map[string]config.ReceiverConfig,
+	oldSelectors map[string]config.SelectorConfig,
+	oldTaskSets map[string][]string,
 	oldSenders map[string]config.SenderConfig,
 	oldPipelines map[string][]config.StageConfig,
 	oldTasks map[string]config.TaskConfig,
 	cfg config.Config,
 ) businessDeltaPlan {
 	receiverAdded, receiverRemoved := splitDeltaWithReplace(oldReceivers, cfg.Receivers)
+	selectorAdded, selectorRemoved := splitDeltaWithReplace(oldSelectors, cfg.Selectors)
+	taskSetAdded, taskSetRemoved := splitDeltaWithReplace(oldTaskSets, cfg.TaskSets)
 	senderAdded, senderRemoved := splitDeltaWithReplace(oldSenders, cfg.Senders)
 	pipelineAdded, pipelineRemoved := splitDeltaWithReplace(oldPipelines, cfg.Pipelines)
 	taskAdded, taskRemoved := splitDeltaWithReplace(oldTasks, cfg.Tasks)
@@ -393,6 +393,10 @@ func planBusinessDelta(
 	return businessDeltaPlan{
 		receiverAdded:   receiverAdded,
 		receiverRemoved: receiverRemoved,
+		selectorAdded:   selectorAdded,
+		selectorRemoved: selectorRemoved,
+		taskSetAdded:    taskSetAdded,
+		taskSetRemoved:  taskSetRemoved,
 		senderAdded:     senderAdded,
 		senderRemoved:   senderRemoved,
 		pipelineAdded:   pipelineAdded,
@@ -629,14 +633,15 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 			Recv:           r,
 			LogPayloadRecv: rc.LogPayloadRecv,
 			PayloadLogMax:  payloadLogMaxBytes(rc.PayloadLogMaxBytes, st.loggingPayloadLogMaxBytes()),
+			SelectorName:   rc.Selector,
 		}
 		st.mu.Lock()
 		st.receivers[name] = rs
-		if _, ok := st.subs[name]; !ok {
-			st.subs[name] = make(map[string]struct{})
-		}
 		st.mu.Unlock()
-		startAck := st.startReceiver(ctx, name, r)
+		if err := st.rebuildReceiverSelectors(); err != nil {
+			return err
+		}
+		startAck := st.startReceiver(ctx, rs)
 		<-startAck
 		if ok && old != nil && old.Recv != nil {
 			_ = old.Recv.Stop(ctx)
@@ -649,26 +654,24 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 			continue
 		}
 		delete(st.receivers, name)
-		delete(st.subs, name)
 		go rs.Recv.Stop(ctx)
 	}
 	st.mu.Unlock()
-	st.refreshRecvPayloadLogOptions()
 	return nil
 }
 
 // startReceiver 异步启动单个 receiver。
 //
-// receiver 回调统一进入 dispatch，负责 fan-out 到相关 task。
-func (st *Store) startReceiver(ctx context.Context, name string, r receiver.Receiver) <-chan struct{} {
+// receiver 回调统一进入 dispatch，按当前 receiver 绑定的 selector 做精确匹配。
+func (st *Store) startReceiver(ctx context.Context, rs *ReceiverState) <-chan struct{} {
 	started := make(chan struct{})
-	go func(r receiver.Receiver, rn string, ack chan<- struct{}) {
+	go func(state *ReceiverState, ack chan<- struct{}) {
 		close(ack)
-		err := r.Start(ctx, func(pkt *packet.Packet) { dispatch(ctx, st, rn, pkt) })
+		err := state.Recv.Start(ctx, func(pkt *packet.Packet) { dispatchToSelector(ctx, state, pkt) })
 		if err != nil {
-			logx.L().Errorw("receiver stopped with error", "receiver", rn, "error", err)
+			logx.L().Errorw("接收端异常退出", "组件名称", state.Name, "错误", err)
 		}
-	}(r, name, started)
+	}(rs, started)
 	return started
 }
 
@@ -684,8 +687,7 @@ func (st *Store) waitReceiversStartInvoked(started []<-chan struct{}) {
 //  1. 解析并绑定 pipelines；
 //  2. 绑定 senders 并增加 sender 引用计数；
 //  3. 按配置创建 task 并启动；
-//  4. 更新 task 索引、stage 引用和 receiver 订阅；
-//  5. 刷新 dispatch 快照使新 task 立即可接收流量。
+//  4. 更新 task 索引与 stage 引用。
 func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingConfig, counter *logx.TrafficCounter) error {
 	st.mu.RLock()
 	compiled := st.pipelines
@@ -739,14 +741,7 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 	st.mu.Lock()
 	st.tasks[name] = &TaskState{Name: name, Cfg: tc, T: tk}
 	st.retainTaskStageRefsLocked(name, tc.Pipelines)
-	for _, rn := range tc.Receivers {
-		if _, ok := st.subs[rn]; !ok {
-			st.subs[rn] = make(map[string]struct{})
-		}
-		st.subs[rn][name] = struct{}{}
-	}
 	st.mu.Unlock()
-	st.refreshDispatchSubs()
 	return nil
 }
 
@@ -760,11 +755,6 @@ func (st *Store) removeTask(name string, preserveCounter bool) *logx.TrafficCoun
 	if ts != nil {
 		delete(st.tasks, name)
 		st.releaseTaskStageRefsLocked(name, ts.Cfg.Pipelines)
-		for _, rn := range ts.Cfg.Receivers {
-			if sub, ok := st.subs[rn]; ok {
-				delete(sub, name)
-			}
-		}
 		for _, sn := range ts.Cfg.Senders {
 			if ss, ok := st.senders[sn]; ok {
 				ss.Refs--
@@ -772,7 +762,6 @@ func (st *Store) removeTask(name string, preserveCounter bool) *logx.TrafficCoun
 		}
 	}
 	st.mu.Unlock()
-	st.refreshDispatchSubs()
 	var counter *logx.TrafficCounter
 	if ts != nil {
 		if preserveCounter {
@@ -876,25 +865,6 @@ func (st *Store) rebuildStageTaskRefs() {
 	}
 }
 
-// refreshDispatchSubs 重建 receiver -> task 的只读分发表快照。
-//
-// dispatch 读取该快照进行无锁分发，避免热路径频繁争用 Store 主锁。
-func (st *Store) refreshDispatchSubs() {
-	dispatchSubs := make(map[string][]*TaskState)
-	st.mu.RLock()
-	for rn, sub := range st.subs {
-		tasks := make([]*TaskState, 0, len(sub))
-		for tn := range sub {
-			if ts := st.tasks[tn]; ts != nil {
-				tasks = append(tasks, ts)
-			}
-		}
-		dispatchSubs[rn] = tasks
-	}
-	st.mu.RUnlock()
-	st.setDispatchSubs(dispatchSubs)
-}
-
 // gcUnusedSenders 回收当前引用计数为 0 的 sender 实例。
 func (st *Store) gcUnusedSenders() {
 	unused := make([]sender.Sender, 0)
@@ -920,7 +890,6 @@ func (st *Store) taskSnapshot() []map[string]any {
 	for name, ts := range st.tasks {
 		out = append(out, map[string]any{
 			"task":            name,
-			"receivers":       ts.Cfg.Receivers,
 			"pipelines":       ts.Cfg.Pipelines,
 			"senders":         ts.Cfg.Senders,
 			"execution_model": ts.T.ExecutionModel,
@@ -951,18 +920,100 @@ func senderConfigSnapshot(m map[string]*SenderState) map[string]config.SenderCon
 	return out
 }
 
-// dispatch 将单个输入包 fan-out 到订阅当前 receiver 的所有任务。
-//
-// 性能关键点：
-//  1. 在锁内仅完成任务列表快照，避免长时间持锁；
-//  2. 多订阅者时对每个任务都 Clone，彻底隔离任务间生命周期；
-//  3. 单订阅者直接复用原始包，减少一次额外复制。
-func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.Packet) {
-	tasks := st.getDispatchTasks(receiverName)
-	if opt, ok := st.getRecvPayloadLogOption(receiverName); ok && opt.enabled {
-		logReceiverPayload(receiverName, pkt, opt.max)
+func cloneSelectorConfigMap(in map[string]config.SelectorConfig) map[string]config.SelectorConfig {
+	out := make(map[string]config.SelectorConfig, len(in))
+	for name, cfg := range in {
+		cp := config.SelectorConfig{
+			DefaultTaskSet: cfg.DefaultTaskSet,
+		}
+		if cfg.Matches != nil {
+			cp.Matches = make(map[string]string, len(cfg.Matches))
+			for key, taskSetName := range cfg.Matches {
+				cp.Matches[key] = taskSetName
+			}
+		}
+		out[name] = cp
+	}
+	return out
+}
+
+func cloneTaskSetMap(in map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(in))
+	for name, tasks := range in {
+		out[name] = append([]string(nil), tasks...)
+	}
+	return out
+}
+
+func (st *Store) rebuildReceiverSelectors() error {
+	st.mu.RLock()
+	selectorCfg := cloneSelectorConfigMap(st.selectors)
+	taskSets := cloneTaskSetMap(st.taskSets)
+	tasksByName := make(map[string]*TaskState, len(st.tasks))
+	for name, ts := range st.tasks {
+		tasksByName[name] = ts
+	}
+	receivers := make(map[string]*ReceiverState, len(st.receivers))
+	for name, rs := range st.receivers {
+		receivers[name] = rs
+	}
+	st.mu.RUnlock()
+
+	compiled := make(map[string]*CompiledSelector, len(selectorCfg))
+	for name, sc := range selectorCfg {
+		cs := &CompiledSelector{Name: name, TasksByKey: make(map[string][]*TaskState, len(sc.Matches))}
+		for key, taskSetName := range sc.Matches {
+			taskNames := taskSets[taskSetName]
+			taskStates := make([]*TaskState, 0, len(taskNames))
+			for _, taskName := range taskNames {
+				ts := tasksByName[taskName]
+				if ts == nil {
+					return fmt.Errorf("selector %s task %s not found during compile", name, taskName)
+				}
+				taskStates = append(taskStates, ts)
+			}
+			cs.TasksByKey[key] = taskStates
+		}
+		if sc.DefaultTaskSet != "" {
+			taskNames := taskSets[sc.DefaultTaskSet]
+			cs.DefaultTasks = make([]*TaskState, 0, len(taskNames))
+			for _, taskName := range taskNames {
+				ts := tasksByName[taskName]
+				if ts == nil {
+					return fmt.Errorf("selector %s default task %s not found during compile", name, taskName)
+				}
+				cs.DefaultTasks = append(cs.DefaultTasks, ts)
+			}
+		}
+		compiled[name] = cs
 	}
 
+	for _, rs := range receivers {
+		rs.Selector.Store(compiled[rs.SelectorName])
+	}
+	return nil
+}
+
+// dispatch 将单个输入包 fan-out 到 receiver 当前 selector 命中的所有任务。
+//
+// 热路径仅执行：
+//  1. receiver 已生成好的 match key；
+//  2. selector 对该 key 做一次精确 map lookup；
+//  3. 将命中的 task slice fan-out。
+func dispatchToSelector(ctx context.Context, rs *ReceiverState, pkt *packet.Packet) {
+	if rs == nil {
+		pkt.Release()
+		return
+	}
+	selectorAny := rs.Selector.Load()
+	var selector *CompiledSelector
+	if selectorAny != nil {
+		selector = selectorAny.(*CompiledSelector)
+	}
+	if rs.LogPayloadRecv {
+		logReceiverPayload(rs.Name, pkt, rs.PayloadLogMax)
+	}
+	tasks := selector.Match(pkt.Meta.MatchKey)
 	if len(tasks) == 0 {
 		pkt.Release()
 		return
@@ -984,17 +1035,11 @@ func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.P
 	first.T.Handle(ctx, pkt)
 }
 
-func (st *Store) refreshRecvPayloadLogOptions() {
-	snapshot := make(map[string]recvPayloadLogOption)
+func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.Packet) {
 	st.mu.RLock()
-	for name, rs := range st.receivers {
-		if rs == nil {
-			continue
-		}
-		snapshot[name] = recvPayloadLogOption{enabled: rs.LogPayloadRecv, max: rs.PayloadLogMax}
-	}
+	rs := st.receivers[receiverName]
 	st.mu.RUnlock()
-	st.setRecvPayloadLogOptions(snapshot)
+	dispatchToSelector(ctx, rs, pkt)
 }
 
 // logReceiverPayload 按 receiver 侧日志策略输出 payload 观测日志。
@@ -1006,15 +1051,15 @@ func logReceiverPayload(receiver string, pkt *packet.Packet, maxBytes int) {
 	if pkt == nil || !logx.Enabled(zapcore.InfoLevel) {
 		return
 	}
-	logx.L().Infow("receiver payload recv",
-		"receiver", receiver,
-		"kind", pkt.Kind,
-		"payload_len", len(pkt.Payload),
-		"payload_hex", payloadHex(pkt.Payload, maxBytes),
-		"transfer_id", pkt.Meta.TransferID,
-		"offset", pkt.Meta.Offset,
-		"total_size", pkt.Meta.TotalSize,
-		"eof", pkt.Meta.EOF,
+	logx.L().Infow("接收端接收Payload摘要",
+		"组件名称", receiver,
+		"载荷类型", pkt.Kind,
+		"Payload长度", len(pkt.Payload),
+		"Payload十六进制", payloadHex(pkt.Payload, maxBytes),
+		"传输ID", pkt.Meta.TransferID,
+		"偏移量", pkt.Meta.Offset,
+		"总大小", pkt.Meta.TotalSize,
+		"是否EOF", pkt.Meta.EOF,
 	)
 }
 
@@ -1027,7 +1072,7 @@ func payloadHex(b []byte, max int) string {
 		max = config.DefaultPayloadLogMaxBytes
 	}
 	if len(b) > max {
-		return hex.EncodeToString(b[:max]) + "...(truncated)"
+		return hex.EncodeToString(b[:max]) + "...(已截断)"
 	}
 	return hex.EncodeToString(b)
 }

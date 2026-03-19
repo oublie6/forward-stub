@@ -2,6 +2,8 @@
 package runtime
 
 import (
+	"sync/atomic"
+
 	"forward-stub/src/config"
 	"forward-stub/src/pipeline"
 	"forward-stub/src/receiver"
@@ -25,6 +27,10 @@ type ReceiverState struct {
 	LogPayloadRecv bool
 	// PayloadLogMax 是该 receiver payload 摘要最大字节数。
 	PayloadLogMax int
+	// SelectorName 是当前 receiver 绑定的 selector 名称。
+	SelectorName string
+	// Selector 保存热路径只读 selector 快照。
+	Selector atomic.Value // *CompiledSelector
 }
 
 // SenderState 描述一个 sender 在运行时缓存中的状态。
@@ -75,4 +81,21 @@ type StageCacheEntry struct {
 	Fn       pipeline.StageFunc
 	TaskRefs int
 	Tasks    map[string]struct{}
+}
+
+// CompiledSelector 是运行时编译后的极简精确匹配器。
+type CompiledSelector struct {
+	Name         string
+	TasksByKey   map[string][]*TaskState
+	DefaultTasks []*TaskState
+}
+
+func (s *CompiledSelector) Match(key string) []*TaskState {
+	if s == nil {
+		return nil
+	}
+	if tasks, ok := s.TasksByKey[key]; ok {
+		return tasks
+	}
+	return s.DefaultTasks
 }

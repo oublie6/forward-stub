@@ -17,14 +17,14 @@ import (
 
 // Options 为日志初始化参数。
 type Options struct {
-	Level                    string
-	File                     string
-	MaxSizeMB                int
-	MaxBackups               int
-	MaxAgeDays               int
-	Compress                 bool
-	TrafficStatsInterval     time.Duration
-	TrafficStatsSampleEvery  int
+	Level                   string
+	File                    string
+	MaxSizeMB               int
+	MaxBackups              int
+	MaxAgeDays              int
+	Compress                bool
+	TrafficStatsInterval    time.Duration
+	TrafficStatsSampleEvery int
 }
 
 var (
@@ -118,7 +118,7 @@ func parseLevel(level string) (zapcore.Level, error) {
 	case "error":
 		return zapcore.ErrorLevel, nil
 	default:
-		return 0, fmt.Errorf("unsupported log level: %s", level)
+		return 0, fmt.Errorf("不支持的日志级别: %s", level)
 	}
 }
 

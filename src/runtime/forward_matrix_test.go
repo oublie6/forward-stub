@@ -38,14 +38,19 @@ func runSingleForward(t *testing.T, recv config.ReceiverConfig, sendCfg config.S
 	st := NewStore()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	if recv.Selector == "" {
+		recv.Selector = "sel1"
+	}
 
 	cfg := config.Config{
 		Version:   1,
 		Logging:   config.LoggingConfig{Level: "error"},
 		Receivers: map[string]config.ReceiverConfig{"r1": recv},
+		Selectors: map[string]config.SelectorConfig{"sel1": {DefaultTaskSet: "ts1"}},
+		TaskSets:  map[string][]string{"ts1": []string{"t1"}},
 		Senders:   map[string]config.SenderConfig{"s1": sendCfg},
 		Tasks: map[string]config.TaskConfig{
-			"t1": {PoolSize: 1, FastPath: true, Receivers: []string{"r1"}, Senders: []string{"s1"}},
+			"t1": {PoolSize: 1, FastPath: true, Senders: []string{"s1"}},
 		},
 		Pipelines: map[string][]config.StageConfig{},
 	}

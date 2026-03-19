@@ -5,18 +5,12 @@ import (
 	"context"
 	"forward-stub/src/config"
 	"sync"
-	"sync/atomic"
 
 	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
 )
 
 // Store 持有运行时对象的全集快照。
-
-type recvPayloadLogOption struct {
-	enabled bool
-	max     int
-}
 
 // 设计说明：
 //  1. 通过单把互斥锁保护元数据 map，避免复杂的细粒度锁导致状态不一致；
@@ -25,9 +19,9 @@ type recvPayloadLogOption struct {
 type Store struct {
 	mu sync.RWMutex
 
-	version int64
-
 	receivers map[string]*ReceiverState
+	selectors map[string]config.SelectorConfig
+	taskSets  map[string][]string
 	senders   map[string]*SenderState
 	tasks     map[string]*TaskState
 
@@ -38,13 +32,6 @@ type Store struct {
 	// stageCache 保存可复用 stage 实例及其被 task 使用计数。
 	stageCache map[string]*StageCacheEntry
 
-	subs map[string]map[string]struct{}
-
-	// dispatchSubs 保存 receiver -> tasks 的只读快照，供 dispatch 热路径无锁读取。
-	dispatchSubs atomic.Value // map[string][]*TaskState
-	// recvPayloadLogOptions 保存 receiver payload 日志配置只读快照，供 dispatch 热路径无锁读取。
-	recvPayloadLogOptions atomic.Value // map[string]recvPayloadLogOption
-
 	payloadLogDefaultMax int
 }
 
@@ -52,31 +39,49 @@ type Store struct {
 func NewStore() *Store {
 	s := &Store{
 		receivers:         make(map[string]*ReceiverState),
+		selectors:         make(map[string]config.SelectorConfig),
+		taskSets:          make(map[string][]string),
 		senders:           make(map[string]*SenderState),
 		tasks:             make(map[string]*TaskState),
 		pipelines:         make(map[string]*CompiledPipeline),
 		pipelineCfg:       make(map[string][]config.StageConfig),
 		pipelineStageSigs: make(map[string][]string),
 		stageCache:        make(map[string]*StageCacheEntry),
-		subs:              make(map[string]map[string]struct{}),
 	}
-	s.dispatchSubs.Store(map[string][]*TaskState{})
-	s.recvPayloadLogOptions.Store(map[string]recvPayloadLogOption{})
 	return s
 }
 
-// setDispatchSubs 负责该函数对应的核心逻辑，详见实现细节。
+// setDispatchSubs 兼容测试中直接注入“receiver -> tasks”快照的旧方式。
+// 新架构下它会构造一个仅带默认路由的测试 selector。
 func (s *Store) setDispatchSubs(m map[string][]*TaskState) {
-	s.dispatchSubs.Store(m)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for receiverName, tasks := range m {
+		rs := s.receivers[receiverName]
+		if rs == nil {
+			rs = &ReceiverState{Name: receiverName, SelectorName: "__test__"}
+			s.receivers[receiverName] = rs
+		}
+		rs.Selector.Store(&CompiledSelector{
+			Name:         "__test__",
+			TasksByKey:   map[string][]*TaskState{},
+			DefaultTasks: tasks,
+		})
+	}
 }
 
-// getDispatchTasks 负责该函数对应的核心逻辑，详见实现细节。
 func (s *Store) getDispatchTasks(receiver string) []*TaskState {
-	v := s.dispatchSubs.Load()
-	if v == nil {
+	s.mu.RLock()
+	rs := s.receivers[receiver]
+	s.mu.RUnlock()
+	if rs == nil {
 		return nil
 	}
-	return v.(map[string][]*TaskState)[receiver]
+	selectorAny := rs.Selector.Load()
+	if selectorAny == nil {
+		return nil
+	}
+	return selectorAny.(*CompiledSelector).DefaultTasks
 }
 
 // StopAll 停止当前 store 中已注册的全部 runtime 组件。
@@ -142,19 +147,4 @@ func (s *Store) StopAll(ctx context.Context) error {
 	_ = sg.Wait()
 
 	return errs
-}
-
-// setRecvPayloadLogOptions 负责该函数对应的核心逻辑，详见实现细节。
-func (s *Store) setRecvPayloadLogOptions(m map[string]recvPayloadLogOption) {
-	s.recvPayloadLogOptions.Store(m)
-}
-
-// getRecvPayloadLogOption 负责该函数对应的核心逻辑，详见实现细节。
-func (s *Store) getRecvPayloadLogOption(receiver string) (recvPayloadLogOption, bool) {
-	v := s.recvPayloadLogOptions.Load()
-	if v == nil {
-		return recvPayloadLogOption{}, false
-	}
-	opt, ok := v.(map[string]recvPayloadLogOption)[receiver]
-	return opt, ok
 }

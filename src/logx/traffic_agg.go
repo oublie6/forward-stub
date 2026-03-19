@@ -351,10 +351,10 @@ func (s *trafficSummary) hasData() bool {
 func (s *trafficSummary) log() {
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
-		L().Errorw("marshal traffic stats summary failed", "error", err)
+		L().Errorw("流量统计摘要序列化失败", "错误", err)
 		return
 	}
-	L().Info("traffic stats summary\n" + string(b))
+	L().Info("流量统计摘要\n" + string(b))
 }
 
 func (s *trafficSummary) addRuntimeOnlyTask(task string, runtime TaskRuntimeStats) {
