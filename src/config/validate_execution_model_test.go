@@ -3,7 +3,7 @@ package config
 import "testing"
 
 func baseConfigForTaskModel() Config {
-	return Config{
+	return attachMinimalRouting(Config{
 		Version: 1,
 		Receivers: map[string]ReceiverConfig{
 			"r": {Type: "udp_gnet", Listen: "udp://127.0.0.1:19001"},
@@ -15,7 +15,7 @@ func baseConfigForTaskModel() Config {
 		Tasks: map[string]TaskConfig{
 			"t": {ExecutionModel: "channel", Receivers: []string{"r"}, Pipelines: []string{"p"}, Senders: []string{"s"}},
 		},
-	}
+	})
 }
 
 func TestValidateTaskExecutionModel(t *testing.T) {

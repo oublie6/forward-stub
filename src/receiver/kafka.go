@@ -20,10 +20,11 @@ import (
 )
 
 type KafkaReceiver struct {
-	name    string
-	brokers []string
-	topic   string
-	groupID string
+	name     string
+	selector string
+	brokers  []string
+	topic    string
+	groupID  string
 
 	onPacket func(*packet.Packet)
 
@@ -78,10 +79,11 @@ func NewKafkaReceiver(name string, rc config.ReceiverConfig) (*KafkaReceiver, er
 	if err != nil {
 		return nil, err
 	}
-	return &KafkaReceiver{name: name, brokers: brs, topic: rc.Topic, groupID: groupID, client: cli}, nil
+	return &KafkaReceiver{name: name, selector: rc.Selector, brokers: brs, topic: rc.Topic, groupID: groupID, client: cli}, nil
 }
 
-func (r *KafkaReceiver) Name() string { return r.name }
+func (r *KafkaReceiver) Name() string     { return r.name }
+func (r *KafkaReceiver) Selector() string { return r.selector }
 
 func (r *KafkaReceiver) Key() string {
 	return "kafka|" + strings.Join(r.brokers, ",") + "|" + r.groupID + "|" + r.topic
@@ -148,14 +150,20 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 				r.stats.AddBytes(len(rec.Value))
 			}
 			payload, rel := packet.CopyFrom(rec.Value)
+			matchKey := BuildMatchKey(
+				"kafka",
+				MatchKeyField{Name: "topic", Value: rec.Topic},
+				MatchKeyField{Name: "partition", Value: fmt.Sprintf("%d", rec.Partition)},
+			)
 			r.onPacket(&packet.Packet{
 				Envelope: packet.Envelope{
 					Kind:    packet.PayloadKindStream,
 					Payload: payload,
 					Meta: packet.Meta{
-						Proto:  packet.ProtoKafka,
-						Remote: rec.Topic,
-						Local:  r.groupID,
+						Proto:    packet.ProtoKafka,
+						Remote:   rec.Topic,
+						Local:    r.groupID,
+						MatchKey: matchKey,
 					},
 				},
 				ReleaseFn: rel,

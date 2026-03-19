@@ -37,6 +37,9 @@ type Meta struct {
 	// Local 是本地接入地址或本地资源标识。
 	// 用法：用于区分来自哪个入口实例，辅助排障。
 	Local string
+	// MatchKey 是 receiver 显式构造的唯一匹配字符串。
+	// 用法：selector 仅使用该字段做完整字符串精确匹配，不再推断协议语义。
+	MatchKey string
 
 	// TransferID 是文件传输会话标识。
 	// 用法：file_chunk 场景下用于 sender 聚合同一文件的多个分块。

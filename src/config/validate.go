@@ -16,6 +16,12 @@ func (c *Config) Validate() error {
 	if c.Receivers == nil {
 		return errors.New("receivers missing")
 	}
+	if c.Selectors == nil {
+		return errors.New("selectors missing")
+	}
+	if c.TaskSets == nil {
+		return errors.New("task_sets missing")
+	}
 	if c.Senders == nil {
 		return errors.New("senders missing")
 	}
@@ -35,12 +41,6 @@ func (c *Config) Validate() error {
 		if tn == "" {
 			return errors.New("task name empty")
 		}
-		if len(t.Receivers) == 0 {
-			return fmt.Errorf("task %s has no receivers", tn)
-		}
-		//if len(t.Pipelines) == 0 {
-		//	return fmt.Errorf("task %s has no pipelines", tn)
-		//}
 		if len(t.Senders) == 0 {
 			return fmt.Errorf("task %s has no senders", tn)
 		}
@@ -49,11 +49,6 @@ func (c *Config) Validate() error {
 		}
 		if t.ChannelQueueSize < 0 {
 			return fmt.Errorf("task %s channel_queue_size must be >= 0", tn)
-		}
-		for _, rn := range t.Receivers {
-			if _, ok := c.Receivers[rn]; !ok {
-				return fmt.Errorf("task %s receiver %s not found", tn, rn)
-			}
 		}
 		for _, pn := range t.Pipelines {
 			if _, ok := c.Pipelines[pn]; !ok {
@@ -80,7 +75,52 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	for tsn, taskNames := range c.TaskSets {
+		if tsn == "" {
+			return errors.New("task set name empty")
+		}
+		if len(taskNames) == 0 {
+			return fmt.Errorf("task set %s has no tasks", tsn)
+		}
+		for _, tn := range taskNames {
+			if tn == "" {
+				return fmt.Errorf("task set %s has empty task name", tsn)
+			}
+			if _, ok := c.Tasks[tn]; !ok {
+				return fmt.Errorf("task set %s task %s not found", tsn, tn)
+			}
+		}
+	}
+
+	for sn, sc := range c.Selectors {
+		if sn == "" {
+			return errors.New("selector name empty")
+		}
+		for key, taskSetName := range sc.Matches {
+			if strings.TrimSpace(key) == "" {
+				return fmt.Errorf("selector %s has empty match key", sn)
+			}
+			if strings.TrimSpace(taskSetName) == "" {
+				return fmt.Errorf("selector %s match key %s has empty task set", sn, key)
+			}
+			if _, ok := c.TaskSets[taskSetName]; !ok {
+				return fmt.Errorf("selector %s task set %s not found", sn, taskSetName)
+			}
+		}
+		if sc.DefaultTaskSet != "" {
+			if _, ok := c.TaskSets[sc.DefaultTaskSet]; !ok {
+				return fmt.Errorf("selector %s default task set %s not found", sn, sc.DefaultTaskSet)
+			}
+		}
+	}
+
 	for rn, r := range c.Receivers {
+		if strings.TrimSpace(r.Selector) == "" {
+			return fmt.Errorf("receiver %s selector required", rn)
+		}
+		if _, ok := c.Selectors[r.Selector]; !ok {
+			return fmt.Errorf("receiver %s selector %s not found", rn, r.Selector)
+		}
 		switch r.Type {
 		case "udp_gnet", "tcp_gnet":
 		case "kafka":

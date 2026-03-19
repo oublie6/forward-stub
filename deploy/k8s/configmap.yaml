@@ -25,9 +25,18 @@ data:
         "udp_in": {
           "type": "udp_gnet",
           "listen": "udp://0.0.0.0:19000",
+          "selector": "sel_udp_in",
           "multicore": true,
           "frame": ""
         }
+      },
+      "selectors": {
+        "sel_udp_in": {
+          "default_task_set": "ts_udp_forward"
+        }
+      },
+      "task_sets": {
+        "ts_udp_forward": ["udp-forward"]
       },
       "senders": {
         "udp_out": {
@@ -46,7 +55,6 @@ data:
           "pool_size": 1024,
           "queue_size": 4096,
           "fast_path": true,
-          "receivers": ["udp_in"],
           "pipelines": ["default"],
           "senders": ["udp_out"]
         }

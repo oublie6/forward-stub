@@ -3,7 +3,7 @@ package config
 import "testing"
 
 func kafkaSenderBaseConfig() Config {
-	cfg := Config{
+	cfg := attachMinimalRouting(Config{
 		Version: 1,
 		Logging: LoggingConfig{Level: "info"},
 		Receivers: map[string]ReceiverConfig{
@@ -16,7 +16,7 @@ func kafkaSenderBaseConfig() Config {
 		Tasks: map[string]TaskConfig{
 			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"k1"}},
 		},
-	}
+	})
 	cfg.ApplyDefaults()
 	return cfg
 }

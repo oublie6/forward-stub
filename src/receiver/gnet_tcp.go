@@ -16,6 +16,7 @@ import (
 
 type GnetTCP struct {
 	name             string
+	selector         string
 	listen           string
 	multicore        bool
 	numEventLoop     int
@@ -32,9 +33,10 @@ type GnetTCP struct {
 }
 
 // NewGnetTCP 负责该函数对应的核心逻辑，详见实现细节。
-func NewGnetTCP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, framer Framer, gnetLogLevel string) *GnetTCP {
+func NewGnetTCP(name, selector, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, framer Framer, gnetLogLevel string) *GnetTCP {
 	return &GnetTCP{
 		name:             name,
+		selector:         selector,
 		listen:           listen,
 		multicore:        multicore,
 		numEventLoop:     numEventLoop,
@@ -50,6 +52,8 @@ func (r *GnetTCP) Name() string { return r.name }
 
 // Key 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetTCP) Key() string { return "tcp_gnet|" + r.listen }
+
+func (r *GnetTCP) Selector() string { return r.selector }
 
 // Start 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
@@ -144,14 +148,16 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 		}
 		payload, rel := packet.CopyFrom(cs.buf)
 		cs.buf = cs.buf[:0]
+		matchKey := BuildMatchKey("tcp", MatchKeyField{Name: "src_addr", Value: cs.remote})
 		h.recv.onPacket(&packet.Packet{
 			Envelope: packet.Envelope{
 				Kind:    packet.PayloadKindStream,
 				Payload: payload,
 				Meta: packet.Meta{
-					Proto:  packet.ProtoTCP,
-					Remote: cs.remote,
-					Local:  cs.local,
+					Proto:    packet.ProtoTCP,
+					Remote:   cs.remote,
+					Local:    cs.local,
+					MatchKey: matchKey,
 				},
 			},
 			ReleaseFn: rel,
@@ -170,14 +176,16 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 			stats.AddBytes(len(fr))
 		}
 		payload, rel := packet.CopyFrom(fr)
+		matchKey := BuildMatchKey("tcp", MatchKeyField{Name: "src_addr", Value: cs.remote})
 		h.recv.onPacket(&packet.Packet{
 			Envelope: packet.Envelope{
 				Kind:    packet.PayloadKindStream,
 				Payload: payload,
 				Meta: packet.Meta{
-					Proto:  packet.ProtoTCP,
-					Remote: cs.remote,
-					Local:  cs.local,
+					Proto:    packet.ProtoTCP,
+					Remote:   cs.remote,
+					Local:    cs.local,
+					MatchKey: matchKey,
 				},
 			},
 			ReleaseFn: rel,

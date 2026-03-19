@@ -20,6 +20,7 @@ func TestValidateRejectsInvalidPprofPort(t *testing.T) {
 			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
+	cfg = attachMinimalRouting(cfg)
 	cfg.ApplyDefaults()
 
 	err := cfg.Validate()
@@ -43,6 +44,7 @@ func TestValidateAllowsDisabledPprofPort(t *testing.T) {
 			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
+	cfg = attachMinimalRouting(cfg)
 	cfg.ApplyDefaults()
 
 	if err := cfg.Validate(); err != nil {

@@ -48,8 +48,14 @@ type Config struct {
 	// 用法：生产环境建议配置 file 与滚动参数，便于留存与排障。
 	Logging LoggingConfig `json:"logging"`
 	// Receivers 是接收端定义表，key 为实例名。
-	// 用法：task.Receivers 引用这里的 key，实例名建议稳定且具业务语义。
+	// 用法：每个 receiver 负责协议接入，并绑定一个 selector 参与路由。
 	Receivers map[string]ReceiverConfig `json:"receivers"`
+	// Selectors 是 selector 定义表，key 为 selector 名称。
+	// 用法：receiver.Selector 引用这里的 key；selector 只做 match key 精确匹配。
+	Selectors map[string]SelectorConfig `json:"selectors"`
+	// TaskSets 是 task 集合定义表，key 为 task set 名称。
+	// 用法：selector 通过 task_set 名称复用一组 task；运行时会直接展开到 task slice。
+	TaskSets map[string][]string `json:"task_sets"`
 	// Senders 是发送端定义表，key 为实例名。
 	// 用法：task.Senders 引用这里的 key，可让多个 task 复用同一 sender 连接。
 	Senders map[string]SenderConfig `json:"senders"`
@@ -100,6 +106,8 @@ type SenderDefaultConfig struct {
 type BusinessConfig struct {
 	Version   int64                     `json:"version"`
 	Receivers map[string]ReceiverConfig `json:"receivers"`
+	Selectors map[string]SelectorConfig `json:"selectors"`
+	TaskSets  map[string][]string       `json:"task_sets"`
 	Senders   map[string]SenderConfig   `json:"senders"`
 	Pipelines map[string][]StageConfig  `json:"pipelines"`
 	Tasks     map[string]TaskConfig     `json:"tasks"`
@@ -178,6 +186,9 @@ type ReceiverConfig struct {
 	// Frame 是 TCP 粘包拆包规则（空或 u16be）。
 	// 用法：收发两端需一致；u16be 表示以 2 字节大端长度前缀分帧。
 	Frame string `json:"frame"` // "" | "u16be" (TCP)
+	// Selector 是当前 receiver 绑定的 selector 名称。
+	// 用法：receiver 只负责生成 match key，selector 再把 key 映射到 task set。
+	Selector string `json:"selector"`
 	// Topic 是 Kafka 消费主题名。
 	// 用法：Type=kafka 时必填，指向要订阅的数据流。
 	Topic string `json:"topic,omitempty"`
@@ -413,6 +424,16 @@ type StageConfig struct {
 	DefaultSender string `json:"default_sender,omitempty"`
 }
 
+// SelectorConfig 描述一个“match key -> task set”的精确匹配器。
+type SelectorConfig struct {
+	// Matches 是完整 match key 到 task set 名称的静态映射。
+	// 用法：key 必须由 receiver 显式构造，selector 不再解析协议语义。
+	Matches map[string]string `json:"matches"`
+	// DefaultTaskSet 是未命中任何规则时回退的 task set。
+	// 用法：为空表示未命中直接丢弃，不再继续猜测或遍历规则。
+	DefaultTaskSet string `json:"default_task_set,omitempty"`
+}
+
 // TaskConfig 描述任务绑定关系与执行模型。
 type TaskConfig struct {
 	// PoolSize 是任务 worker 池大小。
@@ -430,9 +451,9 @@ type TaskConfig struct {
 	// ChannelQueueSize 是 channel 执行模型下的有界缓冲长度。
 	// 用法：仅 execution_model=channel 时生效；<=0 时默认回退到 QueueSize，确保与协程池排队上限一致。
 	ChannelQueueSize int `json:"channel_queue_size,omitempty"`
-	// Receivers 是该任务订阅的接收端名称列表。
-	// 用法：填写 Config.Receivers 中已定义 key，支持多源汇聚。
-	Receivers []string `json:"receivers"`
+	// Receivers 为兼容旧配置保留，但运行时不再使用该字段做绑定关系。
+	// 用法：新配置应改为在 receiver 上显式绑定 selector。
+	Receivers []string `json:"receivers,omitempty"`
 	// Pipelines 是按顺序执行的 pipeline 名称列表。
 	// 用法：可串联多个 pipeline 形成分层处理链。
 	Pipelines []string `json:"pipelines"`

@@ -16,6 +16,7 @@ import (
 
 type GnetUDP struct {
 	name             string
+	selector         string
 	listen           string
 	multicore        bool
 	numEventLoop     int
@@ -31,9 +32,10 @@ type GnetUDP struct {
 }
 
 // NewGnetUDP 负责该函数对应的核心逻辑，详见实现细节。
-func NewGnetUDP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, gnetLogLevel string) *GnetUDP {
+func NewGnetUDP(name, selector, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, gnetLogLevel string) *GnetUDP {
 	return &GnetUDP{
 		name:             name,
+		selector:         selector,
 		listen:           listen,
 		multicore:        multicore,
 		numEventLoop:     numEventLoop,
@@ -48,6 +50,8 @@ func (r *GnetUDP) Name() string { return r.name }
 
 // Key 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetUDP) Key() string { return "udp_gnet|" + r.listen }
+
+func (r *GnetUDP) Selector() string { return r.selector }
 
 // Start 负责该函数对应的核心逻辑，详见实现细节。
 func (r *GnetUDP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
@@ -122,14 +126,16 @@ func (h *udpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 		stats.AddBytes(len(in))
 	}
 	payload, rel := packet.CopyFrom(in)
+	matchKey := BuildMatchKey("udp", MatchKeyField{Name: "src_addr", Value: c.RemoteAddr().String()})
 	h.recv.onPacket(&packet.Packet{
 		Envelope: packet.Envelope{
 			Kind:    packet.PayloadKindStream,
 			Payload: payload,
 			Meta: packet.Meta{
-				Proto:  packet.ProtoUDP,
-				Remote: c.RemoteAddr().String(),
-				Local:  c.LocalAddr().String(),
+				Proto:    packet.ProtoUDP,
+				Remote:   c.RemoteAddr().String(),
+				Local:    c.LocalAddr().String(),
+				MatchKey: matchKey,
 			},
 		},
 		ReleaseFn: rel,

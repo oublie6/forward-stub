@@ -34,6 +34,8 @@ type SFTPReceiver struct {
 	// name 是 receiver 实例名（配置 key）。
 	// 用法：用于日志打点、运行时映射与指标标签。
 	name string
+	// selector 是当前 receiver 绑定的 selector 名称。
+	selector string
 	// cfg 是 receiver 配置快照。
 	// 用法：Start/scan 过程中读取轮询、目录、认证等参数。
 	cfg config.ReceiverConfig
@@ -75,11 +77,12 @@ func NewSFTPReceiver(name string, rc config.ReceiverConfig) (*SFTPReceiver, erro
 	if err := config.ValidateSSHHostKeyFingerprint(rc.HostKeyFingerprint); err != nil {
 		return nil, fmt.Errorf("sftp receiver invalid host_key_fingerprint: %w", err)
 	}
-	return &SFTPReceiver{name: name, cfg: rc, seen: make(map[string]string)}, nil
+	return &SFTPReceiver{name: name, selector: rc.Selector, cfg: rc, seen: make(map[string]string)}, nil
 }
 
 // Name 返回 receiver 名称（配置 key）。
-func (r *SFTPReceiver) Name() string { return r.name }
+func (r *SFTPReceiver) Name() string     { return r.name }
+func (r *SFTPReceiver) Selector() string { return r.selector }
 
 // Key 返回 receiver 去重键，用于 runtime 复用实例。
 func (r *SFTPReceiver) Key() string {
@@ -223,6 +226,11 @@ func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePa
 				r.stats.AddBytes(n)
 			}
 			h := sha256.Sum256(buf[:n])
+			matchKey := BuildMatchKey(
+				"sftp",
+				MatchKeyField{Name: "remote_dir", Value: strings.TrimSpace(r.cfg.RemoteDir)},
+				MatchKeyField{Name: "file_name", Value: path.Base(filePath)},
+			)
 			r.onPacket(&packet.Packet{
 				Envelope: packet.Envelope{
 					Kind:    packet.PayloadKindFileChunk,
@@ -231,6 +239,7 @@ func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePa
 						Proto:      packet.ProtoSFTP,
 						Remote:     filePath,
 						Local:      r.cfg.Listen,
+						MatchKey:   matchKey,
 						FileName:   path.Base(filePath),
 						FilePath:   filePath,
 						TransferID: transferID,

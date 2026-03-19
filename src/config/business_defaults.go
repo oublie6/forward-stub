@@ -9,6 +9,8 @@ func (s SystemConfig) Merge(b BusinessConfig) Config {
 		Control:   s.Control,
 		Logging:   s.Logging,
 		Receivers: b.Receivers,
+		Selectors: b.Selectors,
+		TaskSets:  b.TaskSets,
 		Senders:   b.Senders,
 		Pipelines: b.Pipelines,
 		Tasks:     b.Tasks,
