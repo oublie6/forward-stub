@@ -1,3 +1,4 @@
+// Package runtime 负责维护转发运行时对象及其测试辅助逻辑。
 package runtime
 
 import (
@@ -10,23 +11,36 @@ import (
 	"forward-stub/src/task"
 )
 
+// benchCounterSender 是基准测试中的最小发送端实现，用于统计转发次数和字节数。
 type benchCounterSender struct {
-	name  string
+	// name 用于实现 sender.Sender 接口中的标识方法。
+	name string
+	// bytes 记录累计发送字节数，用于验证吞吐统计是否符合预期。
 	bytes int64
-	pkts  int64
+	// pkts 记录累计发送包数，便于在基准结束后核对是否丢包。
+	pkts int64
 }
 
+// 确保基准发送端满足 sender.Sender 接口，避免测试辅助类型漂移。
 var _ sender.Sender = (*benchCounterSender)(nil)
 
+// Name 返回测试发送端名称。
 func (s *benchCounterSender) Name() string { return s.name }
-func (s *benchCounterSender) Key() string  { return s.name }
+
+// Key 返回测试发送端唯一键；在基准中直接复用名称即可。
+func (s *benchCounterSender) Key() string { return s.name }
+
+// Send 只累计统计信息，不执行真实网络发送。
 func (s *benchCounterSender) Send(_ context.Context, p *packet.Packet) error {
 	s.pkts++
 	s.bytes += int64(len(p.Payload))
 	return nil
 }
+
+// Close 在基准场景中无需释放额外资源，保持空实现即可。
 func (s *benchCounterSender) Close(_ context.Context) error { return nil }
 
+// BenchmarkDispatchMatrix 对不同协议组合和 payload 大小的分发热路径做基准测试。
 func BenchmarkDispatchMatrix(b *testing.B) {
 	protos := []string{"udp", "tcp", "kafka", "sftp"}
 	payloadSizes := []int{256, 4096}
@@ -59,6 +73,7 @@ func BenchmarkDispatchMatrix(b *testing.B) {
 	}
 }
 
+// BenchmarkDispatchMatrixPoolSizesNoPayloadLog 对 pool 执行模型在不同队列规模下的无日志分发性能做基准测试。
 func BenchmarkDispatchMatrixPoolSizesNoPayloadLog(b *testing.B) {
 	protos := []string{"udp", "tcp", "kafka", "sftp"}
 	poolSizes := []int{1024, 4096, 8192}

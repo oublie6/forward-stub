@@ -1,3 +1,4 @@
+// Package runtime 负责维护转发运行时对象及其测试辅助逻辑。
 package runtime
 
 import (
@@ -9,6 +10,7 @@ import (
 	"forward-stub/src/pipeline"
 )
 
+// TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks 验证 sender 变化会触发依赖它的未改动任务重建。
 func TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks(t *testing.T) {
 	oldTasks := map[string]config.TaskConfig{
 		"t1": {Senders: []string{"s1", "s2"}},
@@ -36,6 +38,7 @@ func TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks(t *testin
 	}
 }
 
+// TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts 验证 sender 影响范围会并入既有 task 增删集合并保持有序。
 func TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts(t *testing.T) {
 	oldTasks := map[string]config.TaskConfig{
 		"ta": {Senders: []string{"sx"}},
@@ -65,6 +68,7 @@ func TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts(t *testin
 	}
 }
 
+// TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks 验证 pipeline 变化会触发依赖它的未改动任务重建。
 func TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks(t *testing.T) {
 	oldTasks := map[string]config.TaskConfig{
 		"t1": {Pipelines: []string{"p1", "p2"}},
@@ -92,6 +96,7 @@ func TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks(t *test
 	}
 }
 
+// TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree 穷举多维增删改组合，验证 task 重建计划不会遗漏或重复。
 func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
 	type op string
 	const (
@@ -196,6 +201,7 @@ func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
 	}
 }
 
+// contains 判断字符串切片中是否存在指定项，供差量计划测试断言使用。
 func contains(items []string, want string) bool {
 	for _, item := range items {
 		if item == want {
@@ -205,6 +211,7 @@ func contains(items []string, want string) bool {
 	return false
 }
 
+// hasDup 判断字符串切片中是否出现重复项，供差量计划测试校验结果唯一性。
 func hasDup(items []string) bool {
 	seen := make(map[string]struct{}, len(items))
 	for _, item := range items {
@@ -216,6 +223,7 @@ func hasDup(items []string) bool {
 	return false
 }
 
+// TestApplyTaskDeltaAddUpdateRemove 验证任务在增量更新中可以完成新增、重建和删除。
 func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
@@ -269,6 +277,7 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	}
 }
 
+// TestRemoveTaskRefreshDispatchSnapshotImmediately 验证任务删除后 selector 快照会立即反映最新路由结果。
 func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
@@ -298,6 +307,7 @@ func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
 	}
 }
 
+// TestApplyBusinessDeltaUpdatesPayloadLogOptions 验证增量更新后任务 payload 日志配置会同步刷新。
 func TestApplyBusinessDeltaUpdatesPayloadLogOptions(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}

@@ -1,3 +1,4 @@
+// Package runtime 负责维护转发运行时对象及其测试辅助逻辑。
 package runtime
 
 import (
@@ -11,8 +12,8 @@ import (
 	"forward-stub/src/task"
 )
 
-// BenchmarkPayloadLogSwitchThroughput 对 udp/tcp/kafka 转发任务在 payload 日志开关场景下进行吞吐压测，
-// 并在每个子用例结束时校验发送计数，确保测试链路中不丢包。
+// BenchmarkPayloadLogSwitchThroughput 对 udp、tcp、kafka 任务在 payload 日志开关下进行吞吐压测，
+// 并在每个子用例结束时校验发送计数，确保基准过程中没有因日志分支导致丢包。
 func BenchmarkPayloadLogSwitchThroughput(b *testing.B) {
 	if err := logx.Init(logx.Options{Level: "error"}); err != nil {
 		b.Fatalf("log init: %v", err)

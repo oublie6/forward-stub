@@ -1,3 +1,4 @@
+// Package runtime 负责维护转发运行时对象及其测试辅助逻辑。
 package runtime
 
 import (
@@ -7,6 +8,7 @@ import (
 	"forward-stub/src/pipeline"
 )
 
+// TestCompilePipelinesWithStageCacheReuseBySignature 验证相同 stage 配置会复用同一份缓存函数。
 func TestCompilePipelinesWithStageCacheReuseBySignature(t *testing.T) {
 	st := NewStore()
 	cfg := map[string][]config.StageConfig{
@@ -26,6 +28,7 @@ func TestCompilePipelinesWithStageCacheReuseBySignature(t *testing.T) {
 	}
 }
 
+// TestStageCacheTaskRefsTrackAddAndRemove 验证 task 生命周期会同步更新 stage 缓存引用计数。
 func TestStageCacheTaskRefsTrackAddAndRemove(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}

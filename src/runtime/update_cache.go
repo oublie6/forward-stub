@@ -1,4 +1,4 @@
-// update_cache.go 实现运行时缓存的全量替换流程。
+// Package runtime 实现运行时缓存的全量替换、增量更新与热路径分发逻辑。
 package runtime
 
 import (
@@ -20,15 +20,12 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// UpdateCache 负责将运行时状态切换到新配置。
-//
-// 当前实现采用“全量替换”策略（先停旧实例，再创建新实例）：
-//  1. 逻辑清晰、故障边界小，适合作为稳定基线；
-//  2. 避免差量更新时复杂的拓扑依赖与回滚成本；
-//  3. 后续若需更高实时性，可在此基础上演进为增量热更新。
+// taskPayloadLogOptions 描述单个任务生效后的 payload 日志策略。
 type taskPayloadLogOptions struct {
+	// send 表示任务发送阶段是否输出 payload 摘要日志。
 	send bool
-	max  int
+	// max 是 payload 摘要的最大截断字节数；小于等于 0 时调用方应继续回退默认值。
+	max int
 }
 
 // buildTaskPayloadLogOptions 计算单个 task 的 payload 日志策略。
@@ -60,9 +57,8 @@ func payloadLogMaxBytes(localMax int, loggingMax int) int {
 //
 // 处理流程：
 //  1. 更新全局 payload 池与日志默认参数；
-//  2. 尝试一次“仅重启曾经失败的 receiver”；
-//  3. 如果当前状态允许，则走业务增量更新；否则执行全量重建；
-//  4. 打印任务快照与耗时，便于排障和容量评估。
+//  2. 根据当前 Store 是否已有运行态对象，选择增量更新或全量重建；
+//  3. 在切换完成后输出任务快照与耗时，便于排障和容量评估。
 //
 // 注意：这里仅负责“切换运行时对象”，不做配置合法性校验（校验应在更上层完成）。
 func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
@@ -103,7 +99,7 @@ func (st *Store) setPayloadLogDefaultMax(max int) {
 	st.mu.Unlock()
 }
 
-// loggingPayloadLogMaxBytes 读取当前 Store 的全局 payload 日志截断默认值。
+// loggingPayloadLogMaxBytes 返回当前 Store 生效的全局 payload 日志默认截断长度。
 func (st *Store) loggingPayloadLogMaxBytes() int {
 	st.mu.RLock()
 	defer st.mu.RUnlock()
@@ -354,21 +350,37 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	return nil
 }
 
+// businessDeltaPlan 汇总各类配置对象在一次业务更新中的新增/删除结果。
+//
+// 其中“修改”会被上游统一展开为 remove+add，因此这里不单独维护 modified 字段。
 type businessDeltaPlan struct {
-	receiverAdded   []string
+	// receiverAdded 记录需要新增或重建的 receiver 名称集合。
+	receiverAdded []string
+	// receiverRemoved 记录需要下线的旧 receiver 名称集合。
 	receiverRemoved []string
-	selectorAdded   []string
+	// selectorAdded 记录需要新增或重建的 selector 名称集合。
+	selectorAdded []string
+	// selectorRemoved 记录需要删除的 selector 名称集合。
 	selectorRemoved []string
-	taskSetAdded    []string
-	taskSetRemoved  []string
-	senderAdded     []string
-	senderRemoved   []string
-	pipelineAdded   []string
+	// taskSetAdded 记录需要新增或重建的 task_set 名称集合。
+	taskSetAdded []string
+	// taskSetRemoved 记录需要删除的 task_set 名称集合。
+	taskSetRemoved []string
+	// senderAdded 记录需要新增或重建的 sender 名称集合。
+	senderAdded []string
+	// senderRemoved 记录需要下线的旧 sender 名称集合。
+	senderRemoved []string
+	// pipelineAdded 记录需要新增或重编译的 pipeline 名称集合。
+	pipelineAdded []string
+	// pipelineRemoved 记录需要删除的旧 pipeline 名称集合。
 	pipelineRemoved []string
-	taskAdded       []string
-	taskRemoved     []string
+	// taskAdded 记录需要新增或重建的 task 名称集合。
+	taskAdded []string
+	// taskRemoved 记录需要下线的旧 task 名称集合。
+	taskRemoved []string
 }
 
+// planBusinessDelta 根据旧运行态快照和新配置，生成一次业务更新需要执行的差量计划。
 func planBusinessDelta(
 	oldReceivers map[string]config.ReceiverConfig,
 	oldSelectors map[string]config.SelectorConfig,
@@ -435,6 +447,9 @@ func splitDeltaWithReplace[T any](oldMap, newMap map[string]T) (added []string, 
 	return added, removed
 }
 
+// expandTaskDeltaForSenderChanges 把 sender 变化扩散到依赖它们的任务集合中。
+//
+// 即使任务本身配置未改，只要引用了发生变化的 sender，也必须被视为 remove+add。
 func expandTaskDeltaForSenderChanges(
 	oldTasks map[string]config.TaskConfig,
 	newTasks map[string]config.TaskConfig,
@@ -486,6 +501,7 @@ func expandTaskDeltaForSenderChanges(
 	return taskAdded, taskRemoved
 }
 
+// taskUsesChangedSender 判断任务是否依赖任一已变化的 sender。
 func taskUsesChangedSender(tc config.TaskConfig, changed map[string]struct{}) bool {
 	for _, senderName := range tc.Senders {
 		if _, ok := changed[senderName]; ok {
@@ -495,6 +511,9 @@ func taskUsesChangedSender(tc config.TaskConfig, changed map[string]struct{}) bo
 	return false
 }
 
+// expandTaskDeltaForPipelineChanges 把 pipeline 变化扩散到依赖它们的任务集合中。
+//
+// 即使任务本身配置未改，只要引用了发生变化的 pipeline，也必须被视为 remove+add。
 func expandTaskDeltaForPipelineChanges(
 	oldTasks map[string]config.TaskConfig,
 	newTasks map[string]config.TaskConfig,
@@ -546,6 +565,7 @@ func expandTaskDeltaForPipelineChanges(
 	return taskAdded, taskRemoved
 }
 
+// taskUsesChangedPipeline 判断任务是否依赖任一已变化的 pipeline。
 func taskUsesChangedPipeline(tc config.TaskConfig, changed map[string]struct{}) bool {
 	for _, pipelineName := range tc.Pipelines {
 		if _, ok := changed[pipelineName]; ok {
@@ -675,6 +695,9 @@ func (st *Store) startReceiver(ctx context.Context, rs *ReceiverState) <-chan st
 	return started
 }
 
+// waitReceiversStartInvoked 等待所有 receiver 的 Start 调用都已被 goroutine 触发。
+//
+// 它只保证 Start 已开始执行，不保证底层监听已经完全准备就绪。
 func (st *Store) waitReceiversStartInvoked(started []<-chan struct{}) {
 	for _, ack := range started {
 		<-ack
@@ -920,6 +943,7 @@ func senderConfigSnapshot(m map[string]*SenderState) map[string]config.SenderCon
 	return out
 }
 
+// cloneSelectorConfigMap 深拷贝 selector 配置，避免热更新过程共享底层 map。
 func cloneSelectorConfigMap(in map[string]config.SelectorConfig) map[string]config.SelectorConfig {
 	out := make(map[string]config.SelectorConfig, len(in))
 	for name, cfg := range in {
@@ -937,6 +961,7 @@ func cloneSelectorConfigMap(in map[string]config.SelectorConfig) map[string]conf
 	return out
 }
 
+// cloneTaskSetMap 深拷贝 task_set 配置，避免热更新过程共享底层切片。
 func cloneTaskSetMap(in map[string][]string) map[string][]string {
 	out := make(map[string][]string, len(in))
 	for name, tasks := range in {
@@ -945,6 +970,9 @@ func cloneTaskSetMap(in map[string][]string) map[string][]string {
 	return out
 }
 
+// rebuildReceiverSelectors 根据当前 selectors、taskSets 与 tasks 重新编译每个 receiver 的只读 selector 快照。
+//
+// 该函数会先在锁外准备编译输入，再逐个原子替换 receiver 内的 selector，减少热路径读锁竞争。
 func (st *Store) rebuildReceiverSelectors() error {
 	st.mu.RLock()
 	selectorCfg := cloneSelectorConfigMap(st.selectors)
@@ -1035,6 +1063,7 @@ func dispatchToSelector(ctx context.Context, rs *ReceiverState, pkt *packet.Pack
 	first.T.Handle(ctx, pkt)
 }
 
+// dispatch 为兼容旧测试入口保留的分发包装函数，按 receiver 名称查询状态后转给 dispatchToSelector。
 func dispatch(ctx context.Context, st *Store, receiverName string, pkt *packet.Packet) {
 	st.mu.RLock()
 	rs := st.receivers[receiverName]
@@ -1077,7 +1106,9 @@ func payloadHex(b []byte, max int) string {
 	return hex.EncodeToString(b)
 }
 
-// buildReceiver 负责该函数对应的核心逻辑，详见实现细节。
+// buildReceiver 根据 receiver 配置创建具体接收端实例。
+//
+// 该函数只做实例构造，不负责启动；调用方应在成功后自行接入 Store 与生命周期管理。
 func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (receiver.Receiver, error) {
 	multicore := config.DefaultReceiverMulticore
 	if rc.Multicore != nil {
@@ -1110,7 +1141,9 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 	}
 }
 
-// buildSender 负责该函数对应的核心逻辑，详见实现细节。
+// buildSender 根据 sender 配置创建具体发送端实例。
+//
+// 该函数只做实例构造，不负责引用计数或关闭旧实例；这些工作由调用方在更新流程中处理。
 func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (sender.Sender, error) {
 	conc := sc.Concurrency
 	if conc <= 0 {

@@ -1,3 +1,4 @@
+// Package runtime 负责维护转发运行时对象及其测试辅助逻辑。
 package runtime
 
 import (
@@ -10,6 +11,7 @@ import (
 	"forward-stub/src/task"
 )
 
+// newFastTask 创建一个 fastpath 测试任务，减少各个路由测试中的重复搭建代码。
 func newFastTask(t *testing.T, name string, s sender.Sender) *task.Task {
 	t.Helper()
 	tk := &task.Task{Name: name, FastPath: true, Senders: []sender.Sender{s}}
@@ -19,6 +21,7 @@ func newFastTask(t *testing.T, name string, s sender.Sender) *task.Task {
 	return tk
 }
 
+// TestSelectorCompileExpandsTaskSetReuse 验证 selector 编译时会把 task_set 直接展开为任务切片。
 func TestSelectorCompileExpandsTaskSetReuse(t *testing.T) {
 	st := NewStore()
 	s1 := &captureSender{name: "s1"}
@@ -55,6 +58,7 @@ func TestSelectorCompileExpandsTaskSetReuse(t *testing.T) {
 	}
 }
 
+// TestDispatchUsesMatchKeyAndDefaultTasks 验证 dispatch 会优先使用 MatchKey 命中规则，并在未命中时走默认任务集。
 func TestDispatchUsesMatchKeyAndDefaultTasks(t *testing.T) {
 	ctx := context.Background()
 	sKafka := &captureSender{name: "kafka"}
