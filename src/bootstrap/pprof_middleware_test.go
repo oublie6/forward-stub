@@ -37,31 +37,31 @@ func TestWithPprofRequestLogRecordsRequestDetails(t *testing.T) {
 
 	h.ServeHTTP(rr, req)
 
-	if lg.msg != "pprof request completed" {
+	if lg.msg != "pprof请求处理完成" {
 		t.Fatalf("unexpected log message: %s", lg.msg)
 	}
-	if got := lg.fields["method"]; got != http.MethodGet {
+	if got := lg.fields["方法"]; got != http.MethodGet {
 		t.Fatalf("unexpected method: %v", got)
 	}
-	if got := lg.fields["path"]; got != "/debug/pprof/profile" {
+	if got := lg.fields["路径"]; got != "/debug/pprof/profile" {
 		t.Fatalf("unexpected path: %v", got)
 	}
-	if got := lg.fields["query"]; got != "seconds=1" {
+	if got := lg.fields["查询串"]; got != "seconds=1" {
 		t.Fatalf("unexpected query: %v", got)
 	}
-	if got := lg.fields["remote_addr"]; got != "127.0.0.1:12345" {
+	if got := lg.fields["远端地址"]; got != "127.0.0.1:12345" {
 		t.Fatalf("unexpected remote addr: %v", got)
 	}
-	if got := lg.fields["user_agent"]; got != "pprof-test" {
+	if got := lg.fields["客户端"]; got != "pprof-test" {
 		t.Fatalf("unexpected user agent: %v", got)
 	}
-	if got := lg.fields["status"]; got != http.StatusCreated {
+	if got := lg.fields["状态码"]; got != http.StatusCreated {
 		t.Fatalf("unexpected status: %v", got)
 	}
-	if got := lg.fields["response_bytes"]; got != 2 {
+	if got := lg.fields["响应字节数"]; got != 2 {
 		t.Fatalf("unexpected response bytes: %v", got)
 	}
-	if got, ok := lg.fields["duration"].(string); !ok || got == "" {
-		t.Fatalf("unexpected duration: %v", lg.fields["duration"])
+	if got, ok := lg.fields["耗时"].(string); !ok || got == "" {
+		t.Fatalf("unexpected duration: %v", lg.fields["耗时"])
 	}
 }

@@ -9,6 +9,8 @@ func (s SystemConfig) Merge(b BusinessConfig) Config {
 		Control:   s.Control,
 		Logging:   s.Logging,
 		Receivers: b.Receivers,
+		Selectors: b.Selectors,
+		TaskSets:  b.TaskSets,
 		Senders:   b.Senders,
 		Pipelines: b.Pipelines,
 		Tasks:     b.Tasks,
@@ -91,6 +93,13 @@ func (c *Config) ApplyDefaults() {
 	if c.Logging.Compress == nil {
 		v := DefaultLogRotateCompress
 		c.Logging.Compress = &v
+	}
+	if c.Logging.GCStatsLogEnabled == nil {
+		v := DefaultGCStatsLogEnabled
+		c.Logging.GCStatsLogEnabled = &v
+	}
+	if c.Logging.GCStatsLogInterval == "" {
+		c.Logging.GCStatsLogInterval = DefaultGCStatsLogInterval
 	}
 	if c.Logging.TrafficStatsInterval == "" {
 		c.Logging.TrafficStatsInterval = DefaultTrafficStatsInterval

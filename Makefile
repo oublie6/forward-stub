@@ -21,7 +21,7 @@ SERVICE_ARGS ?=
 
 # build: 本机构建当前平台二进制到 bin/。
 build:
-	CGO_ENABLED=0 GOFLAGS="$(GOFLAGS)" go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o bin/$(APP_NAME) .
+	CGO_ENABLED=0 GOFLAGS="$(GOFLAGS)" go build -trimpath -ldflags "-s -w" -o bin/$(APP_NAME) .
 
 # build-linux: 调用脚本输出 linux/arm64 二进制到 dist/linux。
 build-linux:

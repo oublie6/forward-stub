@@ -12,9 +12,10 @@ func TestValidateSFTPSenderRequiresFields(t *testing.T) {
 		},
 		Pipelines: map[string][]StageConfig{"p1": {}},
 		Tasks: map[string]TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
+	cfg = attachMinimalRouting(cfg)
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected sftp sender config valid, got: %v", err)
 	}

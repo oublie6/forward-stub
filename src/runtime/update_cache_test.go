@@ -1,3 +1,4 @@
+// Package runtime 负责维护转发运行时对象及其测试辅助逻辑。
 package runtime
 
 import (
@@ -10,19 +11,20 @@ import (
 	"forward-stub/src/task"
 )
 
+// captureSender 是测试用发送端，会把收到的 payload 副本保存在内存中供断言使用。
 type captureSender struct {
-	name string
+	testNamedSender
 
-	mu      sync.Mutex
+	// mu 保护 payload 切片，避免测试中并发发送造成数据竞争。
+	mu sync.Mutex
+	// payload 保存每次发送的内容副本，便于回放最后一次或全部发送结果。
 	payload [][]byte
 }
 
+// 确保 captureSender 始终满足 sender.Sender 接口。
 var _ sender.Sender = (*captureSender)(nil)
 
-func (s *captureSender) Name() string { return s.name }
-
-func (s *captureSender) Key() string { return s.name }
-
+// Send 复制并保存 payload，避免后续释放底层 buffer 影响断言。
 func (s *captureSender) Send(_ context.Context, p *packet.Packet) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -31,8 +33,7 @@ func (s *captureSender) Send(_ context.Context, p *packet.Packet) error {
 	return nil
 }
 
-func (s *captureSender) Close(_ context.Context) error { return nil }
-
+// Last 返回最近一次发送的 payload 副本；若尚未发送则返回 nil。
 func (s *captureSender) Last() []byte {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -42,29 +43,28 @@ func (s *captureSender) Last() []byte {
 	return s.payload[len(s.payload)-1]
 }
 
+// spyPacketSender 是测试用发送端，用于观察任务收到的是否为同一个 packet 指针。
 type spyPacketSender struct {
-	name string
+	testNamedSender
+	// last 保存最近一次收到的 packet 指针，便于测试是否发生 clone。
 	last *packet.Packet
 }
 
+// 确保 spyPacketSender 始终满足 sender.Sender 接口。
 var _ sender.Sender = (*spyPacketSender)(nil)
 
-func (s *spyPacketSender) Name() string { return s.name }
-
-func (s *spyPacketSender) Key() string { return s.name }
-
+// Send 仅记录 packet 指针，不复制内容，便于验证复用策略。
 func (s *spyPacketSender) Send(_ context.Context, p *packet.Packet) error {
 	s.last = p
 	return nil
 }
 
-func (s *spyPacketSender) Close(_ context.Context) error { return nil }
-
+// TestDispatchClonesForEveryTaskAndReleasesOriginal 验证多订阅场景会为后续任务 clone 包并释放原包一次。
 func TestDispatchClonesForEveryTaskAndReleasesOriginal(t *testing.T) {
 	ctx := context.Background()
 
-	s1 := &captureSender{name: "s1"}
-	s2 := &captureSender{name: "s2"}
+	s1 := &captureSender{testNamedSender: testNamedSender{name: "s1"}}
+	s2 := &captureSender{testNamedSender: testNamedSender{name: "s2"}}
 
 	t1 := &task.Task{Name: "t1", FastPath: true, Senders: []sender.Sender{s1}}
 	t2 := &task.Task{Name: "t2", FastPath: true, Senders: []sender.Sender{s2}}
@@ -107,10 +107,11 @@ func TestDispatchClonesForEveryTaskAndReleasesOriginal(t *testing.T) {
 	}
 }
 
+// TestDispatchSingleSubscriberReusesOriginalPacket 验证单订阅场景直接复用原始 packet，避免多余复制。
 func TestDispatchSingleSubscriberReusesOriginalPacket(t *testing.T) {
 	ctx := context.Background()
 
-	s1 := &spyPacketSender{name: "s1"}
+	s1 := &spyPacketSender{testNamedSender: testNamedSender{name: "s1"}}
 	t1 := &task.Task{Name: "t1", FastPath: true, Senders: []sender.Sender{s1}}
 	if err := t1.Start(); err != nil {
 		t.Fatalf("t1 start: %v", err)
