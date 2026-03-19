@@ -34,7 +34,7 @@ type GnetUDP struct {
 func NewGnetUDP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, gnetLogLevel string) *GnetUDP {
 	return &GnetUDP{
 		name:             name,
-		listen:           listen,
+		listen:           normalizeGnetListen("udp", listen),
 		multicore:        multicore,
 		numEventLoop:     numEventLoop,
 		readBufferCap:    readBufferCap,
@@ -122,14 +122,16 @@ func (h *udpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 		stats.AddBytes(len(in))
 	}
 	payload, rel := packet.CopyFrom(in)
+	matchKey := BuildMatchKey("udp", MatchKeyField{Name: "src_addr", Value: c.RemoteAddr().String()})
 	h.recv.onPacket(&packet.Packet{
 		Envelope: packet.Envelope{
 			Kind:    packet.PayloadKindStream,
 			Payload: payload,
 			Meta: packet.Meta{
-				Proto:  packet.ProtoUDP,
-				Remote: c.RemoteAddr().String(),
-				Local:  c.LocalAddr().String(),
+				Proto:    packet.ProtoUDP,
+				Remote:   c.RemoteAddr().String(),
+				Local:    c.LocalAddr().String(),
+				MatchKey: matchKey,
 			},
 		},
 		ReleaseFn: rel,

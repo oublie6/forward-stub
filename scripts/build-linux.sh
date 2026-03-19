@@ -6,7 +6,7 @@ set -euo pipefail
 
 # APP_NAME: 应用名，仅用于默认二进制命名。
 APP_NAME=${APP_NAME:-forward-stub}
-# VERSION: 注入 main.version 的版本号。
+# VERSION: 产物版本号，仅用于日志输出与产物命名上下文。
 VERSION=${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}
 # GOOS/GOARCH: 默认构建 linux/arm64（aarch64），可按需覆盖。
 GOOS=${GOOS:-linux}
@@ -20,8 +20,8 @@ OUT_DIR=${OUT_DIR:-dist/linux}
 # BINARY_NAME: 输出文件名，默认等于 APP_NAME。
 BINARY_NAME=${BINARY_NAME:-${APP_NAME}}
 
-# 默认优化参数：去符号并注入版本信息。
-LDFLAGS=${LDFLAGS:-"-s -w -X main.version=${VERSION}"}
+# 默认优化参数：裁剪符号信息，减小二进制体积。
+LDFLAGS=${LDFLAGS:-"-s -w"}
 
 mkdir -p "${OUT_DIR}"
 OUT_FILE="${OUT_DIR}/${BINARY_NAME}"

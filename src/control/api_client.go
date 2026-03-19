@@ -38,7 +38,7 @@ func (c *ConfigAPIClient) FetchBusinessConfig(ctx context.Context) (config.Busin
 	defer resp.Body.Close()
 
 	if resp.StatusCode/100 != 2 {
-		return config.BusinessConfig{}, fmt.Errorf("config api status=%s", resp.Status)
+		return config.BusinessConfig{}, fmt.Errorf("配置中心返回非成功状态: %s", resp.Status)
 	}
 
 	var cfg config.BusinessConfig
@@ -49,7 +49,7 @@ func (c *ConfigAPIClient) FetchBusinessConfig(ctx context.Context) (config.Busin
 	}
 	var trailing struct{}
 	if err := dec.Decode(&trailing); err == nil {
-		return config.BusinessConfig{}, fmt.Errorf("invalid json: trailing data")
+		return config.BusinessConfig{}, fmt.Errorf("JSON格式非法: 存在多余内容")
 	} else if err != io.EOF {
 		return config.BusinessConfig{}, err
 	}

@@ -11,15 +11,14 @@ import (
 )
 
 type gateSender struct {
+	testNamedSender
+
 	entered chan struct{}
 	release chan struct{}
 }
 
 var _ sender.Sender = (*gateSender)(nil)
 
-func (s *gateSender) Name() string                { return "gate" }
-func (s *gateSender) Key() string                 { return "gate" }
-func (s *gateSender) Close(context.Context) error { return nil }
 func (s *gateSender) Send(context.Context, *packet.Packet) error {
 	select {
 	case s.entered <- struct{}{}:
@@ -35,7 +34,7 @@ func trackedPacket(payload []byte, released *atomic.Int32) *packet.Packet {
 }
 
 func TestTaskSubmitBlocksAndQueuesWhenPoolBusy(t *testing.T) {
-	s := &gateSender{entered: make(chan struct{}, 2), release: make(chan struct{})}
+	s := &gateSender{testNamedSender: testNamedSender{name: "gate"}, entered: make(chan struct{}, 2), release: make(chan struct{})}
 	tk := &Task{PoolSize: 1, QueueSize: 1, Senders: []sender.Sender{s}}
 	if err := tk.Start(); err != nil {
 		t.Fatalf("start task: %v", err)
