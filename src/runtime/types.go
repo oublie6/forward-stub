@@ -107,3 +107,20 @@ func (s *CompiledSelector) Match(key string) []*TaskState {
 	}
 	return s.DefaultTasks
 }
+
+// CompiledSelector 是运行时编译后的极简精确匹配器。
+type CompiledSelector struct {
+	Name         string
+	TasksByKey   map[string][]*TaskState
+	DefaultTasks []*TaskState
+}
+
+func (s *CompiledSelector) Match(key string) []*TaskState {
+	if s == nil {
+		return nil
+	}
+	if tasks, ok := s.TasksByKey[key]; ok {
+		return tasks
+	}
+	return s.DefaultTasks
+}
