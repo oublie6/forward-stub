@@ -24,6 +24,8 @@ type KafkaSender struct {
 	topic       string
 	concurrency int
 	shardMask   int
+	recordKey   []byte
+	keySource   string
 
 	clients []atomic.Pointer[kgo.Client]
 	nextIdx atomic.Uint64
@@ -38,10 +40,44 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 	if len(brs) == 0 {
 		return nil, errors.New("kafka sender requires brokers in remote/listen")
 	}
+	dialTimeout, err := kafkaDurationOrDefault(sc.DialTimeout, config.DefaultKafkaDialTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("kafka sender dial_timeout 配置非法: %w", err)
+	}
+	requestTimeout, err := kafkaDurationOrDefault(sc.RequestTimeout, config.DefaultKafkaSenderRequestTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("kafka sender request_timeout 配置非法: %w", err)
+	}
+	retryTimeout, err := kafkaDurationOrDefault(sc.RetryTimeout, config.DefaultKafkaRetryTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("kafka sender retry_timeout 配置非法: %w", err)
+	}
+	retryBackoff, err := kafkaDurationOrDefault(sc.RetryBackoff, config.DefaultKafkaRetryBackoff)
+	if err != nil {
+		return nil, fmt.Errorf("kafka sender retry_backoff 配置非法: %w", err)
+	}
+	connIdleTimeout, err := kafkaDurationOrDefault(sc.ConnIdleTimeout, config.DefaultKafkaConnIdleTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("kafka sender conn_idle_timeout 配置非法: %w", err)
+	}
+	metadataMaxAge, err := kafkaDurationOrDefault(sc.MetadataMaxAge, config.DefaultKafkaMetadataMaxAge)
+	if err != nil {
+		return nil, fmt.Errorf("kafka sender metadata_max_age 配置非法: %w", err)
+	}
+	partitioner, err := kafkaPartitioner(sc.Partitioner)
+	if err != nil {
+		return nil, err
+	}
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(brs...),
 		kgo.RequiredAcks(kafkaRequiredAcks(sc.Acks.Int())),
-		kgo.RecordPartitioner(kgo.StickyKeyPartitioner(nil)),
+		kgo.DialTimeout(dialTimeout),
+		kgo.ProduceRequestTimeout(requestTimeout),
+		kgo.RetryTimeout(retryTimeout),
+		kgo.RetryBackoffFn(func(int) time.Duration { return retryBackoff }),
+		kgo.ConnIdleTimeout(connIdleTimeout),
+		kgo.MetadataMaxAge(metadataMaxAge),
+		kgo.RecordPartitioner(partitioner),
 		kgo.ProducerBatchMaxBytes(int32(kafkaIntDefault(sc.BatchMaxBytes, 1<<20))),
 		kgo.ProducerLinger(time.Duration(kafkaIntDefault(sc.LingerMS, 1)) * time.Millisecond),
 	}
@@ -54,7 +90,7 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 	if v := strings.TrimSpace(sc.ClientID); v != "" {
 		opts = append(opts, kgo.ClientID(v))
 	}
-	if codec, enabled, err := kafkaCompressionCodec(sc.Compression); err != nil {
+	if codec, enabled, err := kafkaCompressionCodec(sc.Compression, sc.CompressionLevel); err != nil {
 		return nil, err
 	} else if enabled {
 		opts = append(opts, kgo.ProducerBatchCompression(codec))
@@ -88,6 +124,8 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 		topic:       sc.Topic,
 		concurrency: concurrency,
 		shardMask:   concurrency - 1,
+		recordKey:   []byte(sc.RecordKey),
+		keySource:   strings.TrimSpace(sc.RecordKeySource),
 		clients:     make([]atomic.Pointer[kgo.Client], concurrency),
 	}
 	for i := 0; i < concurrency; i++ {
@@ -114,10 +152,10 @@ func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
 	if cli == nil {
 		return errors.New("kafka sender closed")
 	}
-	rec := &kgo.Record{Topic: s.topic, Value: p.Payload}
+	rec := &kgo.Record{Topic: s.topic, Value: p.Payload, Key: kafkaRecordKey(s.recordKey, s.keySource, p)}
 	res := cli.ProduceSync(ctx, rec)
 	if err := res.FirstErr(); err != nil {
-		logx.L().Warnw("kafka sender produce failed", "sender", s.name, "topic", s.topic, "error", err)
+		logx.L().Warnw("Kafka发送失败", "发送端", s.name, "主题", s.topic, "错误", err)
 		return err
 	}
 	return nil
@@ -164,21 +202,86 @@ func kafkaRequiredAcks(acks int) kgo.Acks {
 	}
 }
 
-func kafkaCompressionCodec(v string) (kgo.CompressionCodec, bool, error) {
+func kafkaCompressionCodec(v string, level int) (kgo.CompressionCodec, bool, error) {
+	withLevel := func(codec kgo.CompressionCodec) kgo.CompressionCodec {
+		if level == 0 {
+			return codec
+		}
+		return codec.WithLevel(level)
+	}
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "", "none":
 		return kgo.NoCompression(), false, nil
 	case "gzip":
-		return kgo.GzipCompression(), true, nil
+		return withLevel(kgo.GzipCompression()), true, nil
 	case "snappy":
 		return kgo.SnappyCompression(), true, nil
 	case "lz4":
-		return kgo.Lz4Compression(), true, nil
+		return withLevel(kgo.Lz4Compression()), true, nil
 	case "zstd":
-		return kgo.ZstdCompression(), true, nil
+		return withLevel(kgo.ZstdCompression()), true, nil
 	default:
 		return kgo.NoCompression(), false, fmt.Errorf("kafka compression %s unsupported", v)
 	}
+}
+
+func kafkaPartitioner(v string) (kgo.Partitioner, error) {
+	switch strings.TrimSpace(v) {
+	case "", "sticky":
+		return kgo.StickyPartitioner(), nil
+	case "round_robin":
+		return kgo.RoundRobinPartitioner(), nil
+	case "hash_key":
+		return kgo.StickyKeyPartitioner(nil), nil
+	default:
+		return nil, fmt.Errorf("kafka partitioner %s unsupported", v)
+	}
+}
+
+func kafkaRecordKey(fixedKey []byte, source string, p *packet.Packet) []byte {
+	if len(fixedKey) > 0 {
+		return append([]byte(nil), fixedKey...)
+	}
+	if p == nil {
+		return nil
+	}
+	switch source {
+	case "":
+		return nil
+	case "payload":
+		return append([]byte(nil), p.Payload...)
+	case "match_key":
+		return []byte(p.Meta.MatchKey)
+	case "remote":
+		return []byte(p.Meta.Remote)
+	case "local":
+		return []byte(p.Meta.Local)
+	case "file_name":
+		return []byte(p.Meta.FileName)
+	case "file_path":
+		return []byte(p.Meta.FilePath)
+	case "transfer_id":
+		return []byte(p.Meta.TransferID)
+	case "route_sender":
+		return []byte(p.Meta.RouteSender)
+	default:
+		return nil
+	}
+}
+
+func kafkaDurationOrDefault(value, fallback string) (time.Duration, error) {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		raw = fallback
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, err
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("duration must be > 0")
+	}
+	return d, nil
 }
 
 type kafkaPlainMechanism struct {

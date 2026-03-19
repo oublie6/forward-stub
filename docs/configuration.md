@@ -54,6 +54,45 @@
 - `selector` 是 receiver 到 selector 的唯一绑定。
 - receiver 不再由 task 反向引用。
 
+### Kafka receiver 直接映射配置
+
+以下字段仅对 `type=kafka` 生效，且都直接映射到 franz-go / kgo：
+
+- `dial_timeout` -> `kgo.DialTimeout`
+- `conn_idle_timeout` -> `kgo.ConnIdleTimeout`
+- `metadata_max_age` -> `kgo.MetadataMaxAge`
+- `retry_backoff` -> `kgo.RetryBackoffFn`
+- `session_timeout` -> `kgo.SessionTimeout`
+- `heartbeat_interval` -> `kgo.HeartbeatInterval`
+- `rebalance_timeout` -> `kgo.RebalanceTimeout`
+- `balancers` -> `kgo.Balancers`
+- `auto_commit` -> `kgo.DisableAutoCommit` / 自动提交开关
+- `auto_commit_interval` -> `kgo.AutoCommitInterval`
+- `fetch_max_partition_bytes` -> `kgo.FetchMaxPartitionBytes`
+- `isolation_level` -> `kgo.FetchIsolationLevel`
+
+默认值：
+
+- `dial_timeout`: `10s`
+- `conn_idle_timeout`: `30s`
+- `metadata_max_age`: `5m`
+- `retry_backoff`: `250ms`
+- `session_timeout`: `45s`
+- `heartbeat_interval`: `3s`
+- `rebalance_timeout`: `1m`
+- `balancers`: `["cooperative_sticky"]`
+- `auto_commit`: `true`
+- `auto_commit_interval`: `5s`
+- `fetch_max_partition_bytes`: `1048576`
+- `isolation_level`: `read_uncommitted`
+
+注意事项：
+
+- `heartbeat_interval` 必须小于 `session_timeout`。
+- `auto_commit=false` 时不能再设置 `auto_commit_interval`。
+- `balancers` 当前支持 `range`、`round_robin`、`cooperative_sticky`。
+- `fetch_max_partition_bytes` 不应大于 `fetch_max_bytes`。
+
 ## 4. selectors
 
 selector 只支持完整字符串精确匹配：
@@ -106,6 +145,39 @@ selector 只支持完整字符串精确匹配：
 ```
 
 现在 task 不再承担 receiver 绑定职责。
+
+## 6.1 Kafka sender 直接映射配置
+
+以下字段仅对 `type=kafka` 生效，且都直接映射到 franz-go / kgo：
+
+- `dial_timeout` -> `kgo.DialTimeout`
+- `request_timeout` -> `kgo.ProduceRequestTimeout`
+- `retry_timeout` -> `kgo.RetryTimeout`
+- `retry_backoff` -> `kgo.RetryBackoffFn`
+- `conn_idle_timeout` -> `kgo.ConnIdleTimeout`
+- `metadata_max_age` -> `kgo.MetadataMaxAge`
+- `partitioner` -> `kgo.RecordPartitioner`
+- `record_key` -> `kgo.Record.Key`
+- `record_key_source` -> `kgo.Record.Key`
+- `compression_level` -> `kgo.CompressionCodec.WithLevel`
+
+默认值：
+
+- `dial_timeout`: `10s`
+- `request_timeout`: `30s`
+- `retry_timeout`: `1m`
+- `retry_backoff`: `250ms`
+- `conn_idle_timeout`: `30s`
+- `metadata_max_age`: `5m`
+- `partitioner`: `sticky`
+
+注意事项：
+
+- `partitioner` 当前支持 `sticky`、`round_robin`、`hash_key`。
+- `hash_key` 依赖 `record_key` 或 `record_key_source` 提供 key，否则配置会被拒绝。
+- `record_key` 与 `record_key_source` 互斥。
+- `record_key_source` 当前只支持直接读取已有字段：`payload`、`match_key`、`remote`、`local`、`file_name`、`file_path`、`transfer_id`、`route_sender`。
+- `compression_level` 只对 `gzip`、`lz4`、`zstd` 生效；`snappy` / `none` 没有可直接设置的压缩级别。
 
 ## 7. 配置校验规则
 

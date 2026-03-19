@@ -142,6 +142,45 @@ func (c *Config) ApplyDefaults() {
 		if rc.SocketRecvBuffer <= 0 {
 			rc.SocketRecvBuffer = DefaultReceiverSocketRecvBuffer
 		}
+		if rc.Type == "kafka" {
+			if rc.DialTimeout == "" {
+				rc.DialTimeout = DefaultKafkaDialTimeout
+			}
+			if rc.ConnIdleTimeout == "" {
+				rc.ConnIdleTimeout = DefaultKafkaConnIdleTimeout
+			}
+			if rc.MetadataMaxAge == "" {
+				rc.MetadataMaxAge = DefaultKafkaMetadataMaxAge
+			}
+			if rc.RetryBackoff == "" {
+				rc.RetryBackoff = DefaultKafkaRetryBackoff
+			}
+			if rc.SessionTimeout == "" {
+				rc.SessionTimeout = DefaultKafkaReceiverSessionTTL
+			}
+			if rc.HeartbeatInterval == "" {
+				rc.HeartbeatInterval = DefaultKafkaReceiverHeartbeat
+			}
+			if rc.RebalanceTimeout == "" {
+				rc.RebalanceTimeout = DefaultKafkaReceiverRebalanceTTL
+			}
+			if rc.Balancers == nil {
+				rc.Balancers = append([]string(nil), DefaultKafkaReceiverBalancers...)
+			}
+			if rc.AutoCommit == nil {
+				v := DefaultKafkaReceiverAutoCommit
+				rc.AutoCommit = &v
+			}
+			if BoolValue(rc.AutoCommit) && rc.AutoCommitInterval == "" {
+				rc.AutoCommitInterval = DefaultKafkaReceiverAutoCommitIv
+			}
+			if rc.FetchMaxPartitionBytes <= 0 {
+				rc.FetchMaxPartitionBytes = DefaultKafkaFetchMaxPartBytes
+			}
+			if rc.IsolationLevel == "" {
+				rc.IsolationLevel = DefaultKafkaIsolationLevel
+			}
+		}
 		c.Receivers[name] = rc
 	}
 	for name, sc := range c.Senders {
@@ -150,6 +189,29 @@ func (c *Config) ApplyDefaults() {
 		}
 		if sc.SocketSendBuffer <= 0 {
 			sc.SocketSendBuffer = DefaultSenderSocketSendBuffer
+		}
+		if sc.Type == "kafka" {
+			if sc.DialTimeout == "" {
+				sc.DialTimeout = DefaultKafkaDialTimeout
+			}
+			if sc.RequestTimeout == "" {
+				sc.RequestTimeout = DefaultKafkaSenderRequestTimeout
+			}
+			if sc.RetryTimeout == "" {
+				sc.RetryTimeout = DefaultKafkaRetryTimeout
+			}
+			if sc.RetryBackoff == "" {
+				sc.RetryBackoff = DefaultKafkaRetryBackoff
+			}
+			if sc.ConnIdleTimeout == "" {
+				sc.ConnIdleTimeout = DefaultKafkaConnIdleTimeout
+			}
+			if sc.MetadataMaxAge == "" {
+				sc.MetadataMaxAge = DefaultKafkaMetadataMaxAge
+			}
+			if sc.Partitioner == "" {
+				sc.Partitioner = DefaultKafkaSenderPartitioner
+			}
 		}
 		c.Senders[name] = sc
 	}

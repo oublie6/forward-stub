@@ -30,7 +30,23 @@ const (
 	DefaultTaskPoolSize              = 4096
 	DefaultTaskQueueSize             = 8192
 	DefaultPayloadPoolMaxCachedBytes = int64(0)
+	DefaultKafkaDialTimeout          = "10s"
+	DefaultKafkaSenderRequestTimeout = "30s"
+	DefaultKafkaRetryTimeout         = "1m"
+	DefaultKafkaRetryBackoff         = "250ms"
+	DefaultKafkaConnIdleTimeout      = "30s"
+	DefaultKafkaMetadataMaxAge       = "5m"
+	DefaultKafkaSenderPartitioner    = "sticky"
+	DefaultKafkaReceiverSessionTTL   = "45s"
+	DefaultKafkaReceiverHeartbeat    = "3s"
+	DefaultKafkaReceiverRebalanceTTL = "1m"
+	DefaultKafkaReceiverAutoCommit   = true
+	DefaultKafkaReceiverAutoCommitIv = "5s"
+	DefaultKafkaFetchMaxPartBytes    = 1 << 20
+	DefaultKafkaIsolationLevel       = "read_uncommitted"
 )
+
+var DefaultKafkaReceiverBalancers = []string{"cooperative_sticky"}
 
 // Config 是系统运行时的全量配置快照。
 //
@@ -222,16 +238,52 @@ type ReceiverConfig struct {
 	// ClientID 是 Kafka 客户端标识。
 	// 用法：建议设置为实例名，便于 Kafka 端审计与监控定位。
 	ClientID string `json:"client_id,omitempty"`
+	// DialTimeout 是 Kafka 建连超时，如 "10s"。
+	// 用法：映射 franz-go / kgo 的 DialTimeout；仅 Type=kafka 时生效，必须是合法正数时长。
+	DialTimeout string `json:"dial_timeout,omitempty"`
+	// ConnIdleTimeout 是 Kafka 空闲连接回收超时，如 "30s"。
+	// 用法：映射 kgo.ConnIdleTimeout；仅 Type=kafka 时生效，调大可减少重连，调小可更快回收空闲连接。
+	ConnIdleTimeout string `json:"conn_idle_timeout,omitempty"`
+	// MetadataMaxAge 是 Kafka 元数据缓存最大存活时间，如 "5m"。
+	// 用法：映射 kgo.MetadataMaxAge；仅 Type=kafka 时生效，调小可更快感知分区变化，代价是更多 metadata 请求。
+	MetadataMaxAge string `json:"metadata_max_age,omitempty"`
+	// RetryBackoff 是 Kafka 可重试请求的退避间隔，如 "250ms"。
+	// 用法：映射 kgo.RetryBackoffFn；仅 Type=kafka 时生效，用于控制重试节奏。
+	RetryBackoff string `json:"retry_backoff,omitempty"`
 
 	// StartOffset 指定 Kafka 启动消费位点（earliest/latest）。
 	// 用法：首次启动追历史数据用 earliest，只消费新数据用 latest。
 	StartOffset string `json:"start_offset,omitempty"` // earliest | latest
+	// SessionTimeout 是 Kafka consumer group 会话超时，如 "45s"。
+	// 用法：映射 kgo.SessionTimeout；仅 Type=kafka 时生效，应大于 heartbeat_interval。
+	SessionTimeout string `json:"session_timeout,omitempty"`
+	// HeartbeatInterval 是 Kafka consumer group 心跳间隔，如 "3s"。
+	// 用法：映射 kgo.HeartbeatInterval；仅 Type=kafka 时生效，通常应显著小于 session_timeout。
+	HeartbeatInterval string `json:"heartbeat_interval,omitempty"`
+	// RebalanceTimeout 是 Kafka consumer group 重平衡超时，如 "1m"。
+	// 用法：映射 kgo.RebalanceTimeout；仅 Type=kafka 时生效，控制成员在 rebalance 中允许占用的最长时间。
+	RebalanceTimeout string `json:"rebalance_timeout,omitempty"`
+	// Balancers 指定 Kafka consumer group 分配策略列表。
+	// 用法：映射 kgo.Balancers；仅 Type=kafka 时生效，当前支持 range / round_robin / cooperative_sticky。
+	Balancers []string `json:"balancers,omitempty"`
+	// AutoCommit 控制 Kafka receiver 是否启用自动提交位点。
+	// 用法：映射 kgo.DisableAutoCommit / AutoCommitInterval；仅 Type=kafka 时生效，nil 表示使用默认 true。
+	AutoCommit *bool `json:"auto_commit,omitempty"`
+	// AutoCommitInterval 是 Kafka 自动提交位点的周期，如 "5s"。
+	// 用法：映射 kgo.AutoCommitInterval；仅 Type=kafka 且 auto_commit=true 时生效。
+	AutoCommitInterval string `json:"auto_commit_interval,omitempty"`
 	// FetchMinBytes 是 Kafka 拉取最小字节数。
 	// 用法：调大可提高批量效率，但会增加端到端时延。
 	FetchMinBytes int `json:"fetch_min_bytes,omitempty"`
 	// FetchMaxBytes 是 Kafka 单次拉取最大字节数。
 	// 用法：需大于典型消息尺寸，避免频繁截断批次。
 	FetchMaxBytes int `json:"fetch_max_bytes,omitempty"`
+	// FetchMaxPartitionBytes 是 Kafka 单分区单次拉取最大字节数。
+	// 用法：映射 kgo.FetchMaxPartitionBytes；仅 Type=kafka 时生效，应不大于 fetch_max_bytes。
+	FetchMaxPartitionBytes int `json:"fetch_max_partition_bytes,omitempty"`
+	// IsolationLevel 控制 Kafka 拉取隔离级别。
+	// 用法：映射 kgo.FetchIsolationLevel；仅 Type=kafka 时生效，当前支持 read_uncommitted / read_committed。
+	IsolationLevel string `json:"isolation_level,omitempty"`
 	// FetchMaxWaitMS 是 Kafka 拉取最大等待时间（毫秒）。
 	// 用法：与 FetchMinBytes 配合调节吞吐与时延平衡。
 	FetchMaxWaitMS int `json:"fetch_max_wait_ms,omitempty"`
@@ -295,6 +347,24 @@ type SenderConfig struct {
 	// ClientID 是 Kafka 客户端标识。
 	// 用法：用于 broker 端日志追踪与监控分组。
 	ClientID string `json:"client_id,omitempty"`
+	// DialTimeout 是 Kafka 建连超时，如 "10s"。
+	// 用法：映射 franz-go / kgo 的 DialTimeout；仅 Type=kafka 时生效。
+	DialTimeout string `json:"dial_timeout,omitempty"`
+	// RequestTimeout 是 Kafka Produce 请求超时，如 "30s"。
+	// 用法：映射 kgo.ProduceRequestTimeout；仅 Type=kafka 时生效，只约束 Produce 请求在 broker 侧的等待时间。
+	RequestTimeout string `json:"request_timeout,omitempty"`
+	// RetryTimeout 是 Kafka 请求允许持续重试的总时长，如 "1m"。
+	// 用法：映射 kgo.RetryTimeout；仅 Type=kafka 时生效，超时后可重试请求会尽快失败返回。
+	RetryTimeout string `json:"retry_timeout,omitempty"`
+	// RetryBackoff 是 Kafka 可重试请求的退避间隔，如 "250ms"。
+	// 用法：映射 kgo.RetryBackoffFn；仅 Type=kafka 时生效，用于控制重试节奏。
+	RetryBackoff string `json:"retry_backoff,omitempty"`
+	// ConnIdleTimeout 是 Kafka 空闲连接回收超时，如 "30s"。
+	// 用法：映射 kgo.ConnIdleTimeout；仅 Type=kafka 时生效。
+	ConnIdleTimeout string `json:"conn_idle_timeout,omitempty"`
+	// MetadataMaxAge 是 Kafka 元数据缓存最大存活时间，如 "5m"。
+	// 用法：映射 kgo.MetadataMaxAge；仅 Type=kafka 时生效，调小可更快感知 topic / partition 变化。
+	MetadataMaxAge string `json:"metadata_max_age,omitempty"`
 
 	// Acks 是 Kafka 生产确认策略（0/1/all 或 -1）。
 	// 用法：可靠性优先选 all(-1)，低延迟可考虑 1 或 0。
@@ -323,6 +393,18 @@ type SenderConfig struct {
 	// Compression 是 Kafka 压缩算法（none/gzip/snappy/lz4/zstd）。
 	// 用法：带宽紧张时优先启用压缩，CPU 紧张时可用 none。
 	Compression string `json:"compression,omitempty"`
+	// CompressionLevel 是 Kafka 压缩级别。
+	// 用法：映射 franz-go CompressionCodec.WithLevel；仅对 gzip / lz4 / zstd 生效，0 表示使用库默认级别。
+	CompressionLevel int `json:"compression_level,omitempty"`
+	// Partitioner 指定 Kafka 分区策略。
+	// 用法：映射 kgo.RecordPartitioner；当前支持 sticky / round_robin / hash_key。
+	Partitioner string `json:"partitioner,omitempty"`
+	// RecordKey 是 Kafka record 固定 key。
+	// 用法：当所有消息都需要固定 key 时填写；与 record_key_source 互斥。
+	RecordKey string `json:"record_key,omitempty"`
+	// RecordKeySource 指定 Kafka record key 的来源字段。
+	// 用法：当前支持 payload / match_key / remote / local / file_name / file_path / transfer_id / route_sender；与 record_key 互斥。
+	RecordKeySource string `json:"record_key_source,omitempty"`
 
 	// LocalIP 是 UDP sender 绑定的本地出接口 IP。
 	// 用法：多网卡机器可显式指定出口网络。

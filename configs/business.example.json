@@ -25,7 +25,19 @@
       "topic": "order",
       "group_id": "forward-stub-order",
       "client_id": "forward-stub-rx-order",
-      "start_offset": "latest"
+      "start_offset": "latest",
+      "dial_timeout": "10s",
+      "conn_idle_timeout": "30s",
+      "metadata_max_age": "5m",
+      "retry_backoff": "250ms",
+      "session_timeout": "45s",
+      "heartbeat_interval": "3s",
+      "rebalance_timeout": "1m",
+      "balancers": ["cooperative_sticky"],
+      "auto_commit": true,
+      "auto_commit_interval": "5s",
+      "fetch_max_partition_bytes": 1048576,
+      "isolation_level": "read_uncommitted"
     },
     "rx_sftp_file": {
       "type": "sftp",
@@ -94,7 +106,17 @@
       "acks": "all",
       "idempotent": true,
       "retries": 20,
-      "max_in_flight_requests_per_connection": 1
+      "max_in_flight_requests_per_connection": 1,
+      "dial_timeout": "10s",
+      "request_timeout": "30s",
+      "retry_timeout": "1m",
+      "retry_backoff": "250ms",
+      "conn_idle_timeout": "30s",
+      "metadata_max_age": "5m",
+      "partitioner": "hash_key",
+      "record_key_source": "match_key",
+      "compression": "zstd",
+      "compression_level": 3
     },
     "tx_sftp": {
       "type": "sftp",

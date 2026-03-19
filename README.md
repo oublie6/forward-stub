@@ -79,6 +79,61 @@ go build -mod=vendor -o bin/forward-stub .
 
 GC 周期日志会输出 goroutine 数量、heap alloc、heap inuse、heap sys、stack inuse、next gc、GC 次数、最近一次 GC 暂停时间和 `gc_cpu_fraction`。
 
+## Kafka 可配置项补充
+
+当前版本已把**可以直接映射到 franz-go / kgo** 的 Kafka 关键选项补齐到 `receiver` / `sender` 各自配置中。
+
+### Kafka receiver 示例
+
+```json
+{
+  "type": "kafka",
+  "listen": "127.0.0.1:9092",
+  "topic": "input-topic",
+  "group_id": "forward-stub-group",
+  "dial_timeout": "10s",
+  "conn_idle_timeout": "30s",
+  "metadata_max_age": "5m",
+  "retry_backoff": "250ms",
+  "session_timeout": "45s",
+  "heartbeat_interval": "3s",
+  "rebalance_timeout": "1m",
+  "balancers": ["cooperative_sticky"],
+  "auto_commit": true,
+  "auto_commit_interval": "5s",
+  "fetch_max_partition_bytes": 1048576,
+  "isolation_level": "read_uncommitted"
+}
+```
+
+### Kafka sender 示例
+
+```json
+{
+  "type": "kafka",
+  "remote": "127.0.0.1:9092",
+  "topic": "output-topic",
+  "dial_timeout": "10s",
+  "request_timeout": "30s",
+  "retry_timeout": "1m",
+  "retry_backoff": "250ms",
+  "conn_idle_timeout": "30s",
+  "metadata_max_age": "5m",
+  "partitioner": "sticky",
+  "record_key_source": "match_key",
+  "compression": "zstd",
+  "compression_level": 3
+}
+```
+
+说明：
+
+- `partitioner` 当前支持 `sticky`、`round_robin`、`hash_key`。
+- `record_key` 与 `record_key_source` 互斥。
+- 当 `partitioner=hash_key` 时，必须提供 `record_key` 或 `record_key_source`。
+- `record_key_source` 当前仅支持直接读取现有 `packet.Meta` / `payload`：`payload`、`match_key`、`remote`、`local`、`file_name`、`file_path`、`transfer_id`、`route_sender`。
+- receiver 侧未新增 `request_timeout`、`commit_timeout`、`fetch_max_records`，因为当前 franz-go 版本或现有实现中没有可直接、安全映射的一一对应配置入口。
+
 ## 配置总览
 
 ### system config
