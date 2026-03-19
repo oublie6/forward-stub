@@ -223,6 +223,11 @@ func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePa
 				r.stats.AddBytes(n)
 			}
 			h := sha256.Sum256(buf[:n])
+			matchKey := BuildMatchKey(
+				"sftp",
+				MatchKeyField{Name: "remote_dir", Value: strings.TrimSpace(r.cfg.RemoteDir)},
+				MatchKeyField{Name: "file_name", Value: path.Base(filePath)},
+			)
 			r.onPacket(&packet.Packet{
 				Envelope: packet.Envelope{
 					Kind:    packet.PayloadKindFileChunk,
@@ -231,6 +236,7 @@ func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePa
 						Proto:      packet.ProtoSFTP,
 						Remote:     filePath,
 						Local:      r.cfg.Listen,
+						MatchKey:   matchKey,
 						FileName:   path.Base(filePath),
 						FilePath:   filePath,
 						TransferID: transferID,

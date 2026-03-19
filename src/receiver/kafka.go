@@ -148,14 +148,20 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 				r.stats.AddBytes(len(rec.Value))
 			}
 			payload, rel := packet.CopyFrom(rec.Value)
+			matchKey := BuildMatchKey(
+				"kafka",
+				MatchKeyField{Name: "topic", Value: rec.Topic},
+				MatchKeyField{Name: "partition", Value: fmt.Sprintf("%d", rec.Partition)},
+			)
 			r.onPacket(&packet.Packet{
 				Envelope: packet.Envelope{
 					Kind:    packet.PayloadKindStream,
 					Payload: payload,
 					Meta: packet.Meta{
-						Proto:  packet.ProtoKafka,
-						Remote: rec.Topic,
-						Local:  r.groupID,
+						Proto:    packet.ProtoKafka,
+						Remote:   rec.Topic,
+						Local:    r.groupID,
+						MatchKey: matchKey,
 					},
 				},
 				ReleaseFn: rel,

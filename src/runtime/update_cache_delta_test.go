@@ -1,3 +1,4 @@
+// Package runtime 负责维护转发运行时对象及其测试辅助逻辑。
 package runtime
 
 import (
@@ -9,6 +10,7 @@ import (
 	"forward-stub/src/pipeline"
 )
 
+// TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks 验证 sender 变化会触发依赖它的未改动任务重建。
 func TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks(t *testing.T) {
 	oldTasks := map[string]config.TaskConfig{
 		"t1": {Senders: []string{"s1", "s2"}},
@@ -36,6 +38,7 @@ func TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks(t *testin
 	}
 }
 
+// TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts 验证 sender 影响范围会并入既有 task 增删集合并保持有序。
 func TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts(t *testing.T) {
 	oldTasks := map[string]config.TaskConfig{
 		"ta": {Senders: []string{"sx"}},
@@ -65,6 +68,7 @@ func TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts(t *testin
 	}
 }
 
+// TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks 验证 pipeline 变化会触发依赖它的未改动任务重建。
 func TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks(t *testing.T) {
 	oldTasks := map[string]config.TaskConfig{
 		"t1": {Pipelines: []string{"p1", "p2"}},
@@ -92,6 +96,7 @@ func TestExpandTaskDeltaForPipelineChangesRebuildsImpactedUnchangedTasks(t *test
 	}
 }
 
+// TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree 穷举多维增删改组合，验证 task 重建计划不会遗漏或重复。
 func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
 	type op string
 	const (
@@ -100,22 +105,24 @@ func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
 		opModify op = "modify"
 	)
 
-	oldReceivers := map[string]config.ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":10001"}}
+	oldReceivers := map[string]config.ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":10001", Selector: "sel1"}}
+	oldSelectors := map[string]config.SelectorConfig{"sel1": {DefaultTaskSet: "ts1"}}
+	oldTaskSets := map[string][]string{"ts1": []string{"t1"}}
 	oldSenders := map[string]config.SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:9001"}}
 	oldPipelines := map[string][]config.StageConfig{"p1": {{Type: "trim"}}}
 	oldTasks := map[string]config.TaskConfig{
-		"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+		"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 	}
 
 	applyReceiverOp := func(base map[string]config.ReceiverConfig, o op) map[string]config.ReceiverConfig {
 		next := map[string]config.ReceiverConfig{"r1": base["r1"]}
 		switch o {
 		case opAdd:
-			next["r2"] = config.ReceiverConfig{Type: "udp_gnet", Listen: ":10002"}
+			next["r2"] = config.ReceiverConfig{Type: "udp_gnet", Listen: ":10002", Selector: "sel1"}
 		case opRemove:
 			delete(next, "r1")
 		case opModify:
-			next["r1"] = config.ReceiverConfig{Type: "udp_gnet", Listen: ":10003"}
+			next["r1"] = config.ReceiverConfig{Type: "udp_gnet", Listen: ":10003", Selector: "sel1"}
 		}
 		return next
 	}
@@ -147,7 +154,7 @@ func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
 		next := map[string]config.TaskConfig{"t1": base["t1"]}
 		switch o {
 		case opAdd:
-			next["t2"] = config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}}
+			next["t2"] = config.TaskConfig{Pipelines: []string{"p1"}, Senders: []string{"s1"}}
 		case opRemove:
 			delete(next, "t1")
 		case opModify:
@@ -165,11 +172,13 @@ func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
 				for _, top := range ops {
 					nextCfg := config.Config{
 						Receivers: applyReceiverOp(oldReceivers, rop),
+						Selectors: oldSelectors,
+						TaskSets:  oldTaskSets,
 						Senders:   applySenderOp(oldSenders, sop),
 						Pipelines: applyPipelineOp(oldPipelines, pop),
 						Tasks:     applyTaskOp(oldTasks, top),
 					}
-					plan := planBusinessDelta(oldReceivers, oldSenders, oldPipelines, oldTasks, nextCfg)
+					plan := planBusinessDelta(oldReceivers, oldSelectors, oldTaskSets, oldSenders, oldPipelines, oldTasks, nextCfg)
 
 					if hasDup(plan.taskAdded) {
 						t.Fatalf("taskAdded has duplicates in scenario r=%s s=%s p=%s t=%s: %v", rop, sop, pop, top, plan.taskAdded)
@@ -192,6 +201,7 @@ func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
 	}
 }
 
+// contains 判断字符串切片中是否存在指定项，供差量计划测试断言使用。
 func contains(items []string, want string) bool {
 	for _, item := range items {
 		if item == want {
@@ -201,6 +211,7 @@ func contains(items []string, want string) bool {
 	return false
 }
 
+// hasDup 判断字符串切片中是否出现重复项，供差量计划测试校验结果唯一性。
 func hasDup(items []string) bool {
 	seen := make(map[string]struct{}, len(items))
 	for _, item := range items {
@@ -212,25 +223,33 @@ func hasDup(items []string) bool {
 	return false
 }
 
+// TestApplyTaskDeltaAddUpdateRemove 验证任务在增量更新中可以完成新增、重建和删除。
 func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
 	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
-	st.subs["r1"] = map[string]struct{}{}
+	st.selectors["sel1"] = config.SelectorConfig{DefaultTaskSet: "ts1"}
+	st.taskSets["ts1"] = []string{"t1"}
+	st.receivers["r1"] = &ReceiverState{Name: "r1", SelectorName: "sel1"}
 
-	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
+	if err := st.addTask("t1", config.TaskConfig{Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
 		t.Fatalf("add initial task: %v", err)
+	}
+	if err := st.rebuildReceiverSelectors(); err != nil {
+		t.Fatalf("rebuild selectors: %v", err)
 	}
 
 	cfg := config.Config{
 		Version:   2,
-		Receivers: map[string]config.ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":1"}},
+		Receivers: map[string]config.ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":1", Selector: "sel1"}},
+		Selectors: map[string]config.SelectorConfig{"sel1": {DefaultTaskSet: "ts1"}},
+		TaskSets:  map[string][]string{"ts1": []string{"t1", "t2"}},
 		Senders:   map[string]config.SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:12345"}},
 		Pipelines: map[string][]config.StageConfig{"p1": {}},
 		Tasks: map[string]config.TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "pool", QueueSize: 1024},
-			"t2": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "pool", QueueSize: 1024},
+			"t2": {Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"},
 		},
 		Logging: config.LoggingConfig{},
 	}
@@ -246,6 +265,7 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	}
 
 	cfg2 := cfg
+	cfg2.TaskSets = map[string][]string{"ts1": []string{"t2"}}
 	cfg2.Tasks = map[string]config.TaskConfig{
 		"t2": cfg.Tasks["t2"],
 	}
@@ -257,44 +277,62 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	}
 }
 
+// TestRemoveTaskRefreshDispatchSnapshotImmediately 验证任务删除后 selector 快照会立即反映最新路由结果。
 func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
 	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
+	st.selectors["sel1"] = config.SelectorConfig{DefaultTaskSet: "ts1"}
+	st.taskSets["ts1"] = []string{"t1"}
+	st.receivers["r1"] = &ReceiverState{Name: "r1", SelectorName: "sel1"}
 
-	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
+	if err := st.addTask("t1", config.TaskConfig{Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
 		t.Fatalf("add task: %v", err)
+	}
+	if err := st.rebuildReceiverSelectors(); err != nil {
+		t.Fatalf("rebuild selectors: %v", err)
 	}
 	if got := len(st.getDispatchTasks("r1")); got != 1 {
 		t.Fatalf("expected dispatch snapshot has 1 task, got %d", got)
 	}
 
+	st.taskSets["ts1"] = nil
+	if err := st.rebuildReceiverSelectors(); err != nil {
+		t.Fatalf("rebuild selectors after remove: %v", err)
+	}
 	_ = st.removeTask("t1", false)
 	if got := len(st.getDispatchTasks("r1")); got != 0 {
 		t.Fatalf("expected dispatch snapshot has 0 task after remove, got %d", got)
 	}
 }
 
+// TestApplyBusinessDeltaUpdatesPayloadLogOptions 验证增量更新后任务 payload 日志配置会同步刷新。
 func TestApplyBusinessDeltaUpdatesPayloadLogOptions(t *testing.T) {
 	st := NewStore()
 	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
 	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
-	st.subs["r1"] = map[string]struct{}{}
-	st.receivers["r1"] = &ReceiverState{Name: "r1", Cfg: config.ReceiverConfig{Type: "udp_gnet", Listen: ":1"}}
+	st.selectors["sel1"] = config.SelectorConfig{DefaultTaskSet: "ts1"}
+	st.taskSets["ts1"] = []string{"t1"}
+	st.receivers["r1"] = &ReceiverState{Name: "r1", SelectorName: "sel1", Cfg: config.ReceiverConfig{Type: "udp_gnet", Listen: ":1", Selector: "sel1"}}
 
-	if err := st.addTask("t1", config.TaskConfig{Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{PayloadLogMaxBytes: 128}, nil); err != nil {
+	if err := st.addTask("t1", config.TaskConfig{Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{PayloadLogMaxBytes: 128}, nil); err != nil {
 		t.Fatalf("add initial task: %v", err)
+	}
+	if err := st.rebuildReceiverSelectors(); err != nil {
+		t.Fatalf("rebuild selectors: %v", err)
 	}
 
 	cfg := config.Config{
 		Version:   2,
-		Receivers: map[string]config.ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":1", LogPayloadRecv: true, PayloadLogMaxBytes: 64}},
+		Receivers: map[string]config.ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":1", Selector: "sel1", LogPayloadRecv: true, PayloadLogMaxBytes: 64}},
+		Selectors: map[string]config.SelectorConfig{"sel1": {DefaultTaskSet: "ts1"}},
+		TaskSets:  map[string][]string{"ts1": []string{"t1"}},
 		Senders:   map[string]config.SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:12345"}},
 		Pipelines: map[string][]config.StageConfig{"p1": {}},
 		Tasks: map[string]config.TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath", LogPayloadSend: true, PayloadLogMaxBytes: 32},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath", LogPayloadSend: true, PayloadLogMaxBytes: 32},
 		},
 		Logging: config.LoggingConfig{PayloadLogMaxBytes: 128},
 	}

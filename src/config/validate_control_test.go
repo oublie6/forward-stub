@@ -17,9 +17,10 @@ func TestValidateRejectsInvalidPprofPort(t *testing.T) {
 		},
 		Pipelines: map[string][]StageConfig{"p1": {}},
 		Tasks: map[string]TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
+	cfg = attachMinimalRouting(cfg)
 	cfg.ApplyDefaults()
 
 	err := cfg.Validate()
@@ -40,9 +41,10 @@ func TestValidateAllowsDisabledPprofPort(t *testing.T) {
 		},
 		Pipelines: map[string][]StageConfig{"p1": {}},
 		Tasks: map[string]TaskConfig{
-			"t1": {Receivers: []string{"r1"}, Pipelines: []string{"p1"}, Senders: []string{"s1"}},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
+	cfg = attachMinimalRouting(cfg)
 	cfg.ApplyDefaults()
 
 	if err := cfg.Validate(); err != nil {

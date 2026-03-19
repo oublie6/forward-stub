@@ -14,7 +14,7 @@ func TestLoadSystemAndBusinessLocal(t *testing.T) {
 	if err := os.WriteFile(systemPath, []byte(`{"control":{"timeout_sec":9},"logging":{"level":"warn"}}`), 0o644); err != nil {
 		t.Fatalf("write system config: %v", err)
 	}
-	if err := os.WriteFile(businessPath, []byte(`{"version":2,"receivers":{"r1":{"type":"udp_gnet","listen":":1"}},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:2"}},"pipelines":{"p1":[]},"tasks":{"t1":{"receivers":["r1"],"pipelines":["p1"],"senders":["s1"]}}}`), 0o644); err != nil {
+	if err := os.WriteFile(businessPath, []byte(`{"version":2,"receivers":{"r1":{"type":"udp_gnet","listen":":1","selector":"sel1"}},"selectors":{"sel1":{"matches":{"k1":"ts1"}}},"task_sets":{"ts1":["t1"]},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:2"}},"pipelines":{"p1":[]},"tasks":{"t1":{"pipelines":["p1"],"senders":["s1"]}}}`), 0o644); err != nil {
 		t.Fatalf("write business config: %v", err)
 	}
 
