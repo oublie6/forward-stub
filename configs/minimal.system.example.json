@@ -1,0 +1,22 @@
+{
+  "control": {
+    "api": "",
+    "timeout_sec": 5,
+    "config_watch_interval": "2s",
+    "pprof_port": -1
+  },
+  "logging": {
+    "level": "info",
+    "file": "",
+    "max_size_mb": 100,
+    "max_backups": 5,
+    "max_age_days": 30,
+    "compress": true,
+    "traffic_stats_interval": "1s",
+    "traffic_stats_sample_every": 1,
+    "payload_log_max_bytes": 256,
+    "payload_pool_max_cached_bytes": 0,
+    "gc_stats_log_enabled": false,
+    "gc_stats_log_interval": "1m"
+  }
+}

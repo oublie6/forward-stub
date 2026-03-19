@@ -1,0 +1,65 @@
+{
+  "version": 1005,
+  "receivers": {
+    "rx_udp": {
+      "type": "udp_gnet",
+      "listen": "0.0.0.0:19020",
+      "selector": "sel_models"
+    }
+  },
+  "selectors": {
+    "sel_models": {
+      "default_task_set": "ts_models"
+    }
+  },
+  "task_sets": {
+    "ts_models": [
+      "task_fastpath",
+      "task_pool",
+      "task_channel"
+    ]
+  },
+  "senders": {
+    "tx_udp": {
+      "type": "udp_unicast",
+      "remote": "127.0.0.1:21020",
+      "local_ip": "0.0.0.0",
+      "local_port": 21021
+    }
+  },
+  "pipelines": {
+    "pipe_passthrough": []
+  },
+  "tasks": {
+    "task_fastpath": {
+      "fast_path": true,
+      "pipelines": [
+        "pipe_passthrough"
+      ],
+      "senders": [
+        "tx_udp"
+      ]
+    },
+    "task_pool": {
+      "execution_model": "pool",
+      "pool_size": 2048,
+      "queue_size": 4096,
+      "pipelines": [
+        "pipe_passthrough"
+      ],
+      "senders": [
+        "tx_udp"
+      ]
+    },
+    "task_channel": {
+      "execution_model": "channel",
+      "channel_queue_size": 1024,
+      "pipelines": [
+        "pipe_passthrough"
+      ],
+      "senders": [
+        "tx_udp"
+      ]
+    }
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "version": 1002,
+  "receivers": {
+    "rx_udp": {
+      "type": "udp_gnet",
+      "listen": "0.0.0.0:19010",
+      "multicore": true,
+      "num_event_loop": 4,
+      "read_buffer_cap": 1048576,
+      "socket_recv_buffer": 1073741824,
+      "selector": "sel_net"
+    },
+    "rx_tcp": {
+      "type": "tcp_gnet",
+      "listen": "0.0.0.0:19011",
+      "multicore": true,
+      "num_event_loop": 4,
+      "read_buffer_cap": 1048576,
+      "socket_recv_buffer": 1073741824,
+      "frame": "u16be",
+      "selector": "sel_net"
+    }
+  },
+  "selectors": {
+    "sel_net": {
+      "matches": {
+        "udp|src_addr=10.0.0.1:9000": "ts_udp",
+        "tcp|src_addr=10.0.0.1:9000": "ts_tcp"
+      },
+      "default_task_set": "ts_udp"
+    }
+  },
+  "task_sets": {
+    "ts_udp": [
+      "task_udp"
+    ],
+    "ts_tcp": [
+      "task_tcp"
+    ]
+  },
+  "senders": {
+    "tx_udp": {
+      "type": "udp_unicast",
+      "remote": "127.0.0.1:21010",
+      "local_ip": "0.0.0.0",
+      "local_port": 21011,
+      "concurrency": 4
+    },
+    "tx_tcp": {
+      "type": "tcp_gnet",
+      "remote": "127.0.0.1:21012",
+      "frame": "u16be",
+      "concurrency": 4
+    }
+  },
+  "pipelines": {
+    "pipe_header_check": [
+      {
+        "type": "match_offset_bytes",
+        "offset": 0,
+        "hex": "aabb"
+      }
+    ]
+  },
+  "tasks": {
+    "task_udp": {
+      "execution_model": "fastpath",
+      "pipelines": [
+        "pipe_header_check"
+      ],
+      "senders": [
+        "tx_udp"
+      ]
+    },
+    "task_tcp": {
+      "execution_model": "pool",
+      "pool_size": 1024,
+      "queue_size": 2048,
+      "pipelines": [
+        "pipe_header_check"
+      ],
+      "senders": [
+        "tx_tcp"
+      ]
+    }
+  }
+}

@@ -1,50 +1,141 @@
-# Selector、Task Set 与 Dispatch
+# Selector、Task Set、Task 与 Dispatch
 
-## 1. selector 的职责
+## 1. 配置引用链路
 
-selector 只做一件事：
+当前配置引用关系固定为：
 
 ```text
-match key -> task set
+receiver.selector -> selectors.<name>
+selector.matches/default_task_set -> task_sets.<name>
+task_sets.<name>[] -> tasks.<name>
+tasks.<name>.pipelines[] -> pipelines.<name>
+tasks.<name>.senders[] -> senders.<name>
 ```
 
-并且是：
+这条链路里没有“task 直接绑定 receiver”的旧模型了。
 
-- 完整字符串精确匹配
-- 可选 default task set
-- 无规则遍历
-- 无 DSL
-- 无表达式引擎
+## 2. selector 的职责
 
-## 2. task set 的职责
+selector 只做：
 
-task set 只负责配置复用：
+```text
+match key -> task_set
+```
+
+字段说明：
+
+- `matches`：显式命中表。
+- `default_task_set`：未命中时的默认 task_set。
+
+关键规则：
+
+- key 必须由 receiver 生成的**完整 match key**。
+- value 必须是 task_set 名称。
+- 不支持通配符、正则、优先级、表达式。
+
+## 3. task_set 的职责
+
+task_set 只是 task 名称数组，例如：
 
 ```json
 "task_sets": {
-  "ts_order_shared": ["task_normalize", "task_forward"]
+  "ts_realtime": ["task_parse", "task_forward"]
 }
 ```
 
-多个 key 可以复用同一个 task set：
+它的用途只有两个：
 
-```json
-"matches": {
-  "kafka|topic=order|partition=0": "ts_order_shared",
-  "kafka|topic=order|partition=1": "ts_order_shared"
-}
+1. 让多个 match key 复用同一组 task。
+2. 让配置结构比直接在 selector 中写 task 数组更清晰。
+
+### 3.1 为什么 task_set 不在热路径里保留
+
+运行时会先把：
+
+```text
+match key -> task_set_name
 ```
 
-## 3. dispatch 的职责
+编译成：
 
-dispatch 现在不再按 receiver 名字查“订阅 task”。它只做：
+```text
+match key -> []*TaskState
+```
 
-1. 读取 receiver 当前绑定的 selector 快照
-2. 用 `packet.Meta.MatchKey` 做一次 map lookup
-3. 将结果 fanout 到 task
+这样 dispatch 热路径就只需要一次 map lookup，不需要再多跳一层 task_set。
 
-## 4. 默认行为
+## 4. task 的职责
 
-- 命中：执行命中的 task slice
-- 未命中且有 `default_task_set`：执行默认 task slice
-- 未命中且无 default：直接丢弃
+task 决定的是“命中之后怎么处理”：
+
+- 执行哪些 pipeline。
+- 把结果送到哪些 sender。
+- 采用哪种 execution model。
+- 是否打印发送前 payload 摘要。
+
+### 4.1 `fast_path` 与 `execution_model`
+
+- 新配置优先使用 `execution_model`。
+- `fast_path` 只是兼容旧配置的简写开关。
+- 当 `execution_model` 已经明确填写时，`fast_path` 不再参与决策。
+
+## 5. dispatch 的真实热路径
+
+当前 runtime 热路径如下：
+
+```text
+1. receiver 收到数据
+2. receiver 构造 packet + match key
+3. dispatch 读取 receiver 当前 selector 快照
+4. 用 match key 做一次 map 精确查找
+5. 命中 task 切片后 fan-out
+```
+
+### 5.1 未命中的行为
+
+- 命中 `matches`：执行命中的 task 列表。
+- 未命中但配置了 `default_task_set`：执行默认 task 列表。
+- 未命中且没有 `default_task_set`：直接丢弃。
+
+### 5.2 多 task fan-out 的复制语义
+
+- 如果只命中 1 个 task，原始 packet 会直接复用。
+- 如果命中多个 task，runtime 会为第 2 个及之后的 task 逐个 `Clone()`，避免共享 packet 带来释放时序冲突。
+
+## 6. route sender 与 selector 的边界
+
+两者经常被混淆，但职责完全不同：
+
+### selector
+
+- 决定：**这条数据应该进入哪些 task**。
+- 输入：`packet.Meta.MatchKey`。
+- 输出：`[]*TaskState`。
+
+### route stage（`route_offset_bytes_sender`）
+
+- 决定：**当前 task 内最终选哪个 sender**。
+- 输入：payload 中某个偏移的字节内容。
+- 输出：`packet.Meta.RouteSender`。
+
+### 必须记住的约束
+
+- route stage 命中的 sender 必须已经在当前 `task.senders` 中列出。
+- route stage 不会改变 selector 的匹配结果。
+
+## 7. match key 示例
+
+| 协议 | match key 示例 |
+|---|---|
+| UDP | `udp|src_addr=10.0.0.1:9000` |
+| TCP | `tcp|src_addr=10.0.0.1:9000` |
+| Kafka | `kafka|topic=orders|partition=0` |
+| SFTP | `sftp|remote_dir=/input|file_name=orders.csv` |
+
+## 8. 配置设计建议
+
+- 用 receiver 表达**接入协议**。
+- 用 selector 表达**主路由**。
+- 用 task_set 表达**复用**。
+- 用 task 表达**处理与发送**。
+- 用 pipeline 表达**数据变换或 task 内 sender 选择**。

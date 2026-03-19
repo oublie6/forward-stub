@@ -536,7 +536,7 @@ type TaskConfig struct {
 	// 用法："channel" 表示单 goroutine + 有界队列顺序处理，适用于需要 task 内保序且希望避免 receiver 串行执行放大的场景。
 	ExecutionModel string `json:"execution_model,omitempty"`
 	// QueueSize 是任务池在“满载时允许排队等待提交”的最大长度。
-	// 用法：>0 启用有界排队；<=0 时默认取 4096。该值越大，削峰能力越强但请求等待时延可能增大。
+	// 用法：>0 启用有界排队；<=0 时默认取 8192。该值越大，削峰能力越强但请求等待时延可能增大。
 	QueueSize int `json:"queue_size,omitempty"`
 	// ChannelQueueSize 是 channel 执行模型下的有界缓冲长度。
 	// 用法：仅 execution_model=channel 时生效；<=0 时默认回退到 QueueSize，确保与协程池排队上限一致。

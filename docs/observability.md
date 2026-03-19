@@ -1,110 +1,138 @@
-# Observability
+# 可观测性与相关配置
 
-## 1. 可观测性入口总览
+## 1. 可观测性入口一览
 
-当前仓库中可用的观测入口：
+当前代码内的主要观测手段有：
 
-- `src/logx` 结构化日志。
-- 流量聚合统计日志。
-- payload 摘要日志。
-- pprof HTTP 端点。
-- GC 周期日志。
-- `go test -bench` benchmark 输出。
+- 结构化日志（`logging.*`）
+- 流量统计日志（`traffic_stats_interval`、`traffic_stats_sample_every`）
+- receiver / task 级 payload 摘要日志
+- pprof（`control.pprof_port`）
+- GC 周期日志（`gc_stats_log_enabled`、`gc_stats_log_interval`）
+- benchmark 配置（`configs/bench.example.json`）
 
-## 2. 日志
+## 2. logging 配置如何影响运行时
 
-### 作用
+### 2.1 基础日志输出
 
-- 记录启动、配置加载、更新、错误、停止事件。
-- 记录 sender/receiver 异常。
-- 记录 task 队列满导致的丢包。
+- `logging.level`：控制常规日志级别，同时也会被 gnet sender/receiver 用来解析 gnet 自身日志级别。
+- `logging.file`：为空输出 stderr；非空则使用滚动日志文件。
+- `max_size_mb` / `max_backups` / `max_age_days` / `compress`：控制日志轮转策略。
 
-### 配置点
+### 2.2 流量统计日志
 
-- `logging.level`
-- `logging.file`
-- `max_size_mb/max_backups/max_age_days/compress`
-- `gc_stats_log_enabled`
-- `gc_stats_log_interval`
+- `traffic_stats_interval`：统计输出周期。
+- `traffic_stats_sample_every`：采样倍率，`1` 表示每条都统计。
+
+当前代码会在以下位置按 info 级别输出聚合流量统计：
+
+- receiver 侧：UDP、TCP、Kafka、SFTP 接收流量。
+- task 侧：任务发送流量。
+
+### 2.3 payload 摘要日志
+
+#### receiver 侧
+
+- 开关：`receiver.log_payload_recv`
+- 截断长度：`receiver.payload_log_max_bytes`
+- 回退：`logging.payload_log_max_bytes`
+
+#### task 侧
+
+- 开关：`task.log_payload_send`
+- 截断长度：`task.payload_log_max_bytes`
+- 回退：`logging.payload_log_max_bytes`
+
+### 2.4 payload 池上限
+
+- `logging.payload_pool_max_cached_bytes` 控制 payload 内存池总缓存上限。
+- `0` 表示默认不限制。
+- 负数会被默认值逻辑修正为 `0`，同时校验也要求它不能小于 `0`。
 
 ## 3. GC 周期日志
 
-GC 周期日志由 bootstrap 生命周期统一托管，可通过 `logging.gc_stats_log_enabled` 开关控制，并通过 `logging.gc_stats_log_interval` 配置输出周期。
+### 3.1 配置项
 
-日志字段固定包含：
+| 字段 | 默认值 | 说明 |
+|---|---|---|
+| `logging.gc_stats_log_enabled` | `false` | 是否开启 GC 周期日志。 |
+| `logging.gc_stats_log_interval` | `1m` | GC 周期日志间隔，必须是合法且 `>0` 的 duration。 |
+
+### 3.2 日志内容
+
+当前固定输出：
 
 - 采样时间
 - goroutine 数量
-- heap alloc / heap inuse / heap sys
-- stack inuse
-- next gc
+- `heap_alloc`
+- `heap_inuse`
+- `heap_sys`
+- `stack_inuse`
+- `next_gc`
 - GC 次数
-- 最近一次 GC 暂停时间
+- 最近一次 GC 时间
+- 最近一次 GC 暂停纳秒
 - `gc_cpu_fraction`
 
-该任务会随主进程优雅退出，不会残留后台 goroutine。
+### 3.3 生命周期
 
-## 4. 吞吐统计
+- logger 初始化后启动。
+- 收到停机信号时随主 context 一起停止。
+- 如果配置间隔非法，运行时会回退到默认值并打印告警。
 
-流量统计由 logx 聚合并按 `traffic_stats_interval` 输出。
+## 4. pprof
 
-可用于快速判断：
+### 4.1 配置项
 
-- 入站是否持续增长。
-- 出站是否低于入站。
-- 采样周期内是否有异常突降。
+- `control.pprof_port=-1`：禁用。
+- `control.pprof_port=0`：回退到默认 `6060`。
+- `control.pprof_port=6060`：监听 `:6060`。
 
-## 5. payload 观测
+### 4.2 常用接口
 
-receiver/task 支持 payload 摘要输出：
-
-- `log_payload_recv`
-- `log_payload_send`
-- `payload_log_max_bytes`
-
-建议仅在短时排障窗口开启。
-
-## 6. pprof
-
-开启方式：`control.pprof_port > 0`。
-
-常用接口：
-
+- `/debug/pprof/`
 - `/debug/pprof/profile`
 - `/debug/pprof/heap`
 - `/debug/pprof/goroutine`
+- `/debug/pprof/trace`
 
-## 7. benchmark
+### 4.3 当前实现特点
 
-benchmark 提供可重复内部链路性能观测：
+- 每次 pprof 请求都会打印结构化访问日志。
+- 停机时会对 pprof server 做显式 `Shutdown`。
 
-- 无丢包吞吐区间。
-- 执行模型对比。
-- payload 大小、workers、队列参数对比。
+## 5. benchmark 配置（`configs/bench.example.json`）
 
-建议将 benchmark 命令、commit 与 profile 文件一起归档。参数规范与边界解读详见 `docs/benchmark.md`。
+该文件不属于运行时主配置结构，而是 benchmark 驱动自己的参数集。当前字段如下：
 
-## 8. 关键观测指标建议
+| 字段 | 说明 |
+|---|---|
+| `mode` | benchmark 运行模式。 |
+| `duration` | 正式压测时长。 |
+| `warmup` | 预热时长。 |
+| `payload_size` | payload 字节数。 |
+| `workers` | 并发 worker 数。 |
+| `pps_per_worker` | 每个 worker 固定 PPS；`0` 时可配合 sweep。 |
+| `pps_sweep` | 多组 PPS 采样点。 |
+| `multicore` | 是否启用多核。 |
+| `udp_sink_readers` | UDP sink reader 数。 |
+| `udp_sink_read_buf` | UDP sink 读缓冲。 |
+| `task_fast_path` | benchmark 中是否使用 fast path。 |
+| `task_pool_size` | benchmark 中 task pool 大小。 |
+| `log_level` | benchmark 日志级别。 |
+| `log_file` | benchmark 日志文件。 |
+| `traffic_stats_interval` | benchmark 流量统计周期。 |
 
-- 入站速率与出站速率差值。
-- task 丢包告警频次。
-- sender 错误率。
-- CPU 利用率、内存占用、GC 抖动。
+## 6. 观测与配置联动建议
 
-## 9. 如何判断拥塞和回压
+### 6.1 排障窗口建议
 
-常见信号：
+- 开启 `receiver.log_payload_recv` 或 `task.log_payload_send` 时，只建议针对单链路、短时间开启。
+- 如需观察内存与 GC 抖动，再开启 `gc_stats_log_enabled`。
 
-- `pool queue full` 或 channel 入队失败日志。
-- 入站持续高但出站下降。
-- CPU 明显偏高且 sender 错误增加。
+### 6.2 生产默认建议
 
-## 10. 日志指标联动定位建议
-
-1. 先看流量统计判断是全局下降还是局部链路下降。
-2. 再看 error 日志定位 receiver 或 sender。
-3. 若资源异常，抓取 pprof 进一步分析热点和内存分布。
-
-## 11. 待补充项
-
-- 待确认：项目是否规划统一指标导出协议与标准仪表盘模板。
+- `logging.level=info` 或 `warn`
+- `gc_stats_log_enabled=false`
+- `payload` 摘要日志默认关闭
+- `traffic_stats_interval` 设为 `1s~10s` 之间的可观测窗口

@@ -1,149 +1,97 @@
-# Troubleshooting
+# 配置与运行故障排查
 
-## 1. 启动失败
+## 1. 启动即失败
 
-### 现象
+优先检查：
 
-- 进程启动后立即退出。
-- stderr 提示参数或配置错误。
+1. 参数模式是否正确。
+2. JSON 是否有未知字段。
+3. system / business 结构是否混写。
 
-### 排查路径
-
-1. 检查参数模式。
-2. 检查配置文件可读。
-3. 检查 JSON 格式。
+### 1.1 双配置模式命令
 
 ```bash
-jq . ./configs/system.example.json >/dev/null
-jq . ./configs/business.example.json >/dev/null
+./bin/forward-stub -system-config ./configs/system.example.json -business-config ./configs/business.example.json
 ```
 
-## 2. 配置错误
+### 1.2 单文件模式命令
 
-### 常见表现
+```bash
+./bin/forward-stub -config ./configs/example.json
+```
 
-- `配置校验失败`
-- task 引用不存在对象
-- sftp 指纹格式错误
+## 2. 最常见的配置错误
 
-### 排查
+### 2.1 selector 相关
 
-- 核对 task 的 receiver/sender/pipeline 名称。
-- 核对 `execution_model` 是否有效。
-- 核对 `host_key_fingerprint` 格式。
+- receiver 写了不存在的 `selector`。
+- selector 引用了不存在的 `task_set`。
+- task_set 引用了不存在的 task。
 
-## 3. receiver 启动异常
+### 2.2 task 相关
 
-### UDP/TCP
+- `execution_model` 不是 `fastpath` / `pool` / `channel`。
+- route stage 指向了不在当前 `task.senders` 列表里的 sender。
+
+### 2.3 sender 相关
+
+- `concurrency` 显式配置成了非 2 的幂。
+- Kafka `idempotent=true` 但 `acks` 不是 `all/-1`。
+- Kafka `partitioner=hash_key` 却没配置 `record_key` 或 `record_key_source`。
+
+### 2.4 receiver 相关
+
+- Kafka `heartbeat_interval >= session_timeout`。
+- Kafka `auto_commit=false` 却仍然配置了 `auto_commit_interval`。
+- SFTP `host_key_fingerprint` 格式不正确。
+
+## 3. 协议专项排查
+
+### 3.1 UDP / TCP
 
 ```bash
 ss -lntup | rg ':19000|:19001'
 ```
 
-关注：端口冲突、地址格式、权限。
+重点看：
 
-### Kafka
+- 端口是否已监听。
+- `frame` 是否和对端协议一致。
+- socket buffer 是否过小导致拥塞。
+
+### 3.2 Kafka
 
 ```bash
 nc -vz 127.0.0.1 9092
 ```
 
-关注：broker 可达、topic 存在、鉴权参数。
+重点看：
 
-### SFTP
+- broker 可达性。
+- topic 是否存在。
+- TLS / SASL 是否匹配。
+- `group_id`、`start_offset`、`balancers` 是否符合预期。
 
-关注：账号权限、目录存在、主机指纹一致。
-
-## 4. sender 发送异常
-
-### 排查顺序
-
-1. 目标端可达性。
-2. 目标端处理能力。
-3. sender 协议参数。
-4. task 是否 route 到错误 sender。
-
-建议同时检查：
-
-- sender `concurrency` 是否误配（非 2 的幂会被校验拒绝）。
-- Kafka 的 `topic` 与 broker ACL 是否匹配。
-
-## 5. 队列堆积与回压
-
-### 现象
-
-- 队列满日志。
-- 入站高出站低。
-
-### 排查
-
-1. 确认下游是否变慢。
-2. 检查 task 执行模型。
-3. 调整 `pool_size`、`queue_size`、`channel_queue_size`。
-4. 拆分热点 task。
-
-## 6. 吞吐下降
-
-### 判断依据
-
-- benchmark 结果出现显著回退。
-- 流量统计持续下降。
-
-### 排查命令
-
-```bash
-go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
-```
-
-结合日志判断是 receiver、task 还是 sender 瓶颈。
-
-判断依据：
-
-- 入站稳定但出站下降，多数为 sender 或下游问题。
-- 入站下降，多数为 receiver 或上游问题。
-- 入站和出站都下降，优先检查资源限制与配置变更。
-
-## 7. CPU 异常
-
-```bash
-top -H -p <pid>
-pidstat -t -p <pid> 1
-```
-
-- 单线程热点：优先检查执行模型和热点 sender。
-- 全局高 CPU：检查日志级别、payload 打印开关和 GC 周期日志。
-
-## 8. 内存异常
-
-```bash
-go tool pprof http://127.0.0.1:6060/debug/pprof/heap
-```
+### 3.3 SFTP
 
 重点看：
 
-- 队列是否过深。
-- 大 payload 是否异常增多。
-- 日志是否放大对象生命周期。
+- `host_key_fingerprint` 是否与服务端一致。
+- 账号是否有 `remote_dir` 的读/写/rename 权限。
+- `temp_suffix` 是否导致下游误读临时文件。
 
-如为持续增长，补充检查：
+## 4. 吞吐下降或回压
 
-- 是否反复触发大规模配置替换。
-- 是否存在异常大包持续输入。
+优先检查：
 
-## 9. 协议专项问题
+1. `execution_model` 是否合适。
+2. `pool_size` / `queue_size` / `channel_queue_size` 是否过小。
+3. sender 下游是否变慢。
+4. 是否误开 payload 摘要日志导致日志放大。
 
-- UDP：内核缓冲不足导致丢包。
-- TCP：frame 不匹配导致边界错误。
-- Kafka：SASL 或 TLS 参数不匹配。
-- SFTP：host key 指纹错误或目录权限不足。
+## 5. 想核对完整字段时看哪里
 
-## 10. 观测联动排查模板
-
-1. 看流量统计确认问题范围。
-2. 看 error 日志定位组件。
-3. 用场景化 benchmark 复现并量化。
-4. 必要时抓 pprof 定位热点。
-
-## 11. 待确认
-
-- 待确认：是否会补充统一指标系统以减少纯日志排障成本。
+- 顶层和所有字段：`docs/configuration.md`
+- 协议专属字段：`docs/receivers-and-senders.md`
+- 执行模型：`docs/execution-model.md`
+- 示例文件：`configs/*.example.json`
