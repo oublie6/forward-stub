@@ -226,7 +226,7 @@ func hasDup(items []string) bool {
 // TestApplyTaskDeltaAddUpdateRemove 验证任务在增量更新中可以完成新增、重建和删除。
 func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 	st := NewStore()
-	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
+	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{testNamedSender: testNamedSender{name: "s1"}}}
 	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
 	st.selectors["sel1"] = config.SelectorConfig{DefaultTaskSet: "ts1"}
@@ -280,7 +280,7 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 // TestRemoveTaskRefreshDispatchSnapshotImmediately 验证任务删除后 selector 快照会立即反映最新路由结果。
 func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
 	st := NewStore()
-	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
+	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{testNamedSender: testNamedSender{name: "s1"}}}
 	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
 	st.selectors["sel1"] = config.SelectorConfig{DefaultTaskSet: "ts1"}
@@ -310,7 +310,7 @@ func TestRemoveTaskRefreshDispatchSnapshotImmediately(t *testing.T) {
 // TestApplyBusinessDeltaUpdatesPayloadLogOptions 验证增量更新后任务 payload 日志配置会同步刷新。
 func TestApplyBusinessDeltaUpdatesPayloadLogOptions(t *testing.T) {
 	st := NewStore()
-	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{name: "s1"}}
+	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{testNamedSender: testNamedSender{name: "s1"}}}
 	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
 	st.selectors["sel1"] = config.SelectorConfig{DefaultTaskSet: "ts1"}

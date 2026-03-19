@@ -30,8 +30,7 @@ type benchScenario struct {
 
 // benchUDPDownstreamSender 模拟 UDP 下游发送端，仅做分片和目标轮询，不执行真实网络 IO。
 type benchUDPDownstreamSender struct {
-	// name 是发送端逻辑名称。
-	name string
+	testNamedSender
 	// shardMask 用于把递增序号映射到固定分片；要求并发度满足 2 的幂时效果最佳。
 	shardMask int
 	// nextShard 保存全局递增序号，供多协程并发取模分片。
@@ -41,15 +40,6 @@ type benchUDPDownstreamSender struct {
 	// targets 保存可选下游地址，仅用于模拟多目标场景下的轮询开销。
 	targets []string
 }
-
-// Name 返回模拟 UDP sender 的名称。
-func (s *benchUDPDownstreamSender) Name() string { return s.name }
-
-// Key 返回模拟 UDP sender 的唯一键。
-func (s *benchUDPDownstreamSender) Key() string { return "bench_udp|" + s.name }
-
-// Close 在纯内存基准中无需释放额外资源。
-func (s *benchUDPDownstreamSender) Close(context.Context) error { return nil }
 
 // Send 模拟按分片轮询目标地址的计算成本，不进行真实发送。
 func (s *benchUDPDownstreamSender) Send(_ context.Context, p *packet.Packet) error {
@@ -65,8 +55,7 @@ func (s *benchUDPDownstreamSender) Send(_ context.Context, p *packet.Packet) err
 
 // benchTCPDownstreamSender 模拟 TCP 下游 sender，可选是否做长度前缀封包。
 type benchTCPDownstreamSender struct {
-	// name 是发送端逻辑名称。
-	name string
+	testNamedSender
 	// withLen 表示是否模拟 u16be 长度头编码；为 false 时等价于裸流模式。
 	withLen bool
 	// shardMask 用于把递增序号映射到固定分片；要求并发度满足 2 的幂时效果最佳。
@@ -76,15 +65,6 @@ type benchTCPDownstreamSender struct {
 	// framePool 复用封包缓冲区，避免基准结果被重复分配放大。
 	framePool sync.Pool
 }
-
-// Name 返回模拟 TCP sender 的名称。
-func (s *benchTCPDownstreamSender) Name() string { return s.name }
-
-// Key 返回模拟 TCP sender 的唯一键。
-func (s *benchTCPDownstreamSender) Key() string { return "bench_tcp|" + s.name }
-
-// Close 在纯内存基准中无需释放额外资源。
-func (s *benchTCPDownstreamSender) Close(context.Context) error { return nil }
 
 // Send 模拟 TCP sender 的分片选择和可选的长度前缀封包成本。
 func (s *benchTCPDownstreamSender) Send(_ context.Context, p *packet.Packet) error {
@@ -110,8 +90,7 @@ func (s *benchTCPDownstreamSender) Send(_ context.Context, p *packet.Packet) err
 
 // benchKafkaDownstreamSender 模拟 Kafka sender 的分片、topic 和 header 处理开销。
 type benchKafkaDownstreamSender struct {
-	// name 是发送端逻辑名称。
-	name string
+	testNamedSender
 	// topic 保存目标 topic，仅用于模拟访问成本。
 	topic string
 	// shardMask 用于把递增序号映射到固定分片；要求并发度满足 2 的幂时效果最佳。
@@ -121,15 +100,6 @@ type benchKafkaDownstreamSender struct {
 	// headers 保存模拟消息头，用于覆盖 header 复制/访问场景。
 	headers [][2]string
 }
-
-// Name 返回模拟 Kafka sender 的名称。
-func (s *benchKafkaDownstreamSender) Name() string { return s.name }
-
-// Key 返回模拟 Kafka sender 的唯一键。
-func (s *benchKafkaDownstreamSender) Key() string { return "bench_kafka|" + s.name }
-
-// Close 在纯内存基准中无需释放额外资源。
-func (s *benchKafkaDownstreamSender) Close(context.Context) error { return nil }
 
 // Send 模拟 Kafka sender 在写入前对 topic、header 与 payload 元信息的访问成本。
 func (s *benchKafkaDownstreamSender) Send(_ context.Context, p *packet.Packet) error {
@@ -143,8 +113,7 @@ func (s *benchKafkaDownstreamSender) Send(_ context.Context, p *packet.Packet) e
 
 // benchSFTPDownstreamSender 模拟 SFTP sender 的分块落盘过程，并维护每个传输的写入进度。
 type benchSFTPDownstreamSender struct {
-	// name 是发送端逻辑名称。
-	name string
+	testNamedSender
 	// remoteDir 是模拟远端目录，用于构造最终路径和临时文件路径。
 	remoteDir string
 	// shardMask 用于把递增序号映射到固定分片；要求并发度满足 2 的幂时效果最佳。
@@ -156,15 +125,6 @@ type benchSFTPDownstreamSender struct {
 	// written 记录每个 transferID 已写入到的最新偏移，用于模拟续传进度。
 	written map[string]int64
 }
-
-// Name 返回模拟 SFTP sender 的名称。
-func (s *benchSFTPDownstreamSender) Name() string { return s.name }
-
-// Key 返回模拟 SFTP sender 的唯一键。
-func (s *benchSFTPDownstreamSender) Key() string { return "bench_sftp|" + s.name }
-
-// Close 在纯内存基准中无需释放额外资源。
-func (s *benchSFTPDownstreamSender) Close(context.Context) error { return nil }
 
 // Send 模拟 SFTP 分块写入和 EOF 清理状态的成本。
 func (s *benchSFTPDownstreamSender) Send(_ context.Context, p *packet.Packet) error {
@@ -257,7 +217,7 @@ func scenarioBenchmarks() []benchScenario {
 				for i := range t {
 					t[i] = "10.0.1." + strconv.Itoa(i+1) + ":9000"
 				}
-				return &benchUDPDownstreamSender{name: "udp", shardMask: concurrency - 1, targets: t, rr: make([]atomic.Uint64, concurrency)}
+				return &benchUDPDownstreamSender{testNamedSender: testNamedSender{name: "udp", key: "bench_udp|udp"}, shardMask: concurrency - 1, targets: t, rr: make([]atomic.Uint64, concurrency)}
 			},
 		},
 		{
@@ -267,7 +227,7 @@ func scenarioBenchmarks() []benchScenario {
 				return ingestUDPDatagram(payload, "10.0.0.1:12000", "10.0.0.2:13000")
 			},
 			mkSender: func(concurrency, targets int) sender.Sender {
-				return &benchTCPDownstreamSender{name: "tcp", withLen: true, shardMask: concurrency - 1, framePool: sync.Pool{New: func() any { b := make([]byte, 0, 2048); return &b }}}
+				return &benchTCPDownstreamSender{testNamedSender: testNamedSender{name: "tcp", key: "bench_tcp|tcp"}, withLen: true, shardMask: concurrency - 1, framePool: sync.Pool{New: func() any { b := make([]byte, 0, 2048); return &b }}}
 			},
 		},
 		{
@@ -281,7 +241,7 @@ func scenarioBenchmarks() []benchScenario {
 				for i := range t {
 					t[i] = "10.0.2." + strconv.Itoa(i+1) + ":9100"
 				}
-				return &benchUDPDownstreamSender{name: "udp", shardMask: concurrency - 1, targets: t, rr: make([]atomic.Uint64, concurrency)}
+				return &benchUDPDownstreamSender{testNamedSender: testNamedSender{name: "udp", key: "bench_udp|udp"}, shardMask: concurrency - 1, targets: t, rr: make([]atomic.Uint64, concurrency)}
 			},
 		},
 		{
@@ -295,7 +255,7 @@ func scenarioBenchmarks() []benchScenario {
 				for i := range t {
 					t[i] = "10.0.3." + strconv.Itoa(i+1) + ":9200"
 				}
-				return &benchUDPDownstreamSender{name: "udp", shardMask: concurrency - 1, targets: t, rr: make([]atomic.Uint64, concurrency)}
+				return &benchUDPDownstreamSender{testNamedSender: testNamedSender{name: "udp", key: "bench_udp|udp"}, shardMask: concurrency - 1, targets: t, rr: make([]atomic.Uint64, concurrency)}
 			},
 		},
 		{
@@ -305,7 +265,7 @@ func scenarioBenchmarks() []benchScenario {
 				return ingestUDPDatagram(payload, "10.2.0.1:12000", "10.2.0.2:13000")
 			},
 			mkSender: func(concurrency, targets int) sender.Sender {
-				return &benchKafkaDownstreamSender{name: "kafka", topic: "topic.out", shardMask: concurrency - 1, headers: [][2]string{{"x-scenario", "udp_to_kafka"}}}
+				return &benchKafkaDownstreamSender{testNamedSender: testNamedSender{name: "kafka", key: "bench_kafka|kafka"}, topic: "topic.out", shardMask: concurrency - 1, headers: [][2]string{{"x-scenario", "udp_to_kafka"}}}
 			},
 		},
 		{
@@ -319,7 +279,7 @@ func scenarioBenchmarks() []benchScenario {
 				return ingestSFTPChunk(payload, id, offset, total, eof)
 			},
 			mkSender: func(concurrency, targets int) sender.Sender {
-				return &benchTCPDownstreamSender{name: "tcp", withLen: true, shardMask: concurrency - 1, framePool: sync.Pool{New: func() any { b := make([]byte, 0, 2048); return &b }}}
+				return &benchTCPDownstreamSender{testNamedSender: testNamedSender{name: "tcp", key: "bench_tcp|tcp"}, withLen: true, shardMask: concurrency - 1, framePool: sync.Pool{New: func() any { b := make([]byte, 0, 2048); return &b }}}
 			},
 		},
 		{
@@ -335,7 +295,7 @@ func scenarioBenchmarks() []benchScenario {
 				return pkt
 			},
 			mkSender: func(concurrency, targets int) sender.Sender {
-				return &benchSFTPDownstreamSender{name: "sftp", remoteDir: "/out", shardMask: concurrency - 1, written: make(map[string]int64)}
+				return &benchSFTPDownstreamSender{testNamedSender: testNamedSender{name: "sftp", key: "bench_sftp|sftp"}, remoteDir: "/out", shardMask: concurrency - 1, written: make(map[string]int64)}
 			},
 		},
 	}

@@ -71,11 +71,7 @@ func (s *Store) setDispatchSubs(m map[string][]*TaskState) {
 			rs = &ReceiverState{Name: receiverName, SelectorName: "__test__"}
 			s.receivers[receiverName] = rs
 		}
-		rs.Selector.Store(&CompiledSelector{
-			Name:         "__test__",
-			TasksByKey:   map[string][]*TaskState{},
-			DefaultTasks: tasks,
-		})
+		rs.Selector.Store(newDefaultOnlyCompiledSelector("__test__", tasks))
 	}
 }
 

@@ -24,8 +24,8 @@ func newFastTask(t *testing.T, name string, s sender.Sender) *task.Task {
 // TestSelectorCompileExpandsTaskSetReuse 验证 selector 编译时会把 task_set 直接展开为任务切片。
 func TestSelectorCompileExpandsTaskSetReuse(t *testing.T) {
 	st := NewStore()
-	s1 := &captureSender{name: "s1"}
-	s2 := &captureSender{name: "s2"}
+	s1 := &captureSender{testNamedSender: testNamedSender{name: "s1"}}
+	s2 := &captureSender{testNamedSender: testNamedSender{name: "s2"}}
 	t1 := newFastTask(t, "t1", s1)
 	t2 := newFastTask(t, "t2", s2)
 	defer t1.StopGraceful()
@@ -61,21 +61,18 @@ func TestSelectorCompileExpandsTaskSetReuse(t *testing.T) {
 // TestDispatchUsesMatchKeyAndDefaultTasks 验证 dispatch 会优先使用 MatchKey 命中规则，并在未命中时走默认任务集。
 func TestDispatchUsesMatchKeyAndDefaultTasks(t *testing.T) {
 	ctx := context.Background()
-	sKafka := &captureSender{name: "kafka"}
-	sDefault := &captureSender{name: "default"}
+	sKafka := &captureSender{testNamedSender: testNamedSender{name: "kafka"}}
+	sDefault := &captureSender{testNamedSender: testNamedSender{name: "default"}}
 	tKafka := newFastTask(t, "kafka-task", sKafka)
 	tDefault := newFastTask(t, "default-task", sDefault)
 	defer tKafka.StopGraceful()
 	defer tDefault.StopGraceful()
 
 	rs := &ReceiverState{Name: "rx", LogPayloadRecv: false}
-	rs.Selector.Store(&CompiledSelector{
-		Name: "sel1",
-		TasksByKey: map[string][]*TaskState{
-			"kafka|topic=orders|partition=3": []*TaskState{{Name: "kafka-task", T: tKafka}},
-		},
-		DefaultTasks: []*TaskState{{Name: "default-task", T: tDefault}},
-	})
+	selector := newCompiledSelector("sel1", 1)
+	selector.TasksByKey["kafka|topic=orders|partition=3"] = []*TaskState{{Name: "kafka-task", T: tKafka}}
+	selector.DefaultTasks = []*TaskState{{Name: "default-task", T: tDefault}}
+	rs.Selector.Store(selector)
 
 	dispatchToSelector(ctx, rs, &packet.Packet{
 		Envelope: packet.Envelope{

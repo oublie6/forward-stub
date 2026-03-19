@@ -28,7 +28,7 @@ func BenchmarkPayloadLogSwitchThroughput(b *testing.B) {
 			for _, payloadLogEnabled := range []bool{false, true} {
 				caseName := fmt.Sprintf("%s_payloadlog_%t_%dB", proto, payloadLogEnabled, payloadSize)
 				b.Run(caseName, func(b *testing.B) {
-					sinkSender := &benchCounterSender{name: proto + "-sink"}
+					sinkSender := &benchCounterSender{testNamedSender: testNamedSender{name: proto + "-sink"}}
 					tk := &task.Task{
 						Name:           "bench-" + proto,
 						FastPath:       true,

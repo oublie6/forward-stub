@@ -11,16 +11,13 @@ import (
 )
 
 type namedCaptureSender struct {
-	name  string
+	testNamedSender
 	mu    sync.Mutex
 	count int
 }
 
 var _ sender.Sender = (*namedCaptureSender)(nil)
 
-func (s *namedCaptureSender) Name() string                { return s.name }
-func (s *namedCaptureSender) Key() string                 { return s.name }
-func (s *namedCaptureSender) Close(context.Context) error { return nil }
 func (s *namedCaptureSender) Send(context.Context, *packet.Packet) error {
 	s.mu.Lock()
 	s.count++
@@ -35,8 +32,8 @@ func (s *namedCaptureSender) Count() int {
 }
 
 func TestTaskRouteSenderSendsOnlyMatchedSender(t *testing.T) {
-	s1 := &namedCaptureSender{name: "kafka-a"}
-	s2 := &namedCaptureSender{name: "kafka-b"}
+	s1 := &namedCaptureSender{testNamedSender: testNamedSender{name: "kafka-a"}}
+	s2 := &namedCaptureSender{testNamedSender: testNamedSender{name: "kafka-b"}}
 	tk := &Task{Name: "route", ExecutionModel: ExecutionModelFastPath, Senders: []sender.Sender{s1, s2}}
 	if err := tk.Start(); err != nil {
 		t.Fatalf("start task: %v", err)
@@ -59,10 +56,10 @@ func TestTaskRouteSenderSendsOnlyMatchedSender(t *testing.T) {
 func BenchmarkTaskRouteSenderLookup(b *testing.B) {
 	senders := make([]sender.Sender, 0, 64)
 	for i := 0; i < 64; i++ {
-		senders = append(senders, &namedCaptureSender{name: "s" + string(rune('A'+(i%26))) + string(rune('a'+(i/26)))})
+		senders = append(senders, &namedCaptureSender{testNamedSender: testNamedSender{name: "s" + string(rune('A'+(i%26))) + string(rune('a'+(i/26)))}})
 	}
 	// ensure a deterministic target exists.
-	target := &namedCaptureSender{name: "target"}
+	target := &namedCaptureSender{testNamedSender: testNamedSender{name: "target"}}
 	senders = append(senders, target)
 	tk := &Task{Name: "bench-route", ExecutionModel: ExecutionModelFastPath, Senders: senders}
 	if err := tk.Start(); err != nil {

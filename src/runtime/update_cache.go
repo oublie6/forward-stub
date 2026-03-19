@@ -989,29 +989,20 @@ func (st *Store) rebuildReceiverSelectors() error {
 
 	compiled := make(map[string]*CompiledSelector, len(selectorCfg))
 	for name, sc := range selectorCfg {
-		cs := &CompiledSelector{Name: name, TasksByKey: make(map[string][]*TaskState, len(sc.Matches))}
+		cs := newCompiledSelector(name, len(sc.Matches))
 		for key, taskSetName := range sc.Matches {
-			taskNames := taskSets[taskSetName]
-			taskStates := make([]*TaskState, 0, len(taskNames))
-			for _, taskName := range taskNames {
-				ts := tasksByName[taskName]
-				if ts == nil {
-					return fmt.Errorf("selector %s task %s not found during compile", name, taskName)
-				}
-				taskStates = append(taskStates, ts)
+			taskStates, err := resolveTaskSetStates(name, taskSetName, taskSets, tasksByName)
+			if err != nil {
+				return err
 			}
 			cs.TasksByKey[key] = taskStates
 		}
 		if sc.DefaultTaskSet != "" {
-			taskNames := taskSets[sc.DefaultTaskSet]
-			cs.DefaultTasks = make([]*TaskState, 0, len(taskNames))
-			for _, taskName := range taskNames {
-				ts := tasksByName[taskName]
-				if ts == nil {
-					return fmt.Errorf("selector %s default task %s not found during compile", name, taskName)
-				}
-				cs.DefaultTasks = append(cs.DefaultTasks, ts)
+			defaultTasks, err := resolveTaskSetStates(name, sc.DefaultTaskSet, taskSets, tasksByName)
+			if err != nil {
+				return err
 			}
+			cs.DefaultTasks = defaultTasks
 		}
 		compiled[name] = cs
 	}
@@ -1020,6 +1011,22 @@ func (st *Store) rebuildReceiverSelectors() error {
 		rs.Selector.Store(compiled[rs.SelectorName])
 	}
 	return nil
+}
+
+// resolveTaskSetStates 将 task_set 名称展开为运行时任务状态切片。
+//
+// 该函数统一处理 selector 的显式匹配项和默认任务集，避免同一段“task_set -> taskState”展开逻辑在编译阶段重复维护。
+func resolveTaskSetStates(selectorName, taskSetName string, taskSets map[string][]string, tasksByName map[string]*TaskState) ([]*TaskState, error) {
+	taskNames := taskSets[taskSetName]
+	taskStates := make([]*TaskState, 0, len(taskNames))
+	for _, taskName := range taskNames {
+		ts := tasksByName[taskName]
+		if ts == nil {
+			return nil, fmt.Errorf("selector %s task %s not found during compile", selectorName, taskName)
+		}
+		taskStates = append(taskStates, ts)
+	}
+	return taskStates, nil
 }
 
 // dispatch 将单个输入包 fan-out 到 receiver 当前 selector 命中的所有任务。

@@ -196,7 +196,7 @@ func TestSimulatedDispatchAcrossProtocolCombinations(t *testing.T) {
 	for _, in := range types {
 		for _, out := range types {
 			t.Run(in+"_to_"+out, func(t *testing.T) {
-				cap := &captureSender{name: out}
+				cap := &captureSender{testNamedSender: testNamedSender{name: out}}
 				tk := &task.Task{Name: "task", FastPath: true, Senders: []sender.Sender{cap}}
 				if err := tk.Start(); err != nil {
 					t.Fatalf("task start: %v", err)

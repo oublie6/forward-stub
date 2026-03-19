@@ -97,24 +97,32 @@ type CompiledSelector struct {
 	DefaultTasks []*TaskState
 }
 
+// newCompiledSelector 创建一个空的 selector 编译结果。
+//
+// 约束：
+//   - name 仅用于日志和错误上下文，不参与匹配逻辑；
+//   - matchKeyCapacity 只用于初始化 map 容量，传入负值时按 0 处理；
+//   - 返回值始终携带已初始化的 TasksByKey，便于调用方直接填充匹配结果。
+func newCompiledSelector(name string, matchKeyCapacity int) *CompiledSelector {
+	if matchKeyCapacity < 0 {
+		matchKeyCapacity = 0
+	}
+	return &CompiledSelector{
+		Name:       name,
+		TasksByKey: make(map[string][]*TaskState, matchKeyCapacity),
+	}
+}
+
+// newDefaultOnlyCompiledSelector 创建只包含默认任务列表的 selector。
+//
+// 该辅助函数主要服务于测试代码，避免多处重复拼装“无显式匹配、仅默认路由”的 selector。
+func newDefaultOnlyCompiledSelector(name string, tasks []*TaskState) *CompiledSelector {
+	cs := newCompiledSelector(name, 0)
+	cs.DefaultTasks = append([]*TaskState(nil), tasks...)
+	return cs
+}
+
 // Match 根据 match key 返回命中的任务切片；若未命中则返回默认任务列表。
-func (s *CompiledSelector) Match(key string) []*TaskState {
-	if s == nil {
-		return nil
-	}
-	if tasks, ok := s.TasksByKey[key]; ok {
-		return tasks
-	}
-	return s.DefaultTasks
-}
-
-// CompiledSelector 是运行时编译后的极简精确匹配器。
-type CompiledSelector struct {
-	Name         string
-	TasksByKey   map[string][]*TaskState
-	DefaultTasks []*TaskState
-}
-
 func (s *CompiledSelector) Match(key string) []*TaskState {
 	if s == nil {
 		return nil
