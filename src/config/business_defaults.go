@@ -99,6 +99,9 @@ func (c *Config) ApplyDefaults() {
 	if c.Logging.TrafficStatsSampleEvery <= 0 {
 		c.Logging.TrafficStatsSampleEvery = DefaultTrafficStatsSampleEvery
 	}
+	if c.Logging.GCStatsInterval == "" {
+		c.Logging.GCStatsInterval = DefaultGCStatsInterval
+	}
 	if c.Logging.PayloadLogMaxBytes <= 0 {
 		c.Logging.PayloadLogMaxBytes = DefaultPayloadLogMaxBytes
 	}

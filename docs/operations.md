@@ -38,14 +38,17 @@
 关键日志类别：
 
 - 启动与配置加载日志。
+- 启动阶段 step start / step completed 日志。
 - task 队列满丢包日志。
 - sender 发送异常日志。
 - 流量聚合统计日志。
+- GC 周期统计日志（按需开启）。
 
 建议：
 
 - 生产默认 `info` 或 `warn`。
 - 排障窗口短时启用更高日志级别。
+- `gc_stats_enabled` 建议仅在需要持续观测 GC 行为时开启，并保持分钟级 `gc_stats_interval`。
 
 ## 5. 常用运维命令
 

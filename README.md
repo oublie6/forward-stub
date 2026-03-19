@@ -20,6 +20,8 @@
 - runtime 支持 dispatch 快照分发，降低热路径锁竞争。
 - 支持 system/business 双配置模式，兼容 legacy 单文件模式。
 - 支持 business 配置热更新（文件监听 + 信号触发）。
+- 启动阶段提供结构化分步日志，可快速定位卡顿/失败步骤。
+- 支持可关闭、低频、低侵入的 GC 周期观测日志。
 - 支持 payload 复用、队列边界和回压控制。
 
 ## 目录结构
@@ -246,6 +248,8 @@ go test ./src/runtime -bench BenchmarkScenarioForwarding -benchmem
     "compress": true,
     "traffic_stats_interval": "1s",
     "traffic_stats_sample_every": 1,
+    "gc_stats_enabled": false,
+    "gc_stats_interval": "5m",
     "payload_log_max_bytes": 256,
     "payload_pool_max_cached_bytes": 0
   },

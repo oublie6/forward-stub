@@ -18,10 +18,12 @@ const (
 	DefaultLogLevel                  = "info"
 	DefaultTrafficStatsInterval      = "1s"
 	DefaultTrafficStatsSampleEvery   = 1
+	DefaultGCStatsInterval           = "5m"
 	DefaultLogRotateMaxSizeMB        = 100
 	DefaultLogRotateMaxBackups       = 5
 	DefaultLogRotateMaxAgeDays       = 30
 	DefaultLogRotateCompress         = true
+	DefaultGCStatsEnabled            = false
 	DefaultPayloadLogMaxBytes        = 256
 	DefaultReceiverMulticore         = true
 	DefaultReceiverNumEventLoop      = 8
@@ -154,6 +156,12 @@ type LoggingConfig struct {
 	// TrafficStatsSampleEvery 为采样倍率，1 表示全量统计。
 	// 用法：高吞吐场景可调大以降低统计开销。
 	TrafficStatsSampleEvery int `json:"traffic_stats_sample_every,omitempty"`
+	// GCStatsEnabled 控制是否周期性打印 GC 统计日志。
+	// 用法：默认关闭；仅在需要持续观测 GC 行为时开启。
+	GCStatsEnabled bool `json:"gc_stats_enabled,omitempty"`
+	// GCStatsInterval 是 GC 统计日志的打印周期，如 "5m"。
+	// 用法：仅在 gc_stats_enabled=true 时生效；建议保持分钟级，避免日志噪音。
+	GCStatsInterval string `json:"gc_stats_interval,omitempty"`
 	// PayloadLogMaxBytes 是 payload 摘要日志的默认最大字节数。
 	// 用法：receiver/task 未单独配置时使用该值；建议设置为 64~1024。
 	PayloadLogMaxBytes int `json:"payload_log_max_bytes,omitempty"`

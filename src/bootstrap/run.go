@@ -4,11 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"time"
 
 	"forward-stub/src/app"
@@ -25,27 +27,41 @@ func Run(args []string) int {
 	legacyPath := fs.String("config", "", "legacy config json path (same file for system and business)")
 	systemPath := fs.String("system-config", "", "system config json path")
 	businessPath := fs.String("business-config", "", "business config json path")
+	prelog := stderrBootstrapLogger{out: os.Stderr}
+	logBootstrapStepDone(prelog, "process_start", "pid", os.Getpid(), "args_count", len(args))
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	logBootstrapStepDone(prelog, "cli_parse", "legacy_config", emptyAsUnset(*legacyPath), "system_config", emptyAsUnset(*systemPath), "business_config", emptyAsUnset(*businessPath))
 
+	logBootstrapStepStart(prelog, "resolve_config_paths")
 	sysPath, bizPath, err := config.ResolveConfigPaths(*legacyPath, *systemPath, *businessPath)
 	if err != nil {
+		logBootstrapStepFailed(prelog, "resolve_config_paths", "error", err)
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
 		return 1
 	}
+	logBootstrapStepDone(prelog, "resolve_config_paths", "system_config", sysPath, "business_config", bizPath)
 
-	sysCfg, _, cfg, err := loadConfigPair(context.Background(), sysPath, bizPath)
+	logBootstrapStepStart(prelog, "load_config_pair", "system_config", sysPath, "business_config", bizPath)
+	sysCfg, _, cfg, err := loadConfigPair(context.Background(), sysPath, bizPath, prelog)
 	if err != nil {
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
 		return 1
 	}
+	logBootstrapStepDone(prelog, "load_config_pair", "config_version", cfg.Version)
 
 	trafficStatsInterval, err := time.ParseDuration(cfg.Logging.TrafficStatsInterval)
 	if err != nil {
 		_, _ = os.Stderr.WriteString("invalid traffic_stats_interval: " + err.Error() + "\n")
 		return 1
 	}
+	gcStatsInterval, err := time.ParseDuration(cfg.Logging.GCStatsInterval)
+	if err != nil {
+		_, _ = os.Stderr.WriteString("invalid gc_stats_interval: " + err.Error() + "\n")
+		return 1
+	}
+	logBootstrapStepStart(prelog, "logger_init", "level", cfg.Logging.Level, "file", emptyAsUnset(cfg.Logging.File))
 	if err := logx.Init(logx.Options{
 		Level:                   cfg.Logging.Level,
 		File:                    cfg.Logging.File,
@@ -61,34 +77,56 @@ func Run(args []string) int {
 	}
 	defer func() { _ = logx.Sync() }()
 	lg := logx.L()
+	logBootstrapStepDone(lg, "logger_init", "level", cfg.Logging.Level, "file", emptyAsUnset(cfg.Logging.File))
 
+	stopGCStatsLogger := startGCStatsLogger(lg, cfg.Logging.GCStatsEnabled, gcStatsInterval)
+	defer stopGCStatsLogger()
+
+	logBootstrapStepStart(lg, "pprof_init", "port", cfg.Control.PprofPort)
 	pprofSrv := startPprofServer(lg, cfg.Control.PprofPort)
 
+	logBootstrapStepStart(lg, "runtime_create")
 	rt := app.NewRuntime()
+	logBootstrapStepDone(lg, "runtime_create")
+
+	logBootstrapStepStart(lg, "runtime_update_cache", "config_version", cfg.Version)
 	if err := rt.UpdateCache(context.Background(), cfg); err != nil {
+		logBootstrapStepFailed(lg, "runtime_update_cache", "config_version", cfg.Version, "error", err)
 		lg.Errorf("UpdateCache error: %v", err)
 		return 1
 	}
+	logBootstrapStepDone(lg, "runtime_update_cache", "config_version", cfg.Version)
+
+	logBootstrapStepStart(lg, "seed_system_config")
 	if err := rt.SeedSystemConfig(sysCfg); err != nil {
+		logBootstrapStepFailed(lg, "seed_system_config", "error", err)
 		lg.Errorf("seed system config error: %v", err)
 		return 1
 	}
+	logBootstrapStepDone(lg, "seed_system_config")
 
 	initialFingerprint, err := readConfigFingerprint(bizPath)
 	if err != nil {
+		logBootstrapStepFailed(lg, "business_fingerprint_init", "config", bizPath, "error", err)
 		lg.Errorw("init business config fingerprint failed", "config", bizPath, "error", err)
 		return 1
 	}
+	logBootstrapStepDone(lg, "business_fingerprint_init", "config", bizPath, "fingerprint", initialFingerprint)
 
 	configChangeCh := make(chan struct{}, 1)
 	watchDone := make(chan struct{})
+	logBootstrapStepStart(lg, "config_watcher_start", "config", bizPath, "interval", cfg.Control.ConfigWatchInterval)
 	go watchConfigFile(bizPath, initialFingerprint, cfg.Control.ConfigWatchInterval, configChangeCh, watchDone)
 	defer close(watchDone)
+	logBootstrapStepDone(lg, "config_watcher_start", "config", bizPath, "interval", cfg.Control.ConfigWatchInterval)
 
 	logStartupInfo(lg, sysPath, bizPath, cfg)
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, supportedSignals()...)
+	signals := supportedSignals()
+	signal.Notify(sigCh, signals...)
 	defer signal.Stop(sigCh)
+	logBootstrapStepDone(lg, "signal_listener_register", "signals", signalNames(signals))
+	logBootstrapStepDone(lg, "startup_ready", "config_version", cfg.Version)
 
 	for {
 		select {
@@ -134,7 +172,7 @@ func logStartupInfo(lg interface {
 		"business_config", businessPath,
 		"config_version", cfg.Version,
 	)
-	lg.Info("forward-stub started. Press Ctrl+C to stop.")
+	lg.Info("forward-stub startup completed, entering main loop. Press Ctrl+C to stop.")
 }
 
 // pprofResponseRecorder 是供 run.go 使用的包内辅助结构。
@@ -189,6 +227,7 @@ func startPprofServer(lg interface {
 	Warnw(string, ...interface{})
 }, port int) *http.Server {
 	if port <= 0 {
+		logBootstrapStepDone(lg, "pprof_init", "state", "disabled", "port", port)
 		return nil
 	}
 	addr := fmt.Sprintf(":%d", port)
@@ -204,7 +243,7 @@ func startPprofServer(lg interface {
 			lg.Warnw("pprof http server exited unexpectedly", "addr", addr, "error", err)
 		}
 	}()
-	lg.Infow("pprof http server enabled", "addr", addr)
+	logBootstrapStepDone(lg, "pprof_init", "state", "enabled", "addr", addr)
 	return srv
 }
 
@@ -257,7 +296,7 @@ func watchConfigFile(path, initialFingerprint, watchInterval string, notifyCh ch
 // reloadAndApplyBusinessConfig 是供 run.go 使用的包内辅助函数。
 func reloadAndApplyBusinessConfig(ctx context.Context, rt *app.Runtime, systemPath, businessPath, sourceKey, sourceValue string) (config.Config, bool) {
 	lg := logx.L()
-	systemCfg, _, next, err := loadConfigPair(ctx, systemPath, businessPath)
+	systemCfg, _, next, err := loadConfigPair(ctx, systemPath, businessPath, lg)
 	if err != nil {
 		lg.Errorw("reload config failed", sourceKey, sourceValue, "error", err)
 		return config.Config{}, false
@@ -274,22 +313,165 @@ func reloadAndApplyBusinessConfig(ctx context.Context, rt *app.Runtime, systemPa
 }
 
 // loadConfigPair 是供 run.go 使用的包内辅助函数。
-func loadConfigPair(ctx context.Context, systemPath, businessPath string) (config.SystemConfig, config.BusinessConfig, config.Config, error) {
+func loadConfigPair(ctx context.Context, systemPath, businessPath string, progress bootstrapStepLogger) (config.SystemConfig, config.BusinessConfig, config.Config, error) {
+	logBootstrapStepStart(progress, "config_local_load", "system_config", systemPath, "business_config", businessPath)
 	sys, biz, cfg, err := config.LoadLocalPair(systemPath, businessPath)
 	if err != nil {
+		logBootstrapStepFailed(progress, "config_local_load", "error", err)
 		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, err
 	}
+	logBootstrapStepDone(progress, "config_local_load", "system_config", systemPath, "business_config", businessPath, "config_version", cfg.Version)
 	if cfg.Control.API != "" {
+		logBootstrapStepStart(progress, "control_api_fetch", "api", cfg.Control.API, "timeout_sec", cfg.Control.TimeoutSec)
 		cli := control.NewConfigAPIClient(cfg.Control.API, cfg.Control.TimeoutSec)
 		biz, err = cli.FetchBusinessConfig(ctx)
 		if err != nil {
+			logBootstrapStepFailed(progress, "control_api_fetch", "api", cfg.Control.API, "error", err)
 			return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("fetch business config from api error: %w", err)
 		}
 		cfg = sys.Merge(biz)
+		logBootstrapStepDone(progress, "control_api_fetch", "api", cfg.Control.API, "config_version", cfg.Version)
+	} else {
+		logBootstrapStepDone(progress, "control_api_fetch", "state", "disabled")
 	}
+	logBootstrapStepStart(progress, "config_apply_defaults")
 	cfg.ApplyDefaults()
+	logBootstrapStepDone(progress, "config_apply_defaults", "pprof_port", cfg.Control.PprofPort, "gc_stats_enabled", cfg.Logging.GCStatsEnabled, "gc_stats_interval", cfg.Logging.GCStatsInterval)
+	logBootstrapStepStart(progress, "config_validate")
 	if err := cfg.Validate(); err != nil {
+		logBootstrapStepFailed(progress, "config_validate", "error", err)
 		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("config validate error: %w", err)
 	}
+	logBootstrapStepDone(progress, "config_validate", "receivers", len(cfg.Receivers), "tasks", len(cfg.Tasks), "senders", len(cfg.Senders))
 	return sys, biz, cfg, nil
+}
+
+type bootstrapStepLogger interface {
+	Infow(string, ...interface{})
+	Warnw(string, ...interface{})
+}
+
+type stderrBootstrapLogger struct {
+	out io.Writer
+}
+
+func (l stderrBootstrapLogger) Infow(msg string, keysAndValues ...interface{}) {
+	writeBootstrapLogLine(l.out, "INFO", msg, keysAndValues...)
+}
+
+func (l stderrBootstrapLogger) Warnw(msg string, keysAndValues ...interface{}) {
+	writeBootstrapLogLine(l.out, "WARN", msg, keysAndValues...)
+}
+
+func writeBootstrapLogLine(out io.Writer, level, msg string, keysAndValues ...interface{}) {
+	if out == nil {
+		return
+	}
+	_, _ = fmt.Fprintln(out, formatBootstrapLogLine(level, msg, keysAndValues...))
+}
+
+func formatBootstrapLogLine(level, msg string, keysAndValues ...interface{}) string {
+	var b strings.Builder
+	b.WriteString(level)
+	b.WriteString(" ")
+	b.WriteString(msg)
+	for i := 0; i+1 < len(keysAndValues); i += 2 {
+		b.WriteByte(' ')
+		b.WriteString(fmt.Sprint(keysAndValues[i]))
+		b.WriteByte('=')
+		b.WriteString(fmt.Sprint(keysAndValues[i+1]))
+	}
+	if len(keysAndValues)%2 == 1 {
+		b.WriteString(" extra=")
+		b.WriteString(fmt.Sprint(keysAndValues[len(keysAndValues)-1]))
+	}
+	return b.String()
+}
+
+func logBootstrapStepStart(l bootstrapStepLogger, step string, keysAndValues ...interface{}) {
+	if l == nil {
+		return
+	}
+	l.Infow("bootstrap step starting", append([]interface{}{"step", step}, keysAndValues...)...)
+}
+
+func logBootstrapStepDone(l bootstrapStepLogger, step string, keysAndValues ...interface{}) {
+	if l == nil {
+		return
+	}
+	l.Infow("bootstrap step completed", append([]interface{}{"step", step}, keysAndValues...)...)
+}
+
+func logBootstrapStepFailed(l bootstrapStepLogger, step string, keysAndValues ...interface{}) {
+	if l == nil {
+		return
+	}
+	l.Warnw("bootstrap step failed", append([]interface{}{"step", step}, keysAndValues...)...)
+}
+
+func emptyAsUnset(v string) string {
+	if strings.TrimSpace(v) == "" {
+		return "unset"
+	}
+	return v
+}
+
+func signalNames(signals []os.Signal) string {
+	names := make([]string, 0, len(signals))
+	for _, sig := range signals {
+		names = append(names, sig.String())
+	}
+	return strings.Join(names, ",")
+}
+
+func startGCStatsLogger(lg bootstrapStepLogger, enabled bool, interval time.Duration) func() {
+	if !enabled {
+		logBootstrapStepDone(lg, "gc_stats_logger_start", "state", "disabled")
+		return func() {}
+	}
+	logBootstrapStepStart(lg, "gc_stats_logger_start", "interval", interval.String())
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		var prev runtime.MemStats
+		runtime.ReadMemStats(&prev)
+		logBootstrapStepDone(lg, "gc_stats_logger_start", "state", "enabled", "interval", interval.String())
+
+		for {
+			select {
+			case <-ctx.Done():
+				logBootstrapStepDone(lg, "gc_stats_logger_stop")
+				return
+			case <-ticker.C:
+				var cur runtime.MemStats
+				runtime.ReadMemStats(&cur)
+				fields := []interface{}{
+					"num_gc", cur.NumGC,
+					"gc_count_delta", cur.NumGC - prev.NumGC,
+					"pause_total_ns", cur.PauseTotalNs,
+					"pause_total_delta_ns", cur.PauseTotalNs - prev.PauseTotalNs,
+					"heap_alloc", cur.HeapAlloc,
+					"heap_inuse", cur.HeapInuse,
+					"heap_sys", cur.HeapSys,
+					"heap_objects", cur.HeapObjects,
+					"next_gc", cur.NextGC,
+					"gc_cpu_fraction", cur.GCCPUFraction,
+				}
+				if cur.LastGC > 0 {
+					fields = append(fields, "last_gc", time.Unix(0, int64(cur.LastGC)).UTC().Format(time.RFC3339Nano))
+				}
+				lg.Infow("gc stats", fields...)
+				prev = cur
+			}
+		}
+	}()
+
+	return func() {
+		cancel()
+		<-done
+	}
 }

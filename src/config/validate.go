@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Validate 负责该函数对应的核心逻辑，详见实现细节。
@@ -31,6 +32,9 @@ func (c *Config) Validate() error {
 
 	if c.Logging.PayloadPoolMaxCachedBytes < 0 {
 		return errors.New("logging payload_pool_max_cached_bytes must be >= 0")
+	}
+	if _, err := parsePositiveDuration("logging gc_stats_interval", c.Logging.GCStatsInterval); err != nil {
+		return err
 	}
 
 	if c.Control.PprofPort < -1 || c.Control.PprofPort > 65535 {
@@ -338,6 +342,21 @@ func normalizePortRange(raw string) (string, error) {
 		return strconv.Itoa(int(start)), nil
 	}
 	return fmt.Sprintf("%d-%d", start, end), nil
+}
+
+func parsePositiveDuration(field, raw string) (time.Duration, error) {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, fmt.Errorf("%s invalid: %w", field, err)
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("%s must be > 0", field)
+	}
+	return d, nil
 }
 
 // parsePort 是供 validate.go 使用的包内辅助函数。

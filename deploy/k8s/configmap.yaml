@@ -17,6 +17,8 @@ data:
         "file": "/var/log/forward-stub/app.log",
         "traffic_stats_interval": "5s",
         "traffic_stats_sample_every": 1,
+        "gc_stats_enabled": false,
+        "gc_stats_interval": "5m",
         "compress": true,
         "max_size_mb": 100,
         "max_backups": 5,

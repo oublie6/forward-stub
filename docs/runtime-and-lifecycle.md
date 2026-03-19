@@ -15,9 +15,12 @@
 3. `loadConfigPair` 加载 system/business 并合并。
 4. `ApplyDefaults` 和 `Validate` 形成可运行配置。
 5. 初始化 `logx`。
-6. 按 `control.pprof_port` 启动 pprof 服务。
-7. 创建 `app.Runtime` 并执行首次 `UpdateCache`。
-8. 记录 system 配置基线，启动文件监听和信号监听。
+6. 按 `logging.gc_stats_enabled/gc_stats_interval` 决定是否启动 GC 周期日志。
+7. 按 `control.pprof_port` 启动 pprof 服务。
+8. 创建 `app.Runtime` 并执行首次 `UpdateCache`。
+9. 记录 system 配置基线，启动文件监听和信号监听。
+
+启动阶段会按 step start / step completed 风格打印关键里程碑，便于定位“卡在配置加载、控制面拉取、校验、logger、pprof、runtime 初始化”等具体阶段。
 
 ## 3. 运行时构建逻辑
 

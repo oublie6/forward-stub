@@ -117,6 +117,8 @@ config
 | `compress` | bool | 历史分卷压缩 | 否 | `true` | `file` 非空时 | 未设置回退默认 |
 | `traffic_stats_interval` | string(duration) | 流量统计输出周期 | 否 | `"1s"` | 日志模块 | 启动时解析，非法值启动失败 |
 | `traffic_stats_sample_every` | int | 流量统计采样倍率 | 否 | `1` | 日志模块 | <=0 回退默认 |
+| `gc_stats_enabled` | bool | 是否周期性打印 GC 统计日志 | 否 | `false` | 启动后后台观测 goroutine | 关闭时不会启动 goroutine |
+| `gc_stats_interval` | string(duration) | GC 统计日志输出周期 | 否 | `"5m"` | `gc_stats_enabled=true` 时生效 | 需为正 duration；非法值启动失败 |
 | `payload_log_max_bytes` | int | payload 摘要默认截断长度 | 否 | `256` | receiver/task payload 日志 | <=0 回退默认 |
 | `payload_pool_max_cached_bytes` | int64 | payload 内存池缓存上限 | 否 | `0` | payload pool | `<0` 校验失败；`0` 表示不限制 |
 

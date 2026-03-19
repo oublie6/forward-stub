@@ -24,7 +24,7 @@ func TestLoadConfigPairAppliesDefaultsWithoutAPI(t *testing.T) {
 		t.Fatalf("write business config: %v", err)
 	}
 
-	_, _, cfg, err := loadConfigPair(context.Background(), systemPath, businessPath)
+	_, _, cfg, err := loadConfigPair(context.Background(), systemPath, businessPath, nil)
 	if err != nil {
 		t.Fatalf("load config pair: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestLoadConfigPairAppliesDefaultsAfterAPIOverride(t *testing.T) {
 		t.Fatalf("write business config: %v", err)
 	}
 
-	_, _, cfg, err := loadConfigPair(context.Background(), systemPath, businessPath)
+	_, _, cfg, err := loadConfigPair(context.Background(), systemPath, businessPath, nil)
 	if err != nil {
 		t.Fatalf("load config pair: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestLoadConfigPairAPIOnlyBusinessAndMergeSystem(t *testing.T) {
 		t.Fatalf("write business config: %v", err)
 	}
 
-	if _, _, _, err := loadConfigPair(context.Background(), systemPath, businessPath); err == nil {
+	if _, _, _, err := loadConfigPair(context.Background(), systemPath, businessPath, nil); err == nil {
 		t.Fatalf("expected api business-only schema violation")
 	}
 }

@@ -23,6 +23,18 @@ func TestApplyDefaultsKeepsDisabledPprofPort(t *testing.T) {
 	}
 }
 
+// TestApplyDefaultsSetsGCStatsDefaults 验证 config 包中 ApplyDefaultsSetsGCStatsDefaults 的行为。
+func TestApplyDefaultsSetsGCStatsDefaults(t *testing.T) {
+	cfg := Config{}
+	cfg.ApplyDefaults()
+	if cfg.Logging.GCStatsEnabled != DefaultGCStatsEnabled {
+		t.Fatalf("unexpected gc_stats_enabled default: %v", cfg.Logging.GCStatsEnabled)
+	}
+	if cfg.Logging.GCStatsInterval != DefaultGCStatsInterval {
+		t.Fatalf("unexpected gc_stats_interval default: %q", cfg.Logging.GCStatsInterval)
+	}
+}
+
 // TestApplyDefaultsSetsReceiverMulticoreWhenUnset 验证 config 包中 ApplyDefaultsSetsReceiverMulticoreWhenUnset 的行为。
 func TestApplyDefaultsSetsReceiverMulticoreWhenUnset(t *testing.T) {
 	cfg := Config{Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000"}}}
