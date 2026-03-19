@@ -71,7 +71,6 @@ receiver -> selector -> task(pipeline + sender)
 
 ```json
 {
-  "version": 1001,
   "receivers": {
     "rx_udp": {
       "type": "udp_gnet",

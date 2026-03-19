@@ -24,6 +24,7 @@
     "rx_udp_ingress": {
       "type": "udp_gnet",
       "listen": "0.0.0.0:19000",
+      "selector": "sel_ingress",
       "multicore": true,
       "num_event_loop": 8,
       "read_buffer_cap": 2097152,
@@ -292,7 +293,7 @@
       "queue_size": 4096,
       "channel_queue_size": 4096,
       "pipelines": [
-        "pipe_route_sender"
+        "pipe_replace"
       ],
       "senders": [
         "tx_udp",
@@ -354,7 +355,7 @@
     "task_clear_file": {
       "execution_model": "fastpath",
       "pipelines": [
-        "pipe_clear_file"
+        "pipe_replace"
       ],
       "senders": [
         "tx_sftp"
