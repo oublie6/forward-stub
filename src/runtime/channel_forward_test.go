@@ -1,3 +1,4 @@
+// Package runtime 负责维护转发运行时对象及其测试辅助逻辑。
 package runtime
 
 import (
@@ -10,6 +11,7 @@ import (
 	"forward-stub/src/config"
 )
 
+// TestForwardUDPToUDPWithChannelTaskModel 验证 channel 执行模型下的数据包仍可完成 UDP 到 UDP 的真实转发。
 func TestForwardUDPToUDPWithChannelTaskModel(t *testing.T) {
 	recvPort := freeUDPPort(t)
 	sendPort := freeUDPPort(t)
@@ -38,7 +40,13 @@ func TestForwardUDPToUDPWithChannelTaskModel(t *testing.T) {
 		Version: 1,
 		Logging: config.LoggingConfig{Level: "error"},
 		Receivers: map[string]config.ReceiverConfig{
-			"r1": {Type: "udp_gnet", Listen: fmt.Sprintf("udp://127.0.0.1:%d", recvPort)},
+			"r1": {Type: "udp_gnet", Listen: fmt.Sprintf("udp://127.0.0.1:%d", recvPort), Selector: "sel1"},
+		},
+		Selectors: map[string]config.SelectorConfig{
+			"sel1": {DefaultTaskSet: "ts1"},
+		},
+		TaskSets: map[string][]string{
+			"ts1": []string{"t1"},
 		},
 		Senders: map[string]config.SenderConfig{
 			"s1": {Type: "udp_unicast", Remote: fmt.Sprintf("127.0.0.1:%d", sendPort), LocalIP: "127.0.0.1", LocalPort: localPort},
@@ -47,7 +55,6 @@ func TestForwardUDPToUDPWithChannelTaskModel(t *testing.T) {
 			"t1": {
 				ExecutionModel: "channel",
 				QueueSize:      128,
-				Receivers:      []string{"r1"},
 				Pipelines:      []string{"p"},
 				Senders:        []string{"s1"},
 			},

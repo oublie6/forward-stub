@@ -48,14 +48,76 @@ func NewKafkaReceiver(name string, rc config.ReceiverConfig) (*KafkaReceiver, er
 	if len(brs) == 0 {
 		return nil, errors.New("kafka receiver requires brokers in listen/remote")
 	}
+	dialTimeout, err := kafkaDurationOrDefault(rc.DialTimeout, config.DefaultKafkaDialTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("kafka receiver dial_timeout 配置非法: %w", err)
+	}
+	connIdleTimeout, err := kafkaDurationOrDefault(rc.ConnIdleTimeout, config.DefaultKafkaConnIdleTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("kafka receiver conn_idle_timeout 配置非法: %w", err)
+	}
+	metadataMaxAge, err := kafkaDurationOrDefault(rc.MetadataMaxAge, config.DefaultKafkaMetadataMaxAge)
+	if err != nil {
+		return nil, fmt.Errorf("kafka receiver metadata_max_age 配置非法: %w", err)
+	}
+	retryBackoff, err := kafkaDurationOrDefault(rc.RetryBackoff, config.DefaultKafkaRetryBackoff)
+	if err != nil {
+		return nil, fmt.Errorf("kafka receiver retry_backoff 配置非法: %w", err)
+	}
+	sessionTimeout, err := kafkaDurationOrDefault(rc.SessionTimeout, config.DefaultKafkaReceiverSessionTTL)
+	if err != nil {
+		return nil, fmt.Errorf("kafka receiver session_timeout 配置非法: %w", err)
+	}
+	heartbeatInterval, err := kafkaDurationOrDefault(rc.HeartbeatInterval, config.DefaultKafkaReceiverHeartbeat)
+	if err != nil {
+		return nil, fmt.Errorf("kafka receiver heartbeat_interval 配置非法: %w", err)
+	}
+	rebalanceTimeout, err := kafkaDurationOrDefault(rc.RebalanceTimeout, config.DefaultKafkaReceiverRebalanceTTL)
+	if err != nil {
+		return nil, fmt.Errorf("kafka receiver rebalance_timeout 配置非法: %w", err)
+	}
+	autoCommit := true
+	if rc.AutoCommit != nil {
+		autoCommit = *rc.AutoCommit
+	}
+	autoCommitInterval := time.Duration(0)
+	if autoCommit {
+		autoCommitInterval, err = kafkaDurationOrDefault(rc.AutoCommitInterval, config.DefaultKafkaReceiverAutoCommitIv)
+		if err != nil {
+			return nil, fmt.Errorf("kafka receiver auto_commit_interval 配置非法: %w", err)
+		}
+	}
+	balancers, err := kafkaGroupBalancers(rc.Balancers)
+	if err != nil {
+		return nil, err
+	}
+	isolationLevel, err := kafkaIsolationLevel(rc.IsolationLevel)
+	if err != nil {
+		return nil, err
+	}
 
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(brs...),
 		kgo.ConsumerGroup(groupID),
 		kgo.ConsumeTopics(rc.Topic),
+		kgo.DialTimeout(dialTimeout),
+		kgo.ConnIdleTimeout(connIdleTimeout),
+		kgo.MetadataMaxAge(metadataMaxAge),
+		kgo.RetryBackoffFn(func(int) time.Duration { return retryBackoff }),
+		kgo.SessionTimeout(sessionTimeout),
+		kgo.HeartbeatInterval(heartbeatInterval),
+		kgo.RebalanceTimeout(rebalanceTimeout),
+		kgo.Balancers(balancers...),
 		kgo.FetchMinBytes(int32(kafkaIntDefault(rc.FetchMinBytes, 1))),
 		kgo.FetchMaxBytes(int32(kafkaIntDefault(rc.FetchMaxBytes, 16<<20))),
+		kgo.FetchMaxPartitionBytes(int32(kafkaIntDefault(rc.FetchMaxPartitionBytes, config.DefaultKafkaFetchMaxPartBytes))),
 		kgo.FetchMaxWait(time.Duration(kafkaIntDefault(rc.FetchMaxWaitMS, 100)) * time.Millisecond),
+		kgo.FetchIsolationLevel(isolationLevel),
+	}
+	if autoCommit {
+		opts = append(opts, kgo.AutoCommitInterval(autoCommitInterval))
+	} else {
+		opts = append(opts, kgo.DisableAutoCommit())
 	}
 	if v := strings.TrimSpace(rc.ClientID); v != "" {
 		opts = append(opts, kgo.ClientID(v))
@@ -137,7 +199,7 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 			if errors.Is(err, context.Canceled) {
 				return nil
 			}
-			logx.L().Warnw("kafka receiver poll error", "receiver", r.name, "error", err)
+			logx.L().Warnw("Kafka接收端拉取失败", "接收端", r.name, "错误", err)
 			continue
 		}
 
@@ -148,14 +210,20 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 				r.stats.AddBytes(len(rec.Value))
 			}
 			payload, rel := packet.CopyFrom(rec.Value)
+			matchKey := BuildMatchKey(
+				"kafka",
+				MatchKeyField{Name: "topic", Value: rec.Topic},
+				MatchKeyField{Name: "partition", Value: fmt.Sprintf("%d", rec.Partition)},
+			)
 			r.onPacket(&packet.Packet{
 				Envelope: packet.Envelope{
 					Kind:    packet.PayloadKindStream,
 					Payload: payload,
 					Meta: packet.Meta{
-						Proto:  packet.ProtoKafka,
-						Remote: rec.Topic,
-						Local:  r.groupID,
+						Proto:    packet.ProtoKafka,
+						Remote:   rec.Topic,
+						Local:    r.groupID,
+						MatchKey: matchKey,
 					},
 				},
 				ReleaseFn: rel,
@@ -203,6 +271,52 @@ func kafkaIntDefault(v, d int) int {
 		return d
 	}
 	return v
+}
+
+func kafkaDurationOrDefault(value, fallback string) (time.Duration, error) {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		raw = fallback
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, err
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("duration must be > 0")
+	}
+	return d, nil
+}
+
+func kafkaIsolationLevel(v string) (kgo.IsolationLevel, error) {
+	switch strings.TrimSpace(v) {
+	case "", "read_uncommitted":
+		return kgo.ReadUncommitted(), nil
+	case "read_committed":
+		return kgo.ReadCommitted(), nil
+	default:
+		return kgo.ReadUncommitted(), fmt.Errorf("kafka isolation_level %s unsupported", v)
+	}
+}
+
+func kafkaGroupBalancers(values []string) ([]kgo.GroupBalancer, error) {
+	if len(values) == 0 {
+		values = config.DefaultKafkaReceiverBalancers
+	}
+	out := make([]kgo.GroupBalancer, 0, len(values))
+	for _, value := range values {
+		switch strings.TrimSpace(value) {
+		case "range":
+			out = append(out, kgo.RangeBalancer())
+		case "round_robin":
+			out = append(out, kgo.RoundRobinBalancer())
+		case "cooperative_sticky":
+			out = append(out, kgo.CooperativeStickyBalancer())
+		default:
+			return nil, fmt.Errorf("kafka balancer %s unsupported", value)
+		}
+	}
+	return out, nil
 }
 
 type kafkaPlainMechanism struct {

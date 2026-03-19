@@ -1,43 +1,48 @@
 {
   "version": 1001,
   "receivers": {
-    "rx_udp": {
+    "rx_udp_ingress": {
       "type": "udp_gnet",
       "listen": "0.0.0.0:19000",
+      "selector": "sel_ingress",
       "multicore": true,
       "num_event_loop": 8,
-      "read_buffer_cap": 1048576,
-      "socket_recv_buffer": 1073741824,
-      "log_payload_recv": false,
-      "payload_log_max_bytes": 256
+      "socket_recv_buffer": 1073741824
     },
-    "rx_tcp": {
+    "rx_tcp_ingress": {
       "type": "tcp_gnet",
       "listen": "0.0.0.0:19001",
+      "selector": "sel_ingress",
       "frame": "u16be",
       "multicore": true,
       "num_event_loop": 4,
       "socket_recv_buffer": 1073741824
     },
-    "rx_kafka": {
+    "rx_kafka_order": {
       "type": "kafka",
       "listen": "127.0.0.1:9092",
-      "topic": "input-topic",
-      "group_id": "forward-stub-group",
-      "client_id": "forward-stub-rx",
+      "selector": "sel_kafka_order",
+      "topic": "order",
+      "group_id": "forward-stub-order",
+      "client_id": "forward-stub-rx-order",
       "start_offset": "latest",
-      "fetch_min_bytes": 1,
-      "fetch_max_bytes": 1048576,
-      "fetch_max_wait_ms": 100,
-      "username": "kafka-user",
-      "password": "kafka-pass",
-      "sasl_mechanism": "PLAIN",
-      "tls": false,
-      "tls_skip_verify": false
+      "dial_timeout": "10s",
+      "conn_idle_timeout": "30s",
+      "metadata_max_age": "5m",
+      "retry_backoff": "250ms",
+      "session_timeout": "45s",
+      "heartbeat_interval": "3s",
+      "rebalance_timeout": "1m",
+      "balancers": ["cooperative_sticky"],
+      "auto_commit": true,
+      "auto_commit_interval": "5s",
+      "fetch_max_partition_bytes": 1048576,
+      "isolation_level": "read_uncommitted"
     },
-    "rx_sftp": {
+    "rx_sftp_file": {
       "type": "sftp",
       "listen": "127.0.0.1:22",
+      "selector": "sel_sftp_file",
       "username": "demo",
       "password": "demo",
       "remote_dir": "/input",
@@ -46,23 +51,43 @@
       "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"
     }
   },
+  "selectors": {
+    "sel_ingress": {
+      "matches": {
+        "udp|src_addr=10.0.0.10:9000": "ts_realtime_forward",
+        "tcp|src_addr=10.0.0.10:9000": "ts_realtime_forward",
+        "udp|src_addr=10.0.0.11:9001": "ts_archive_forward"
+      },
+      "default_task_set": "ts_realtime_forward"
+    },
+    "sel_kafka_order": {
+      "matches": {
+        "kafka|topic=order|partition=0": "ts_order_partition_0",
+        "kafka|topic=order|partition=1": "ts_order_partition_1"
+      },
+      "default_task_set": "ts_order_partition_0"
+    },
+    "sel_sftp_file": {
+      "matches": {
+        "sftp|remote_dir=/input|file_name=orders.csv": "ts_file_ingest",
+        "sftp|remote_dir=/input|file_name=orders.done": "ts_file_notify"
+      }
+    }
+  },
+  "task_sets": {
+    "ts_realtime_forward": ["task_parse", "task_route_sender"],
+    "ts_archive_forward": ["task_archive"],
+    "ts_order_partition_0": ["task_order_normalize", "task_order_forward"],
+    "ts_order_partition_1": ["task_order_normalize", "task_order_forward"],
+    "ts_file_ingest": ["task_mark_file", "task_send_sftp"],
+    "ts_file_notify": ["task_clear_file", "task_notify_kafka"]
+  },
   "senders": {
     "tx_udp": {
       "type": "udp_unicast",
       "local_ip": "0.0.0.0",
       "local_port": 20000,
       "remote": "127.0.0.1:21000",
-      "concurrency": 8,
-      "socket_send_buffer": 1073741824
-    },
-    "tx_mcast": {
-      "type": "udp_multicast",
-      "local_ip": "0.0.0.0",
-      "local_port": 20001,
-      "remote": "239.0.0.10:21001",
-      "iface": "eth0",
-      "ttl": 16,
-      "loop": false,
       "concurrency": 8,
       "socket_send_buffer": 1073741824
     },
@@ -78,20 +103,20 @@
       "remote": "127.0.0.1:9092",
       "topic": "output-topic",
       "client_id": "forward-stub-tx",
-      "acks": -1,
-      "linger_ms": 5,
-      "batch_max_bytes": 1048576,
-      "compression": "lz4",
-      "username": "kafka-user",
-      "password": "kafka-pass",
-      "sasl_mechanism": "PLAIN",
-      "tls": false,
-      "tls_skip_verify": false,
+      "acks": "all",
       "idempotent": true,
       "retries": 20,
       "max_in_flight_requests_per_connection": 1,
-      "max_buffered_bytes": 67108864,
-      "max_buffered_records": 20000
+      "dial_timeout": "10s",
+      "request_timeout": "30s",
+      "retry_timeout": "1m",
+      "retry_backoff": "250ms",
+      "conn_idle_timeout": "30s",
+      "metadata_max_age": "5m",
+      "partitioner": "hash_key",
+      "record_key_source": "match_key",
+      "compression": "zstd",
+      "compression_level": 3
     },
     "tx_sftp": {
       "type": "sftp",
@@ -105,28 +130,8 @@
   },
   "pipelines": {
     "pipe_match_replace": [
-      {
-        "type": "match_offset_bytes",
-        "offset": 0,
-        "hex": "aabb"
-      },
-      {
-        "type": "replace_offset_bytes",
-        "offset": 2,
-        "hex": "ccdd"
-      }
-    ],
-    "pipe_mark_file": [
-      {
-        "type": "mark_as_file_chunk",
-        "path": "/auto/out.bin",
-        "bool": true
-      }
-    ],
-    "pipe_clear_file": [
-      {
-        "type": "clear_file_meta"
-      }
+      {"type": "match_offset_bytes", "offset": 0, "hex": "aabb"},
+      {"type": "replace_offset_bytes", "offset": 2, "hex": "ccdd"}
     ],
     "pipe_route_sender": [
       {
@@ -138,58 +143,62 @@
         },
         "default_sender": "tx_kafka"
       }
+    ],
+    "pipe_mark_file": [
+      {"type": "mark_as_file_chunk", "path": "/archive/orders.bin", "bool": true}
+    ],
+    "pipe_clear_file": [
+      {"type": "clear_file_meta"}
     ]
   },
   "tasks": {
-    "task_fastpath": {
-      "receivers": [
-        "rx_udp"
-      ],
-      "pipelines": [
-        "pipe_match_replace"
-      ],
-      "senders": [
-        "tx_udp"
-      ],
-      "execution_model": "fastpath",
-      "queue_size": 2048,
-      "channel_queue_size": 2048,
-      "log_payload_send": false,
-      "payload_log_max_bytes": 256
+    "task_parse": {
+      "pipelines": ["pipe_match_replace"],
+      "senders": ["tx_udp"],
+      "execution_model": "fastpath"
     },
-    "task_pool": {
-      "receivers": [
-        "rx_tcp"
-      ],
-      "pipelines": [
-        "pipe_route_sender"
-      ],
-      "senders": [
-        "tx_udp",
-        "tx_tcp",
-        "tx_kafka"
-      ],
+    "task_route_sender": {
+      "pipelines": ["pipe_route_sender"],
+      "senders": ["tx_udp", "tx_tcp", "tx_kafka"],
       "execution_model": "pool",
       "pool_size": 2048,
-      "queue_size": 4096,
-      "channel_queue_size": 4096,
-      "log_payload_send": false,
-      "payload_log_max_bytes": 256
+      "queue_size": 4096
     },
-    "task_channel": {
-      "receivers": [
-        "rx_kafka"
-      ],
-      "pipelines": [
-        "pipe_mark_file"
-      ],
-      "senders": [
-        "tx_sftp"
-      ],
+    "task_archive": {
+      "pipelines": ["pipe_match_replace"],
+      "senders": ["tx_sftp"],
       "execution_model": "channel",
-      "channel_queue_size": 1024,
-      "log_payload_send": false,
-      "payload_log_max_bytes": 256
+      "channel_queue_size": 1024
+    },
+    "task_order_normalize": {
+      "pipelines": ["pipe_match_replace"],
+      "senders": ["tx_kafka"],
+      "execution_model": "pool"
+    },
+    "task_order_forward": {
+      "pipelines": ["pipe_route_sender"],
+      "senders": ["tx_udp", "tx_kafka"],
+      "execution_model": "fastpath"
+    },
+    "task_mark_file": {
+      "pipelines": ["pipe_mark_file"],
+      "senders": ["tx_sftp"],
+      "execution_model": "channel"
+    },
+    "task_send_sftp": {
+      "pipelines": [],
+      "senders": ["tx_sftp"],
+      "execution_model": "channel"
+    },
+    "task_clear_file": {
+      "pipelines": ["pipe_clear_file"],
+      "senders": ["tx_sftp"],
+      "execution_model": "fastpath"
+    },
+    "task_notify_kafka": {
+      "pipelines": [],
+      "senders": ["tx_kafka"],
+      "execution_model": "fastpath"
     }
   }
 }

@@ -1,3 +1,4 @@
+// Package runtime 负责维护转发运行时对象及其测试辅助逻辑。
 package runtime
 
 import (
@@ -6,6 +7,7 @@ import (
 	"forward-stub/src/config"
 )
 
+// TestCompilePipelineFileStages 验证文件分块相关 stage 可以被正确编译并保留执行顺序。
 func TestCompilePipelineFileStages(t *testing.T) {
 	eof := true
 	cfg := map[string][]config.StageConfig{
