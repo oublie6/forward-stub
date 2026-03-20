@@ -132,11 +132,12 @@ receiver -> selector -> task(pipeline + sender)
 ## 4. 文档索引
 
 - `docs/configuration.md`：**完整配置参考手册**，逐项列出字段、类型、默认值、枚举、适用范围、约束与注意事项。
-- `docs/receivers-and-senders.md`：按协议类型解释 receiver / sender 的专属配置和行为差异。
+- `docs/receivers-and-senders.md`：按协议类型解释 receiver / sender 的专属配置、match key 行为和 Kafka 直映射配置。
 - `docs/task-and-dispatch.md`：说明 selector、task_set、task、dispatch、route sender 的关系。
 - `docs/execution-model.md`：说明 `fastpath`、`pool`、`channel` 的配置与选型建议。
 - `docs/observability.md`：说明 logging、payload 日志、流量统计、GC 日志、pprof 等配置与排障方式。
-- `docs/runtime-and-lifecycle.md`：说明配置加载、默认值合并、校验、热更新和启动/停机顺序。
+- `docs/runtime-and-lifecycle.md`：说明默认值生效层次、初始化冷路径、热更新边界和停机顺序。
+- `docs/runtime-sequence-and-flow.md`：说明启动、收包、dispatch、热重载、停机的关键时序与统计对象生命周期。
 - `docs/pipeline.md`：说明 pipeline stage 类型与字段约束。
 
 ## 5. 配置使用上的关键规则
@@ -146,26 +147,28 @@ receiver -> selector -> task(pipeline + sender)
 - `task_sets` 只做复用；运行时会在编译期直接展开为 task 切片。
 - `task.fast_path` 是兼容字段：仅当 `execution_model` 为空时才会把 `fast_path=true` 解释为 `fastpath`。
 - Kafka、SFTP、gnet、组播等字段都只在对应 `type` 下生效，不能跨协议混用。
-- `receiver.match_key` 为 receiver 局部配置：留空时保持历史兼容 key；显式配置后会在 receiver 初始化/热重载时编译成专用 builder，热路径不再走统一公共拼接函数。
+- `receiver.match_key` 为 receiver 局部配置：留空时保持历史兼容 key；显式配置后会在 receiver 初始化/热重载时编译成协议专属 builder，热路径不再走统一公共拼接函数。
+- Kafka receiver / sender 的多项字段会直接映射到 franz-go / `kgo` 选项；其中一部分默认值在 `ApplyDefaults()` 层回写，另一部分保留到具体组件构建时按实现回退。
 - 字符串 duration 字段必须是合法且大于 0 的 `time.ParseDuration` 文本，例如 `250ms`、`10s`、`5m`。
 - `control.pprof_port`：`-1` 表示禁用，`0` 表示回退默认值 `6060`，`1~65535` 表示监听对应端口。
 
-## 5.1 receiver match key 改造说明
+## 5.1 receiver match key 说明
 
 - match key 生成职责已经收敛到各类 receiver 自身；selector 只做完整字符串精确匹配。
 - `receiver.match_key.mode` 留空时保持兼容默认行为：UDP/TCP 继续输出历史 `src_addr`，Kafka 继续输出 `topic + partition`，SFTP 继续输出 `remote_dir + file_name`。
-- 显式配置模式后，会在 receiver 初始化或热重载时预编译为协议专属 builder；UDP/TCP 热路径只做一次轻量函数调用，TCP/SFTP 还会尽量按连接/文件复用已生成的 key。
-- 详见 `docs/configuration.md` 与 `docs/receivers-and-senders.md`。
+- 显式配置模式后，会在 receiver 初始化或热重载重建阶段预编译为协议专属 builder；UDP/TCP 热路径只做一次轻量函数调用，TCP/SFTP 还会尽量按连接或文件复用已生成的 key。
+- 详见 `docs/configuration.md`、`docs/receivers-and-senders.md`、`docs/runtime-and-lifecycle.md`。
 
-## 6. 本次文档治理覆盖范围
+## 6. 本次文档对齐后的关注点
 
-本次已按“**代码实际支持的配置**”对齐以下内容：
+当前 README 与 `docs/` 已统一到以下代码行为：
 
 - 顶层配置：`version`、`control`、`logging`、`receivers`、`selectors`、`task_sets`、`senders`、`pipelines`、`tasks`、`business_defaults`。
 - logging：日志级别、文件滚动、流量统计、payload 日志、payload 池、GC 周期日志。
-- receivers：UDP/TCP gnet、Kafka、SFTP 及其类型专属字段。
+- receivers：UDP/TCP gnet、Kafka、SFTP 及其类型专属字段、match key builder 生命周期。
 - senders：UDP 单播、UDP 组播、TCP、Kafka、SFTP 及其类型专属字段。
 - selector / task_set / task / pipeline：引用关系、默认值、执行模型、stage 参数、route sender 行为。
+- 运行时：冷启动、热更新、receiver/task 统计对象生命周期、pprof、GC 日志。
 - 示例文件：单文件全量、system/business 全量、最小示例、按协议/执行模型拆分示例。
 
 ## 7. 验证命令

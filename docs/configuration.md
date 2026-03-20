@@ -40,7 +40,8 @@
 2. 若使用双配置模式，先把 `system + business` 合并成完整配置。
 3. 先应用 `business_defaults`，再应用代码级默认值。
 4. 若 `control.api` 非空，则再通过控制面拉取 business 配置并重新合并。
-5. 对完整配置执行 `Validate()`。
+5. 对完整配置再次执行 `ApplyDefaults()`（控制面返回 business 时也会重新回写默认值）。
+6. 对完整配置执行 `Validate()`。
 
 ## 2. 顶层配置域总览
 
@@ -70,7 +71,7 @@
 
 - `control.api` 只影响 business 配置来源，不改变 system 配置仍然从本地读取的事实。
 - `control.config_watch_interval` 是文件监听轮询周期，不是控制面拉取周期。
-- `pprof_port <= 0` 时不会启动 pprof 服务；其中 `-1` 是显式禁用语义。
+- `pprof_port=-1` 时禁用；`pprof_port=0` 会先在默认值阶段回写为 `6060`，因此最终仍会启动 pprof。
 
 ## 4. logging 配置
 
@@ -98,7 +99,7 @@
 
 ## 5. business_defaults（system 专属）
 
-`business_defaults` 只存在于 system / 单文件配置中，用于给 business 配置里**未显式设置**的字段补默认值；如果 business 已写明值，则以 business 为准。
+`business_defaults` 只存在于 system 配置中，用于给 business 配置里**未显式设置**的字段补默认值；如果 business 已写明值，则以 business 为准。
 
 ### 5.1 `business_defaults.task`
 
@@ -210,11 +211,11 @@
 | `balancers` | []string | `['cooperative_sticky']` | `kgo.Balancers` | 当前支持 `range`、`round_robin`、`cooperative_sticky`。 |
 | `auto_commit` | bool | `true` | `kgo.DisableAutoCommit` / `kgo.AutoCommitInterval` | 是否自动提交位点。 |
 | `auto_commit_interval` | string(duration) | `5s` | `kgo.AutoCommitInterval` | 仅 `auto_commit=true` 时可配置。 |
-| `fetch_min_bytes` | int | `1` | `kgo.FetchMinBytes` | 拉取最小字节数。 |
-| `fetch_max_bytes` | int | `16777216` | `kgo.FetchMaxBytes` | 单次拉取最大字节数。 |
-| `fetch_max_partition_bytes` | int | `1048576` | `kgo.FetchMaxPartitionBytes` | 单分区拉取上限。 |
+| `fetch_min_bytes` | int | 运行时回退 `1` | `kgo.FetchMinBytes` | 该值不在 `ApplyDefaults()` 中回写；构建 Kafka receiver 时若未配置或 `<=0`，按 `1` 回退。 |
+| `fetch_max_bytes` | int | 运行时回退 `16777216` | `kgo.FetchMaxBytes` | 该值不在 `ApplyDefaults()` 中回写；构建 Kafka receiver 时若未配置或 `<=0`，按 `16 MiB` 回退。 |
+| `fetch_max_partition_bytes` | int | `1048576` | `kgo.FetchMaxPartitionBytes` | 该值会在 `ApplyDefaults()` 中回写。 |
 | `isolation_level` | string | `read_uncommitted` | `kgo.FetchIsolationLevel` | 支持 `read_uncommitted`、`read_committed`。 |
-| `fetch_max_wait_ms` | int | `100` | `kgo.FetchMaxWait` | 拉取最大等待毫秒数。 |
+| `fetch_max_wait_ms` | int | 运行时回退 `100` | `kgo.FetchMaxWait` | 该值不在 `ApplyDefaults()` 中回写；构建 Kafka receiver 时若未配置或 `<=0`，按 `100ms` 回退。 |
 
 #### 6.3.3 Kafka receiver match key
 
@@ -225,7 +226,13 @@
   - `fixed`：输出 `kafka|fixed=<fixed_value>`。
 - 性能注意：`topic` / `fixed` 会在初始化时预生成整串 key；`topic_partition` 只在热路径追加分区号。
 
-#### 6.3.4 Kafka receiver 校验规则
+#### 6.3.4 Kafka receiver 默认值与生效层次
+
+- `dial_timeout`、`conn_idle_timeout`、`metadata_max_age`、`retry_backoff`、`session_timeout`、`heartbeat_interval`、`rebalance_timeout`、`balancers`、`auto_commit`、`auto_commit_interval`、`fetch_max_partition_bytes`、`isolation_level` 会在 `ApplyDefaults()` 层先回写。
+- `group_id`、`fetch_min_bytes`、`fetch_max_bytes`、`fetch_max_wait_ms` 则保留到 `NewKafkaReceiver()` 构建阶段按实现回退。
+- 热重载时，只要 Kafka receiver 配置有变化，就会重建 receiver、新建 `kgo.Client`、重新编译 match key builder，再切换到新实例。
+
+#### 6.3.5 Kafka receiver 校验规则
 
 - `listen` 必须非空。
 - `topic` 必须非空。
@@ -377,7 +384,7 @@
 - 所有 duration 字段必须是合法且 `>0` 的 duration。
 - `partitioner` 只支持 `sticky`、`round_robin`、`hash_key`。
 - `record_key` 与 `record_key_source` 互斥。
-- `record_key_source` 当前只支持：`payload`、`match_key`、`remote`、`local`、`file_name`、`file_path`、`transfer_id`、`route_sender`。
+- `record_key_source` 当前只支持：`payload`、`match_key`、`remote`、`local`、`file_name`、`file_path`、`transfer_id`、`route_sender`。热重载时若这些字段变化，会重建 sender，并联动重建引用它的 task。
 - `partitioner=hash_key` 时必须提供 `record_key` 或 `record_key_source`。
 - `compression_level != 0` 时，`compression` 必须是 `gzip`、`lz4`、`zstd` 之一。
 

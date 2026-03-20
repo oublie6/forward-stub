@@ -27,7 +27,7 @@
 ### 3.3 文档体系
 
 - 补充 `docs/benchmark.md` 的场景覆盖（如更多协议组合与执行模型维度）。
-- 补充 `docs/adr.md` 记录关键设计决策。
+- 继续用 `docs/architecture.md`、`docs/technical-architecture.md` 补充关键设计决策记录。
 
 ## 4. 建议补充的代码注释与设计说明
 
