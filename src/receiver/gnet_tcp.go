@@ -3,9 +3,11 @@ package receiver
 
 import (
 	"context"
+	"net"
 	"sync"
 	"sync/atomic"
 
+	"forward-stub/src/config"
 	"forward-stub/src/logx"
 	"forward-stub/src/packet"
 
@@ -27,6 +29,9 @@ type GnetTCP struct {
 	framer Framer
 	// gnetLogLevel 是项目日志级别映射到 gnet 的结果。
 	gnetLogLevel logging.Level
+	// matchKeyBuilder / matchKeyMode 是初始化阶段编译好的 match key 逻辑与模式。
+	matchKeyBuilder tcpMatchKeyBuilder
+	matchKeyMode    string
 
 	// onPacket 是 runtime 注入的 packet 分发回调。
 	onPacket func(*packet.Packet)
@@ -39,7 +44,11 @@ type GnetTCP struct {
 }
 
 // NewGnetTCP 构造基于 gnet 的 TCP 接收端，并固化 framing 策略。
-func NewGnetTCP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, framer Framer, gnetLogLevel string) *GnetTCP {
+func NewGnetTCP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, framer Framer, gnetLogLevel string, matchKey config.ReceiverMatchKeyConfig) (*GnetTCP, error) {
+	builder, mode, err := compileTCPMatchKeyBuilder(matchKey)
+	if err != nil {
+		return nil, err
+	}
 	return &GnetTCP{
 		name:             name,
 		listen:           normalizeGnetListen("tcp", listen),
@@ -49,7 +58,9 @@ func NewGnetTCP(name, listen string, multicore bool, numEventLoop, readBufferCap
 		socketRecvBuffer: socketRecvBuffer,
 		framer:           framer,
 		gnetLogLevel:     logx.ParseGnetLogLevel(gnetLogLevel),
-	}
+		matchKeyBuilder:  builder,
+		matchKeyMode:     mode,
+	}, nil
 }
 
 // Name 返回 receiver 配置名。
@@ -57,6 +68,9 @@ func (r *GnetTCP) Name() string { return r.name }
 
 // Key 返回 TCP receiver 的稳定身份键。
 func (r *GnetTCP) Key() string { return "tcp_gnet|" + r.listen }
+
+// MatchKeyMode 返回 TCP receiver 当前生效的 match key 模式。
+func (r *GnetTCP) MatchKeyMode() string { return r.matchKeyMode }
 
 // Start 启动 TCP gnet 引擎并建立 receiver 侧聚合统计。
 // 与 UDP 类似，统计句柄的生命周期与 gnet.Run 一致。
@@ -112,6 +126,11 @@ type connState struct {
 	// remote / local 缓存地址字符串，避免每帧重复格式化。
 	remote string
 	local  string
+	// remoteAddr / localAddr 保留原始地址对象，供需要提取 IP 或端口的模式复用。
+	remoteAddr net.Addr
+	localAddr  net.Addr
+	// matchKey 在连接建立时预先生成，后续每帧直接复用。
+	matchKey string
 }
 
 type tcpHandler struct {
@@ -131,11 +150,17 @@ func (h *tcpHandler) OnBoot(eng gnet.Engine) (action gnet.Action) {
 // OnOpen 为每个 TCP 连接初始化独立 connState。
 // 这样后续分帧时可以在连接维度保留残留字节与地址信息。
 func (h *tcpHandler) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
-	c.SetContext(&connState{
-		buf:    make([]byte, 0, 4096),
-		remote: c.RemoteAddr().String(),
-		local:  c.LocalAddr().String(),
-	})
+	remoteAddr := c.RemoteAddr()
+	localAddr := c.LocalAddr()
+	cs := &connState{
+		buf:        make([]byte, 0, 4096),
+		remote:     addrString(remoteAddr),
+		local:      addrString(localAddr),
+		remoteAddr: remoteAddr,
+		localAddr:  localAddr,
+	}
+	cs.matchKey = h.recv.matchKeyBuilder(cs)
+	c.SetContext(cs)
 	return nil, gnet.None
 }
 
@@ -162,7 +187,6 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 		}
 		payload, rel := packet.CopyFrom(cs.buf)
 		cs.buf = cs.buf[:0]
-		matchKey := BuildMatchKey("tcp", MatchKeyField{Name: "src_addr", Value: cs.remote})
 		h.recv.onPacket(&packet.Packet{
 			Envelope: packet.Envelope{
 				Kind:    packet.PayloadKindStream,
@@ -171,7 +195,7 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 					Proto:    packet.ProtoTCP,
 					Remote:   cs.remote,
 					Local:    cs.local,
-					MatchKey: matchKey,
+					MatchKey: cs.matchKey,
 				},
 			},
 			ReleaseFn: rel,
@@ -191,7 +215,6 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 			stats.AddBytes(len(fr))
 		}
 		payload, rel := packet.CopyFrom(fr)
-		matchKey := BuildMatchKey("tcp", MatchKeyField{Name: "src_addr", Value: cs.remote})
 		h.recv.onPacket(&packet.Packet{
 			Envelope: packet.Envelope{
 				Kind:    packet.PayloadKindStream,
@@ -200,7 +223,7 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 					Proto:    packet.ProtoTCP,
 					Remote:   cs.remote,
 					Local:    cs.local,
-					MatchKey: matchKey,
+					MatchKey: cs.matchKey,
 				},
 			},
 			ReleaseFn: rel,

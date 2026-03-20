@@ -28,6 +28,9 @@ type KafkaReceiver struct {
 
 	// onPacket 是 runtime 注入的 packet 分发回调。
 	onPacket func(*packet.Packet)
+	// matchKeyBuilder / matchKeyMode 是初始化阶段编译好的 match key 逻辑与模式。
+	matchKeyBuilder kafkaMatchKeyBuilder
+	matchKeyMode    string
 
 	// mu 保护 client/cancel/done/stats 等运行时状态，避免 Start/Stop 并发释放。
 	mu     sync.Mutex
@@ -145,7 +148,20 @@ func NewKafkaReceiver(name string, rc config.ReceiverConfig) (*KafkaReceiver, er
 	if err != nil {
 		return nil, err
 	}
-	return &KafkaReceiver{name: name, brokers: brs, topic: rc.Topic, groupID: groupID, client: cli}, nil
+	builder, mode, err := compileKafkaMatchKeyBuilder(rc.MatchKey, rc.Topic)
+	if err != nil {
+		cli.Close()
+		return nil, err
+	}
+	return &KafkaReceiver{
+		name:            name,
+		brokers:         brs,
+		topic:           rc.Topic,
+		groupID:         groupID,
+		client:          cli,
+		matchKeyBuilder: builder,
+		matchKeyMode:    mode,
+	}, nil
 }
 
 // Name 返回 Kafka receiver 的配置名。
@@ -156,6 +172,9 @@ func (r *KafkaReceiver) Name() string { return r.name }
 func (r *KafkaReceiver) Key() string {
 	return "kafka|" + strings.Join(r.brokers, ",") + "|" + r.groupID + "|" + r.topic
 }
+
+// MatchKeyMode 返回 Kafka receiver 当前生效的 match key 模式。
+func (r *KafkaReceiver) MatchKeyMode() string { return r.matchKeyMode }
 
 // Start 进入 Kafka 拉取循环，并把每条 record 转成 packet。
 //
@@ -225,11 +244,7 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 			}
 			// Kafka record 在进入 runtime 前会复制 payload，避免底层 fetch 缓冲生命周期泄漏到热路径之外。
 			payload, rel := packet.CopyFrom(rec.Value)
-			matchKey := BuildMatchKey(
-				"kafka",
-				MatchKeyField{Name: "topic", Value: rec.Topic},
-				MatchKeyField{Name: "partition", Value: fmt.Sprintf("%d", rec.Partition)},
-			)
+			matchKey := r.matchKeyBuilder(rec)
 			r.onPacket(&packet.Packet{
 				Envelope: packet.Envelope{
 					Kind:    packet.PayloadKindStream,

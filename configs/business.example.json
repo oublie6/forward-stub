@@ -28,6 +28,9 @@
       "type": "kafka",
       "listen": "127.0.0.1:9092,127.0.0.1:9093",
       "selector": "sel_kafka_orders",
+      "match_key": {
+        "mode": "topic_partition"
+      },
       "topic": "orders",
       "group_id": "forward-stub-orders",
       "username": "demo",
@@ -81,8 +84,8 @@
     },
     "sel_kafka_orders": {
       "matches": {
-        "kafka|topic=orders|partition=0": "ts_orders_p0",
-        "kafka|topic=orders|partition=1": "ts_orders_p1"
+        "kafka|topic_partition=orders|0": "ts_orders_p0",
+        "kafka|topic_partition=orders|1": "ts_orders_p1"
       },
       "default_task_set": "ts_orders_p0"
     },

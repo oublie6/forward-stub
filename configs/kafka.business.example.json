@@ -5,6 +5,9 @@
       "type": "kafka",
       "listen": "127.0.0.1:9092",
       "selector": "sel_kafka",
+      "match_key": {
+        "mode": "topic"
+      },
       "topic": "orders",
       "group_id": "forward-stub-orders",
       "client_id": "forward-stub-rx-orders",

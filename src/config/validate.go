@@ -128,6 +128,9 @@ func (c *Config) Validate() error {
 		if _, ok := c.Selectors[r.Selector]; !ok {
 			return fmt.Errorf("receiver %s selector %s not found", rn, r.Selector)
 		}
+		if err := validateReceiverMatchKey(rn, r); err != nil {
+			return err
+		}
 		switch r.Type {
 		case "udp_gnet", "tcp_gnet":
 		case "kafka":
@@ -248,6 +251,51 @@ func validateKafkaAuth(kind, name, mechanism, username, password string) error {
 		return nil
 	}
 	return fmt.Errorf("%s %s kafka unsupported sasl_mechanism %s", kind, name, mechanism)
+}
+
+// ErrUnsupportedReceiverMatchKeyMode 返回统一的 receiver match key 模式非法错误。
+func ErrUnsupportedReceiverMatchKeyMode(receiverType, mode string) error {
+	return fmt.Errorf("%s receiver match_key.mode 不支持: %s", receiverType, mode)
+}
+
+func validateReceiverMatchKey(name string, rc ReceiverConfig) error {
+	mode := strings.TrimSpace(rc.MatchKey.Mode)
+	fixedValue := rc.MatchKey.FixedValue
+	switch rc.Type {
+	case "udp_gnet":
+		switch mode {
+		case "", "remote_addr", "remote_ip", "local_addr", "local_ip", "fixed":
+		default:
+			return fmt.Errorf("receiver %s: %w", name, ErrUnsupportedReceiverMatchKeyMode(rc.Type, mode))
+		}
+	case "tcp_gnet":
+		switch mode {
+		case "", "remote_addr", "remote_ip", "local_addr", "local_port", "fixed":
+		default:
+			return fmt.Errorf("receiver %s: %w", name, ErrUnsupportedReceiverMatchKeyMode(rc.Type, mode))
+		}
+	case "kafka":
+		switch mode {
+		case "", "topic", "topic_partition", "fixed":
+		default:
+			return fmt.Errorf("receiver %s: %w", name, ErrUnsupportedReceiverMatchKeyMode(rc.Type, mode))
+		}
+	case "sftp":
+		switch mode {
+		case "", "remote_path", "filename", "fixed":
+		default:
+			return fmt.Errorf("receiver %s: %w", name, ErrUnsupportedReceiverMatchKeyMode(rc.Type, mode))
+		}
+	default:
+		return fmt.Errorf("receiver %s unknown type %s", name, rc.Type)
+	}
+	if mode == "fixed" && strings.TrimSpace(fixedValue) == "" {
+		return fmt.Errorf("receiver %s %s match_key.fixed_value 不能为空", name, rc.Type)
+	}
+	if mode != "fixed" && strings.TrimSpace(fixedValue) != "" {
+		return fmt.Errorf("receiver %s %s match_key.fixed_value 仅可在 mode=fixed 时配置", name, rc.Type)
+	}
+	return nil
 }
 
 func validateKafkaReceiverOptions(name string, rc ReceiverConfig) error {

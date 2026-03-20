@@ -5,6 +5,9 @@
       "type": "sftp",
       "listen": "127.0.0.1:22",
       "selector": "sel_sftp",
+      "match_key": {
+        "mode": "filename"
+      },
       "username": "demo",
       "password": "demo-pass",
       "remote_dir": "/incoming",
@@ -16,7 +19,7 @@
   "selectors": {
     "sel_sftp": {
       "matches": {
-        "sftp|remote_dir=/incoming|file_name=orders.csv": "ts_file"
+        "sftp|filename=orders.csv": "ts_file"
       },
       "default_task_set": "ts_file"
     }

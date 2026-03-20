@@ -3,9 +3,11 @@ package receiver
 
 import (
 	"context"
+	"net"
 	"sync"
 	"sync/atomic"
 
+	"forward-stub/src/config"
 	"forward-stub/src/logx"
 	"forward-stub/src/packet"
 
@@ -26,6 +28,9 @@ type GnetUDP struct {
 	socketRecvBuffer int
 	// gnetLogLevel 是映射后的 gnet 内部日志级别。
 	gnetLogLevel logging.Level
+	// matchKeyBuilder / matchKeyMode 是初始化阶段编译好的 match key 逻辑与模式名。
+	matchKeyBuilder udpMatchKeyBuilder
+	matchKeyMode    string
 
 	// onPacket 是 runtime 注入的分发回调；每收到一个 UDP 数据报就调用一次。
 	onPacket func(*packet.Packet)
@@ -39,7 +44,11 @@ type GnetUDP struct {
 
 // NewGnetUDP 构造基于 gnet 的 UDP 接收端。
 // 该对象本身只完成参数归一化；真正的监听与统计句柄创建发生在 Start 阶段。
-func NewGnetUDP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, gnetLogLevel string) *GnetUDP {
+func NewGnetUDP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, gnetLogLevel string, matchKey config.ReceiverMatchKeyConfig) (*GnetUDP, error) {
+	builder, mode, err := compileUDPMatchKeyBuilder(matchKey)
+	if err != nil {
+		return nil, err
+	}
 	return &GnetUDP{
 		name:             name,
 		listen:           normalizeGnetListen("udp", listen),
@@ -48,7 +57,9 @@ func NewGnetUDP(name, listen string, multicore bool, numEventLoop, readBufferCap
 		readBufferCap:    readBufferCap,
 		socketRecvBuffer: socketRecvBuffer,
 		gnetLogLevel:     logx.ParseGnetLogLevel(gnetLogLevel),
-	}
+		matchKeyBuilder:  builder,
+		matchKeyMode:     mode,
+	}, nil
 }
 
 // Name 返回 receiver 名称，用于 runtime 和聚合统计日志关联同一个配置实体。
@@ -57,6 +68,9 @@ func (r *GnetUDP) Name() string { return r.name }
 // Key 返回 receiver 的稳定复用键。
 // 热重载比较配置时会结合该键理解当前实例的监听身份。
 func (r *GnetUDP) Key() string { return "udp_gnet|" + r.listen }
+
+// MatchKeyMode 返回 UDP receiver 当前生效的 match key 模式。
+func (r *GnetUDP) MatchKeyMode() string { return r.matchKeyMode }
 
 // Start 启动 UDP gnet 事件循环，并把每个入站报文包装成 packet 后交给 runtime。
 //
@@ -144,19 +158,30 @@ func (h *udpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 		stats.AddBytes(len(in))
 	}
 	payload, rel := packet.CopyFrom(in)
-	matchKey := BuildMatchKey("udp", MatchKeyField{Name: "src_addr", Value: c.RemoteAddr().String()})
+	remoteAddr := c.RemoteAddr()
+	localAddr := c.LocalAddr()
+	remote := addrString(remoteAddr)
+	local := addrString(localAddr)
+	matchKey := h.recv.matchKeyBuilder(remote, local, remoteAddr, localAddr)
 	h.recv.onPacket(&packet.Packet{
 		Envelope: packet.Envelope{
 			Kind:    packet.PayloadKindStream,
 			Payload: payload,
 			Meta: packet.Meta{
 				Proto:    packet.ProtoUDP,
-				Remote:   c.RemoteAddr().String(),
-				Local:    c.LocalAddr().String(),
+				Remote:   remote,
+				Local:    local,
 				MatchKey: matchKey,
 			},
 		},
 		ReleaseFn: rel,
 	})
 	return gnet.None
+}
+
+func addrString(addr net.Addr) string {
+	if addr == nil {
+		return ""
+	}
+	return addr.String()
 }

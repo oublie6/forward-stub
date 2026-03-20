@@ -347,3 +347,34 @@ func TestApplyBusinessDeltaUpdatesPayloadLogOptions(t *testing.T) {
 		t.Fatalf("task payload log options not updated: %+v", st.tasks["t1"].T)
 	}
 }
+
+// TestPlanBusinessDeltaTreatsReceiverMatchKeyChangeAsRebuild 验证 match key 配置变化会触发 receiver 重建。
+func TestPlanBusinessDeltaTreatsReceiverMatchKeyChangeAsRebuild(t *testing.T) {
+	oldReceivers := map[string]config.ReceiverConfig{
+		"r1": {Type: "udp_gnet", Listen: ":9000", Selector: "sel1"},
+	}
+	nextCfg := config.Config{
+		Receivers: map[string]config.ReceiverConfig{
+			"r1": {Type: "udp_gnet", Listen: ":9000", Selector: "sel1", MatchKey: config.ReceiverMatchKeyConfig{Mode: "remote_ip"}},
+		},
+		Selectors: map[string]config.SelectorConfig{"sel1": {DefaultTaskSet: "ts1"}},
+		TaskSets:  map[string][]string{"ts1": {"t1"}},
+		Senders:   map[string]config.SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:9001"}},
+		Pipelines: map[string][]config.StageConfig{"p1": {}},
+		Tasks:     map[string]config.TaskConfig{"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}}},
+	}
+
+	plan := planBusinessDelta(
+		oldReceivers,
+		map[string]config.SelectorConfig{"sel1": {DefaultTaskSet: "ts1"}},
+		map[string][]string{"ts1": {"t1"}},
+		map[string]config.SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:9001"}},
+		map[string][]config.StageConfig{"p1": {}},
+		map[string]config.TaskConfig{"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}}},
+		nextCfg,
+	)
+
+	if !contains(plan.receiverAdded, "r1") || !contains(plan.receiverRemoved, "r1") {
+		t.Fatalf("expected receiver rebuild on match key change, added=%v removed=%v", plan.receiverAdded, plan.receiverRemoved)
+	}
+}
