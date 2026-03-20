@@ -138,6 +138,7 @@ receiver -> selector -> task(pipeline + sender)
 - `docs/observability.md`：说明 logging、payload 日志、流量统计、GC 日志、pprof 等配置与排障方式。
 - `docs/runtime-and-lifecycle.md`：说明默认值生效层次、初始化冷路径、热更新边界和停机顺序。
 - `docs/runtime-sequence-and-flow.md`：说明启动、收包、dispatch、热重载、停机的关键时序与统计对象生命周期。
+- `docs/operations-manual.md`：面向运维、实施、测试和值班人员的标准操作手册，覆盖部署、启动、重载、停机、巡检与排障。
 - `docs/pipeline.md`：说明 pipeline stage 类型与字段约束。
 
 ## 5. 配置使用上的关键规则

@@ -378,22 +378,77 @@ sequenceDiagram
 
 ## 5. 停机流程
 
-### 5.1 停机顺序
+### 5.1 停机流程时序图
+
+```mermaid
+sequenceDiagram
+    participant signal as OS signal
+    participant bootstrap as bootstrap.Run
+    participant watcher as config watcher
+    participant gc as GC logger
+    participant app as app.Runtime
+    participant store as runtime.Store
+    participant receiver as receivers
+    participant task as tasks
+    participant traffic as TrafficCounter / trafficStatsHub
+    participant sender as senders
+    participant pprof as pprof server
+    participant logger as stage logger
+
+    signal->>bootstrap: SIGINT / SIGTERM
+    bootstrap->>logger: shutdown_begin
+    bootstrap->>watcher: cancelWatch()
+    note over watcher: watchConfigFile 收到 ctx.Done() 后退出<br/>并输出“业务配置监听任务已停止”
+    bootstrap->>bootstrap: cancelRun()
+    note over receiver: receiver Start 持有的 runCtx 被取消<br/>各协议实现开始退出自己的循环
+    bootstrap->>gc: stopGC()
+    gc-->>logger: GC周期日志任务已停止
+    bootstrap->>app: Stop(timeout ctx)
+    app->>store: StopAll(ctx)
+
+    store->>receiver: errgroup 并发 Stop(rctx)
+    receiver->>traffic: 关闭 receiver TrafficCounter
+    receiver-->>store: 网络循环 / poll / gnet event loop 退出
+
+    loop 每个 task（顺序）
+        store->>task: StopGraceful()
+        task->>task: accepting=false
+        task->>task: inflight.Wait()
+        task->>traffic: UnregisterTaskRuntimeStats()
+        task->>traffic: Close send TrafficCounter
+        task-->>store: pool/channel/runtime stats 释放完成
+    end
+
+    store->>sender: errgroup 并发 Close(sctx)
+    sender-->>store: 连接 / 资源关闭完成
+    store-->>app: StopAll 返回
+    app-->>bootstrap: Stop 返回
+    bootstrap->>logger: shutdown_runtime / 运行时已停止
+    bootstrap->>pprof: Shutdown()
+    pprof-->>logger: pprof服务已停止
+    bootstrap->>logger: shutdown_done
+```
+
+### 5.2 停机顺序
 
 1. 收到停止信号；
-2. 停止配置监听；
-3. 取消主运行 context；
-4. 停止 GC 周期日志任务；
-5. 调用 `runtime.Store.StopAll()`：
+2. 记录 `shutdown_begin`；
+3. 停止配置监听；
+4. 取消主运行 context；
+5. 停止 GC 周期日志任务；
+6. 调用 `runtime.Store.StopAll()`：
    - 并发停止 receiver；
    - 顺序 `StopGraceful()` 停 task；
    - 并发关闭 sender；
-6. 停止 pprof 服务。
+7. 记录 `shutdown_runtime` 结果；
+8. 停止 pprof 服务；
+9. 记录 `shutdown_done`。
 
-### 5.2 停机时统计对象如何结束
+### 5.3 停机时统计对象如何结束
 
 - receiver 的 `TrafficCounter` 在各自 `Start/Stop` 生命周期中关闭；
 - task 的发送统计在 `Task.StopGraceful()` 中关闭；
+- task 的 runtime stats 会在 `StopGraceful()` 里先 `UnregisterTaskRuntimeStats()`，因此后续聚合日志不会继续把已停止 task 计入运行态摘要；
 - `trafficStatsHub` 作为进程级后台聚合器常驻，不需要在普通停机路径里逐个手动关闭。
 
 ## 6. 本文档对应的关键结论
