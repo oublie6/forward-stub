@@ -15,23 +15,30 @@ import (
 )
 
 type GnetTCP struct {
-	name             string
-	listen           string
+	// name / listen 是 runtime 用于索引与复用 receiver 的主标识。
+	name   string
+	listen string
+	// gnet 相关参数控制事件循环并发与 socket 缓冲行为。
 	multicore        bool
 	numEventLoop     int
 	readBufferCap    int
 	socketRecvBuffer int
-	framer           Framer
-	gnetLogLevel     logging.Level
+	// framer 负责把 TCP 字节流切成业务帧；nil 时表示“收到多少发多少”。
+	framer Framer
+	// gnetLogLevel 是项目日志级别映射到 gnet 的结果。
+	gnetLogLevel logging.Level
 
+	// onPacket 是 runtime 注入的 packet 分发回调。
 	onPacket func(*packet.Packet)
 
+	// stopMu + stopFn 保存引擎停止入口。
 	stopMu sync.Mutex
 	stopFn func(context.Context) error
-	stats  atomic.Pointer[logx.TrafficCounter]
+	// stats 是 TCP receiver 的聚合统计句柄，OnTraffic 热路径会无锁读取它。
+	stats atomic.Pointer[logx.TrafficCounter]
 }
 
-// NewGnetTCP 负责该函数对应的核心逻辑，详见实现细节。
+// NewGnetTCP 构造基于 gnet 的 TCP 接收端，并固化 framing 策略。
 func NewGnetTCP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, framer Framer, gnetLogLevel string) *GnetTCP {
 	return &GnetTCP{
 		name:             name,
@@ -45,13 +52,14 @@ func NewGnetTCP(name, listen string, multicore bool, numEventLoop, readBufferCap
 	}
 }
 
-// Name 负责该函数对应的核心逻辑，详见实现细节。
+// Name 返回 receiver 配置名。
 func (r *GnetTCP) Name() string { return r.name }
 
-// Key 负责该函数对应的核心逻辑，详见实现细节。
+// Key 返回 TCP receiver 的稳定身份键。
 func (r *GnetTCP) Key() string { return "tcp_gnet|" + r.listen }
 
-// Start 负责该函数对应的核心逻辑，详见实现细节。
+// Start 启动 TCP gnet 引擎并建立 receiver 侧聚合统计。
+// 与 UDP 类似，统计句柄的生命周期与 gnet.Run 一致。
 func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
 	if logx.Enabled(zapcore.InfoLevel) {
@@ -81,7 +89,7 @@ func (r *GnetTCP) Start(ctx context.Context, onPacket func(*packet.Packet)) erro
 	)
 }
 
-// Stop 负责该函数对应的核心逻辑，详见实现细节。
+// Stop 请求 TCP gnet 引擎退出，并关闭统计句柄。
 func (r *GnetTCP) Stop(ctx context.Context) error {
 	r.stopMu.Lock()
 	fn := r.stopFn
@@ -99,17 +107,20 @@ func (r *GnetTCP) Stop(ctx context.Context) error {
 }
 
 type connState struct {
-	buf    []byte
+	// buf 保存该连接尚未被 framer 消费的剩余字节。
+	buf []byte
+	// remote / local 缓存地址字符串，避免每帧重复格式化。
 	remote string
 	local  string
 }
 
 type tcpHandler struct {
 	gnet.BuiltinEventEngine
+	// recv 指向所属 receiver，用于调用 framer、统计器和 onPacket。
 	recv *GnetTCP
 }
 
-// OnBoot 负责该函数对应的核心逻辑，详见实现细节。
+// OnBoot 记录 gnet 停止函数，供 Stop 使用。
 func (h *tcpHandler) OnBoot(eng gnet.Engine) (action gnet.Action) {
 	h.recv.stopMu.Lock()
 	h.recv.stopFn = eng.Stop
@@ -117,7 +128,8 @@ func (h *tcpHandler) OnBoot(eng gnet.Engine) (action gnet.Action) {
 	return gnet.None
 }
 
-// OnOpen 负责该函数对应的核心逻辑，详见实现细节。
+// OnOpen 为每个 TCP 连接初始化独立 connState。
+// 这样后续分帧时可以在连接维度保留残留字节与地址信息。
 func (h *tcpHandler) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 	c.SetContext(&connState{
 		buf:    make([]byte, 0, 4096),
@@ -127,7 +139,12 @@ func (h *tcpHandler) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 	return nil, gnet.None
 }
 
-// OnTraffic 负责该函数对应的核心逻辑，详见实现细节。
+// OnTraffic 处理某个 TCP 连接上的可读事件。
+//
+// 与 UDP 不同，TCP 是流式协议，因此这里需要：
+// 1. 把新读到的字节追加到连接缓冲；
+// 2. 若无 framer，则整段缓冲一次性作为一个 packet；
+// 3. 若有 framer，则循环切帧、逐帧记统计并投递。
 func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	// 与 UDP 侧保持一致：先 Peek 再 Discard，规避不同平台/事件循环下读取游标推进时机差异。
 	in, _ := c.Peek(-1)
@@ -139,6 +156,7 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	cs.buf = append(cs.buf, in...)
 
 	if h.recv.framer == nil {
+		// 无 framer 时，当前缓冲区即视为一个完整 payload。
 		if stats := h.recv.stats.Load(); stats != nil {
 			stats.AddBytes(len(cs.buf))
 		}
@@ -168,6 +186,7 @@ func (h *tcpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	cs.buf = append(cs.buf[:0], remain...)
 
 	for _, fr := range frames {
+		// 多帧场景下每个 frame 都单独记一次 receiver 统计并生成独立 packet。
 		if stats := h.recv.stats.Load(); stats != nil {
 			stats.AddBytes(len(fr))
 		}

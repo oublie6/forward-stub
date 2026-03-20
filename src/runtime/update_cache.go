@@ -711,6 +711,9 @@ func (st *Store) waitReceiversStartInvoked(started []<-chan struct{}) {
 //  2. 绑定 senders 并增加 sender 引用计数；
 //  3. 按配置创建 task 并启动；
 //  4. 更新 task 索引与 stage 引用。
+//
+// counter 参数用于热重载：当旧 task 只是“同名重建”而非彻底删除时，
+// runtime 会把旧 task 的聚合统计句柄传进来，让新 task 继续沿用累计值。
 func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingConfig, counter *logx.TrafficCounter) error {
 	st.mu.RLock()
 	compiled := st.pipelines
@@ -752,6 +755,7 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 		PayloadLogMax:    logOpts.max,
 	}
 	if counter != nil {
+		// 先把旧句柄挂到新 task，再 Start，这样 task.Start 就不会重复创建新的聚合统计对象。
 		tk.ReuseTrafficCounter(counter)
 	}
 	if err := tk.Start(); err != nil {
@@ -788,6 +792,7 @@ func (st *Store) removeTask(name string, preserveCounter bool) *logx.TrafficCoun
 	var counter *logx.TrafficCounter
 	if ts != nil {
 		if preserveCounter {
+			// 先分离统计句柄，再 StopGraceful；这样 StopGraceful 不会关闭它。
 			counter = ts.T.DetachTrafficCounter()
 		}
 		ts.T.StopGraceful()
@@ -1029,12 +1034,17 @@ func resolveTaskSetStates(selectorName, taskSetName string, taskSets map[string]
 	return taskStates, nil
 }
 
-// dispatch 将单个输入包 fan-out 到 receiver 当前 selector 命中的所有任务。
+// dispatchToSelector 将单个输入包 fan-out 到 receiver 当前 selector 命中的所有任务。
 //
 // 热路径仅执行：
 //  1. receiver 已生成好的 match key；
 //  2. selector 对该 key 做一次精确 map lookup；
 //  3. 将命中的 task slice fan-out。
+//
+// 与聚合统计日志的关系：
+//   - receiver 在进入这里之前通常已调用 TrafficCounter.AddBytes；
+//   - task 在 Handle->sendToSender 过程中再追加 task send traffic stats；
+//   - 因此这里是“接收统计”和“发送统计”之间的中间分发桥梁。
 func dispatchToSelector(ctx context.Context, rs *ReceiverState, pkt *packet.Packet) {
 	if rs == nil {
 		pkt.Release()
@@ -1046,6 +1056,7 @@ func dispatchToSelector(ctx context.Context, rs *ReceiverState, pkt *packet.Pack
 		selector = selectorAny.(*CompiledSelector)
 	}
 	if rs.LogPayloadRecv {
+		// payload 摘要是纯观测行为，不影响 selector 匹配结果。
 		logReceiverPayload(rs.Name, pkt, rs.PayloadLogMax)
 	}
 	tasks := selector.Match(pkt.Meta.MatchKey)

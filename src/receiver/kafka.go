@@ -20,22 +20,27 @@ import (
 )
 
 type KafkaReceiver struct {
+	// name / brokers / topic / groupID 决定该 consumer group 的逻辑身份与复用键。
 	name    string
 	brokers []string
 	topic   string
 	groupID string
 
+	// onPacket 是 runtime 注入的 packet 分发回调。
 	onPacket func(*packet.Packet)
 
+	// mu 保护 client/cancel/done/stats 等运行时状态，避免 Start/Stop 并发释放。
 	mu     sync.Mutex
 	client *kgo.Client
 	cancel context.CancelFunc
 	done   chan struct{}
 
+	// stats 是 Kafka receiver 的聚合统计句柄，按 record.Value 字节数累计吞吐。
 	stats *logx.TrafficCounter
 }
 
-// NewKafkaReceiver 负责该函数对应的核心逻辑，详见实现细节。
+// NewKafkaReceiver 构造 Kafka 接收端，并在冷路径完成各类 consumer 参数解析。
+// 这些校验与默认值处理会在服务启动/热重载时提前失败，避免把非法配置带入消费循环。
 func NewKafkaReceiver(name string, rc config.ReceiverConfig) (*KafkaReceiver, error) {
 	if strings.TrimSpace(rc.Topic) == "" {
 		return nil, errors.New("kafka receiver requires topic")
@@ -143,12 +148,21 @@ func NewKafkaReceiver(name string, rc config.ReceiverConfig) (*KafkaReceiver, er
 	return &KafkaReceiver{name: name, brokers: brs, topic: rc.Topic, groupID: groupID, client: cli}, nil
 }
 
+// Name 返回 Kafka receiver 的配置名。
 func (r *KafkaReceiver) Name() string { return r.name }
 
+// Key 返回 Kafka receiver 的稳定标识。
+// 包含 brokers、groupID 和 topic，便于热重载判定实例身份。
 func (r *KafkaReceiver) Key() string {
 	return "kafka|" + strings.Join(r.brokers, ",") + "|" + r.groupID + "|" + r.topic
 }
 
+// Start 进入 Kafka 拉取循环，并把每条 record 转成 packet。
+//
+// 聚合统计关系：
+//   - Start 时在 info 级别创建 receiver traffic stats；
+//   - 每条 record 命中后按 rec.Value 长度累计；
+//   - Start 退出时关闭统计句柄与 Kafka client。
 func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
 
@@ -209,6 +223,7 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 			if r.stats != nil {
 				r.stats.AddBytes(len(rec.Value))
 			}
+			// Kafka record 在进入 runtime 前会复制 payload，避免底层 fetch 缓冲生命周期泄漏到热路径之外。
 			payload, rel := packet.CopyFrom(rec.Value)
 			matchKey := BuildMatchKey(
 				"kafka",
@@ -230,11 +245,14 @@ func (r *KafkaReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)
 			})
 		})
 		if anyRecord {
+			// 仅在真正处理过数据后允许 rebalance，可减少长轮询时的无意义抖动。
 			cli.AllowRebalance()
 		}
 	}
 }
 
+// Stop 取消消费循环并等待 Start 完成资源回收。
+// 超时与否由上层传入的 ctx 控制。
 func (r *KafkaReceiver) Stop(ctx context.Context) error {
 	r.mu.Lock()
 	cancel := r.cancel
@@ -254,6 +272,7 @@ func (r *KafkaReceiver) Stop(ctx context.Context) error {
 	}
 }
 
+// splitCSV 把逗号分隔配置解析为 broker 列表，并去除空白项。
 func splitCSV(v string) []string {
 	parts := strings.Split(v, ",")
 	out := make([]string, 0, len(parts))
@@ -266,6 +285,7 @@ func splitCSV(v string) []string {
 	return out
 }
 
+// kafkaIntDefault 为 Kafka 整数配置提供统一回退值。
 func kafkaIntDefault(v, d int) int {
 	if v <= 0 {
 		return d
@@ -273,6 +293,7 @@ func kafkaIntDefault(v, d int) int {
 	return v
 }
 
+// kafkaDurationOrDefault 解析 Kafka duration 配置，并确保结果大于 0。
 func kafkaDurationOrDefault(value, fallback string) (time.Duration, error) {
 	raw := strings.TrimSpace(value)
 	if raw == "" {
@@ -288,6 +309,7 @@ func kafkaDurationOrDefault(value, fallback string) (time.Duration, error) {
 	return d, nil
 }
 
+// kafkaIsolationLevel 解析 Kafka 消费隔离级别。
 func kafkaIsolationLevel(v string) (kgo.IsolationLevel, error) {
 	switch strings.TrimSpace(v) {
 	case "", "read_uncommitted":
@@ -299,6 +321,8 @@ func kafkaIsolationLevel(v string) (kgo.IsolationLevel, error) {
 	}
 }
 
+// kafkaGroupBalancers 解析 consumer group rebalance 策略列表。
+// 若未显式配置，则回退到项目默认平衡器集合。
 func kafkaGroupBalancers(values []string) ([]kgo.GroupBalancer, error) {
 	if len(values) == 0 {
 		values = config.DefaultKafkaReceiverBalancers

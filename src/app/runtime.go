@@ -12,19 +12,25 @@ import (
 )
 
 type Runtime struct {
+	// store 持有所有运行时组件快照，是启动/热重载/停机的核心状态容器。
 	store *runtime.Store
 
-	systemMu  sync.RWMutex
+	// systemMu 保护 systemCfg / hasSystem，确保热重载校验基线时读写一致。
+	systemMu sync.RWMutex
+	// systemCfg 是冷启动时固化的系统配置基线；业务热重载时必须保持不变。
 	systemCfg config.SystemConfig
+	// hasSystem 标识是否已经完成基线写入，防止在未初始化前误做稳定性比较。
 	hasSystem bool
 }
 
-// NewRuntime 负责该函数对应的核心逻辑，详见实现细节。
+// NewRuntime 创建应用层 Runtime 门面。
+// 它把底层 runtime.Store 与启动/重载所需的 system 配置稳定性检查组合在一起。
 func NewRuntime() *Runtime {
 	return &Runtime{store: runtime.NewStore()}
 }
 
-// UpdateCache 负责该函数对应的核心逻辑，详见实现细节。
+// UpdateCache 把一份已校验的业务配置应用到运行时。
+// 真正的构建、复用、切换逻辑都在 runtime.UpdateCache 中完成。
 func (r *Runtime) UpdateCache(ctx context.Context, cfg config.Config) error {
 	return runtime.UpdateCache(ctx, r.store, cfg)
 }
@@ -57,7 +63,8 @@ func (r *Runtime) CheckSystemConfigStable(cfg config.SystemConfig) error {
 	return nil
 }
 
-// Stop 负责该函数对应的核心逻辑，详见实现细节。
+// Stop 停止 runtime 持有的全部组件。
+// bootstrap 停机流程会通过它统一下发 stop 信号。
 func (r *Runtime) Stop(ctx context.Context) error {
 	return r.store.StopAll(ctx)
 }

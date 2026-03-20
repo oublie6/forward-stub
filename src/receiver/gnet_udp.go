@@ -15,22 +15,30 @@ import (
 )
 
 type GnetUDP struct {
-	name             string
-	listen           string
+	// name 是 receiver 配置名，用于 runtime 索引、日志与聚合统计标签。
+	name string
+	// listen 是规范化后的 gnet 监听地址（带协议前缀），由 Start 直接传给 gnet.Run。
+	listen string
+	// multicore / numEventLoop / readBufferCap / socketRecvBuffer 共同决定 gnet 事件循环的并发与 socket 行为。
 	multicore        bool
 	numEventLoop     int
 	readBufferCap    int
 	socketRecvBuffer int
-	gnetLogLevel     logging.Level
+	// gnetLogLevel 是映射后的 gnet 内部日志级别。
+	gnetLogLevel logging.Level
 
+	// onPacket 是 runtime 注入的分发回调；每收到一个 UDP 数据报就调用一次。
 	onPacket func(*packet.Packet)
 
+	// stopMu + stopFn 保存 gnet 引擎暴露的停止函数，供热重载/停机路径调用。
 	stopMu sync.Mutex
 	stopFn func(context.Context) error
-	stats  atomic.Pointer[logx.TrafficCounter]
+	// stats 是 receiver 聚合统计句柄，采用 atomic.Pointer 以适应 OnTraffic 与 Stop 并发访问。
+	stats atomic.Pointer[logx.TrafficCounter]
 }
 
-// NewGnetUDP 负责该函数对应的核心逻辑，详见实现细节。
+// NewGnetUDP 构造基于 gnet 的 UDP 接收端。
+// 该对象本身只完成参数归一化；真正的监听与统计句柄创建发生在 Start 阶段。
 func NewGnetUDP(name, listen string, multicore bool, numEventLoop, readBufferCap, socketRecvBuffer int, gnetLogLevel string) *GnetUDP {
 	return &GnetUDP{
 		name:             name,
@@ -43,13 +51,19 @@ func NewGnetUDP(name, listen string, multicore bool, numEventLoop, readBufferCap
 	}
 }
 
-// Name 负责该函数对应的核心逻辑，详见实现细节。
+// Name 返回 receiver 名称，用于 runtime 和聚合统计日志关联同一个配置实体。
 func (r *GnetUDP) Name() string { return r.name }
 
-// Key 负责该函数对应的核心逻辑，详见实现细节。
+// Key 返回 receiver 的稳定复用键。
+// 热重载比较配置时会结合该键理解当前实例的监听身份。
 func (r *GnetUDP) Key() string { return "udp_gnet|" + r.listen }
 
-// Start 负责该函数对应的核心逻辑，详见实现细节。
+// Start 启动 UDP gnet 事件循环，并把每个入站报文包装成 packet 后交给 runtime。
+//
+// 聚合统计关系：
+//   - Start 时在 info 级别下创建 receiver traffic stats；
+//   - OnTraffic 命中每个数据报时调用 AddBytes；
+//   - Start 退出或 Stop 触发时关闭统计句柄。
 func (r *GnetUDP) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
 	if logx.Enabled(zapcore.InfoLevel) {
@@ -79,7 +93,8 @@ func (r *GnetUDP) Start(ctx context.Context, onPacket func(*packet.Packet)) erro
 	)
 }
 
-// Stop 负责该函数对应的核心逻辑，详见实现细节。
+// Stop 请求 gnet 引擎退出，并提前关闭 receiver 聚合统计句柄。
+// stats 使用 Swap(nil) 是为了避免与 Start defer 或 OnTraffic 并发时重复 Close。
 func (r *GnetUDP) Stop(ctx context.Context) error {
 	r.stopMu.Lock()
 	fn := r.stopFn
@@ -98,10 +113,11 @@ func (r *GnetUDP) Stop(ctx context.Context) error {
 
 type udpHandler struct {
 	gnet.BuiltinEventEngine
+	// recv 指向所属的 GnetUDP，用于访问停止函数、统计句柄和 onPacket 回调。
 	recv *GnetUDP
 }
 
-// OnBoot 负责该函数对应的核心逻辑，详见实现细节。
+// OnBoot 在 gnet 引擎完成启动时记录 eng.Stop，供外部优雅停机。
 func (h *udpHandler) OnBoot(eng gnet.Engine) (action gnet.Action) {
 	h.recv.stopMu.Lock()
 	h.recv.stopFn = eng.Stop
@@ -109,7 +125,13 @@ func (h *udpHandler) OnBoot(eng gnet.Engine) (action gnet.Action) {
 	return gnet.None
 }
 
-// OnTraffic 负责该函数对应的核心逻辑，详见实现细节。
+// OnTraffic 处理单次 UDP 可读事件。
+//
+// 关键流程：
+// 1. 使用 Peek+Discard 读取完整数据报，规避平台差异；
+// 2. 追加 receiver 聚合统计；
+// 3. 复制 payload，构造 match key；
+// 4. 调用 runtime 注入的 onPacket，正式进入 selector/task 转发链路。
 func (h *udpHandler) OnTraffic(c gnet.Conn) gnet.Action {
 	// 对 UDP 场景优先 Peek + Discard，避免在 Linux epoll 模式下直接 Next
 	// 触发底层读指针推进后再复制所带来的边界差异（表现为上层“像是丢头”）。

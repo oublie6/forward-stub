@@ -5,7 +5,12 @@ import (
 	"time"
 )
 
+// TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats 验证 task 聚合日志不仅统计流量，
+// 还会把运行时 worker pool / queue / inflight 状态一起写入摘要。
+//
+// 该用例覆盖“有流量 + 有 runtime stats”的主路径，是后续维护聚合日志字段时的回归基线。
 func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
+	// 注册一个 task 运行时回调，模拟 task.Start 后聚合线程读取执行模型快照。
 	RegisterTaskRuntimeStats("task-a", func() TaskRuntimeStats {
 		return TaskRuntimeStats{
 			PoolSize:       64,
@@ -20,6 +25,7 @@ func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
 	})
 	defer UnregisterTaskRuntimeStats("task-a")
 
+	// 构造一次 flush 摘要，并人为注入 task counter 的累计值。
 	s := newTrafficSummary(3 * time.Second)
 	c := &trafficCounter{role: "task", name: "task-a", key: "send"}
 	s.add(c, 10, 100, time.Second)
@@ -49,7 +55,10 @@ func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
 	}
 }
 
+// TestTrafficSummaryIncludesRuntimeOnlyTaskWithoutTraffic 验证“当前周期零流量”的 task
+// 仍会因为 runtimeStats 注册而进入摘要，避免运维误判 task 已丢失或未启动。
 func TestTrafficSummaryIncludesRuntimeOnlyTaskWithoutTraffic(t *testing.T) {
+	// 仅提供运行时状态，不注入任何 packets/bytes。
 	stats := TaskRuntimeStats{PoolSize: 16, QueueSize: 64}
 	s := newTrafficSummary(time.Second)
 	s.addRuntimeOnlyTask("task-empty", stats)

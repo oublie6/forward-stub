@@ -21,6 +21,12 @@ import (
 const shutdownTimeout = 10 * time.Second
 
 // Run 负责解析参数、加载配置并驱动运行时生命周期。
+//
+// 整体职责：
+// 1. 解析 system/business 配置并完成默认值与校验；
+// 2. 初始化 logger、聚合统计参数、GC 日志、pprof；
+// 3. 构建 runtime，并启动 receiver 进入稳定接流态；
+// 4. 处理文件监听重载、信号重载与优雅停机。
 func Run(args []string) int {
 	bootLog := newStageLogger()
 	bootLog.Info("process_start", "进程启动",
@@ -281,6 +287,13 @@ func watchConfigFile(ctx context.Context, path, initialFingerprint, watchInterva
 	}
 }
 
+// reloadAndApplyBusinessConfig 执行一次业务配置热重载。
+//
+// 顺序：
+// 1. 重新读取 system+business；
+// 2. 拒绝 system 配置发生变化的场景；
+// 3. 调用 runtime.UpdateCache 执行增量/全量切换；
+// 4. 记录生效日志，供外部关联 reload_begin/reload_done。
 func reloadAndApplyBusinessConfig(ctx context.Context, rt *app.Runtime, systemPath, businessPath string, bootLog *stageLogger, sourceKey, sourceValue string) (config.Config, bool) {
 	systemCfg, _, next, err := loadConfigPair(ctx, systemPath, businessPath)
 	if err != nil {
@@ -299,6 +312,10 @@ func reloadAndApplyBusinessConfig(ctx context.Context, rt *app.Runtime, systemPa
 	return next, true
 }
 
+// loadConfigPair 统一封装配置加载链路：
+// 本地读取 -> 合并 -> ApplyDefaults -> 可选控制面拉取 -> 再次默认化 -> Validate。
+//
+// 这也是启动与热重载共享的配置入口，因此文档中的启动/重载时序都以此为准。
 func loadConfigPair(ctx context.Context, systemPath, businessPath string) (config.SystemConfig, config.BusinessConfig, config.Config, error) {
 	sys, biz, cfg, err := config.LoadLocalPair(systemPath, businessPath)
 	if err != nil {
@@ -320,6 +337,8 @@ func loadConfigPair(ctx context.Context, systemPath, businessPath string) (confi
 	return sys, biz, cfg, nil
 }
 
+// shutdownRuntime 在固定超时窗口内停止 runtime 全部组件。
+// 停机顺序的细节由 runtime.Store.StopAll 决定，这里只负责提供统一超时与阶段日志。
 func shutdownRuntime(rt *app.Runtime, bootLog *stageLogger) {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
