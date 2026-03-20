@@ -29,7 +29,7 @@ match key -> task_set
 
 关键规则：
 
-- key 必须由 receiver 生成的**完整 match key**。
+- key 必须由 receiver 生成的**完整 match key**；selector 本身不再参与 key 拼接。
 - value 必须是 task_set 名称。
 - 不支持通配符、正则、优先级、表达式。
 
@@ -85,7 +85,7 @@ task 决定的是“命中之后怎么处理”：
 
 ```text
 1. receiver 收到数据
-2. receiver 构造 packet + match key
+2. receiver 用各自已编译的 builder 构造 packet + match key
 3. dispatch 读取 receiver 当前 selector 快照
 4. 用 match key 做一次 map 精确查找
 5. 命中 task 切片后 fan-out

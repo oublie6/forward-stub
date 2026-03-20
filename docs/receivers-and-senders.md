@@ -2,7 +2,7 @@
 
 本文从**协议类型**而不是顶层 JSON 结构出发，解释每种 receiver / sender 的有效字段、match key、默认值来源和注意事项。
 
-补充说明：`match_key` 已下沉到 receiver 自身实现。各协议会在初始化阶段把 `match_key.mode` 编译成专用 builder，避免热路径继续经过统一公共拼接函数。
+补充说明：`match_key` 已下沉到 receiver 自身实现。各协议会在初始化阶段把 `match_key.mode` 编译成专用 builder；UDP/TCP/Kafka/SFTP 都是在各自 receiver 构建阶段完成这件事，避免热路径继续经过统一公共拼接函数。
 
 ## 1. Receiver：负责接入并构造 match key
 
@@ -13,6 +13,7 @@
 - 可选字段：`multicore`、`num_event_loop`、`read_buffer_cap`、`socket_recv_buffer`、`log_payload_recv`、`payload_log_max_bytes`
 - `match key` 默认保持兼容输出：`udp|src_addr=<源地址>`。
 - `match_key.mode` 支持：`remote_addr`、`remote_ip`、`local_addr`、`local_ip`、`fixed`。
+- receiver 统计对象在 `Start()` 时创建，真正收到报文后才开始 `AddBytes()`。
 
 适用说明：
 
@@ -26,6 +27,7 @@
 - 额外字段：`frame`
 - `match key` 默认保持兼容输出：`tcp|src_addr=<源地址>`。
 - `match_key.mode` 支持：`remote_addr`、`remote_ip`、`local_addr`、`local_port`、`fixed`。
+- receiver 统计对象在 `Start()` 时创建；每帧切出后再按帧累计字节。
 
 `frame` 说明：
 
@@ -73,7 +75,14 @@
 - `fetch_max_wait_ms`
 - `isolation_level`
 
-#### 1.3.2 Kafka receiver 需要特别注意的点
+#### 1.3.2 Kafka receiver 默认值、启动与热重载
+
+- `dial_timeout`、`conn_idle_timeout`、`metadata_max_age`、`retry_backoff`、`session_timeout`、`heartbeat_interval`、`rebalance_timeout`、`balancers`、`auto_commit`、`auto_commit_interval`、`fetch_max_partition_bytes`、`isolation_level` 会先在 `ApplyDefaults()` 层回写。
+- `group_id`、`fetch_min_bytes`、`fetch_max_bytes`、`fetch_max_wait_ms` 则在 `NewKafkaReceiver()` 中回退并映射到 `kgo`。
+- `Start()` 时会创建 receiver 统计对象；真正处理到 record 后，才按 `record.Value` 长度累计字节。
+- 热重载时，只要 Kafka receiver 配置发生变化，就会重建 `kgo.Client`、重新编译 match key builder，并按“新实例先启动、旧实例后停止”的顺序切换。
+
+#### 1.3.3 Kafka receiver 需要特别注意的点
 
 - `start_offset` 仅在没有已提交位点时更有意义；配置值只允许 `earliest` / `latest`。
 - `heartbeat_interval` 必须小于 `session_timeout`。
@@ -168,6 +177,7 @@
 - `idempotent=true` 时，`acks` 必须是 `all/-1`。
 - `max_in_flight_requests_per_connection` 在幂等开启时通常应保持 `1`。
 - `linger_ms`、`batch_max_bytes`、压缩、缓冲上限一起决定吞吐、CPU 与内存的平衡。
+- 热重载时，只要 Kafka sender 配置变化，就会新建 sender，并联动重建引用该 sender 的 task。
 
 #### 2.4.3 分区与 record key
 

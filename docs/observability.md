@@ -26,8 +26,9 @@
 
 当前代码会在以下位置按 info 级别输出聚合流量统计：
 
-- receiver 侧：UDP、TCP、Kafka、SFTP 接收流量。
-- task 侧：任务发送流量。
+- receiver 侧：UDP、TCP、Kafka、SFTP 接收流量。统计句柄在各自 `Start()` 时创建，真正收到首包、首条 record、首个 chunk 后才开始 `AddBytes()`。
+- task 侧：任务发送流量。统计句柄在 `Task.Start()` 时创建。
+- `trafficStatsHub` 后台 flush 线程会在第一次 `AcquireTrafficCounter()` 时惰性启动。
 
 ### 2.3 payload 摘要日志
 
@@ -85,7 +86,7 @@
 ### 4.1 配置项
 
 - `control.pprof_port=-1`：禁用。
-- `control.pprof_port=0`：回退到默认 `6060`。
+- `control.pprof_port=0`：会先在默认值阶段回写为 `6060`。
 - `control.pprof_port=6060`：监听 `:6060`。
 
 ### 4.2 常用接口
