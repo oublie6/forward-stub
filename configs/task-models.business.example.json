@@ -43,7 +43,6 @@
     "task_pool": {
       "execution_model": "pool",
       "pool_size": 2048,
-      "queue_size": 4096,
       "pipelines": [
         "pipe_passthrough"
       ],

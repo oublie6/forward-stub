@@ -26,6 +26,9 @@ const (
 	// ExecutionModelChannel 表示进入单 goroutine 顺序 worker。
 	// 适合需要保持顺序或限制串行副作用的任务。
 	ExecutionModelChannel = "channel"
+
+	defaultPoolSize         = 4096
+	defaultChannelQueueSize = 8192
 )
 
 // Task 表示一条完整数据处理链路：
@@ -54,9 +57,7 @@ type Task struct {
 	PoolSize int
 	// FastPath 是旧配置兼容字段；当未显式指定 ExecutionModel 时会影响默认模型选择。
 	FastPath bool
-	// QueueSize 是 pool 模型允许的最大阻塞提交数。
-	QueueSize int
-	// ChannelQueueSize 是 channel 模型的有界缓冲大小；未配置时回退到 QueueSize。
+	// ChannelQueueSize 是 channel 模型的有界缓冲大小；未配置时回退到默认值。
 	ChannelQueueSize int
 	// ExecutionModel 是最终生效的执行模型，Start 后会被 resolveExecutionModel 规范化。
 	ExecutionModel string
@@ -109,23 +110,19 @@ type taskRequest struct {
 func (t *Task) Start() error {
 	if t.PoolSize <= 0 {
 		// 默认采用 4096，优先提升发送侧受限场景吞吐。
-		t.PoolSize = 4096
-	}
-	if t.QueueSize <= 0 {
-		t.QueueSize = 8192
+		t.PoolSize = defaultPoolSize
 	}
 	if t.ChannelQueueSize <= 0 {
-		t.ChannelQueueSize = t.QueueSize
+		t.ChannelQueueSize = defaultChannelQueueSize
 	}
 	mode := t.resolveExecutionModel()
 	t.ExecutionModel = mode
 
 	switch mode {
 	case ExecutionModelPool:
-		// pool 模型下的排队与并发控制完全交给 ants，适合高吞吐发送型链路。
+		// pool 模型下的并发控制完全交给 ants，适合高吞吐发送型链路。
 		p, err := ants.NewPool(
 			t.PoolSize,
-			ants.WithMaxBlockingTasks(t.QueueSize),
 			ants.WithPreAlloc(true),
 		)
 		if err != nil {
@@ -184,12 +181,12 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 		run(ctx)
 		return
 	case ExecutionModelPool:
-		// pool 模型下 Submit 失败通常意味着队列已满，需要记录丢弃日志并主动释放 packet。
+		// pool 模型下 Submit 失败通常意味着协程池已停止或处于异常状态，需要记录丢弃日志并主动释放 packet。
 		if err := t.pool.Submit(func() { run(ctx) }); err != nil {
 			t.inflight.Done()
 			t.inflightCount.Add(-1)
 			pkt.Release()
-			logx.L().Errorw("任务丢弃数据包：协程池队列已满", "任务名称", t.Name, "协程池大小", t.PoolSize, "排队长度", t.QueueSize, "错误", err)
+			logx.L().Errorw("任务丢弃数据包：协程池提交失败", "任务名称", t.Name, "协程池大小", t.PoolSize, "错误", err)
 			return
 		}
 		return
@@ -357,35 +354,23 @@ func payloadHex(b []byte, max int) string {
 //   - 读取结果允许是“某一时刻的近似快照”，用于观测而非强一致控制。
 func (t *Task) runtimeStats() logx.TaskRuntimeStats {
 	stats := logx.TaskRuntimeStats{
-		PoolSize:  t.PoolSize,
-		QueueSize: t.QueueSize,
-		Inflight:  t.inflightCount.Load(),
-		FastPath:  t.ExecutionModel == ExecutionModelFastPath,
+		ExecutionModel: t.ExecutionModel,
+		Inflight:       t.inflightCount.Load(),
 	}
 	t.stateMu.RLock()
 	pool := t.pool
 	ch := t.ch
 	t.stateMu.RUnlock()
 	if pool != nil {
-		// pool 模型下，QueueAvailable 反映还可接受多少阻塞提交请求。
-		stats.PoolRunning = pool.Running()
-		stats.PoolFree = pool.Free()
-		stats.PoolWaiting = pool.Waiting()
-		if stats.QueueSize > 0 {
-			stats.QueueAvailable = stats.QueueSize - stats.PoolWaiting
-			if stats.QueueAvailable < 0 {
-				stats.QueueAvailable = 0
-			}
-		}
+		stats.PoolSize = t.PoolSize
+		stats.WorkerPoolRunning = pool.Running()
+		stats.WorkerPoolFree = pool.Free()
+		stats.WorkerPoolWaiting = pool.Waiting()
 	}
 	if ch != nil && t.ChannelQueueSize > 0 {
-		// channel 模型下复用 Waiting/QueueAvailable 字段表达队列状态，方便统一输出。
-		stats.QueueSize = t.ChannelQueueSize
-		stats.PoolWaiting = len(ch)
-		stats.QueueAvailable = cap(ch) - len(ch)
-		if stats.QueueAvailable < 0 {
-			stats.QueueAvailable = 0
-		}
+		stats.ChannelQueueSize = cap(ch)
+		stats.ChannelQueueUsed = len(ch)
+		stats.ChannelQueueAvailable = cap(ch) - len(ch)
 	}
 	return stats
 }

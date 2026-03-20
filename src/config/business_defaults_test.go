@@ -6,7 +6,7 @@ func TestSystemBusinessDefaultsAppliedToBusinessConfig(t *testing.T) {
 	m := true
 	sys := SystemConfig{
 		BusinessDefaults: BusinessDefaultsConfig{
-			Task:     TaskDefaultConfig{PoolSize: 100, QueueSize: 200, ChannelQueueSize: 300, ExecutionModel: "channel", PayloadLogMaxBytes: 111},
+			Task:     TaskDefaultConfig{PoolSize: 100, ChannelQueueSize: 300, ExecutionModel: "channel", PayloadLogMaxBytes: 111},
 			Receiver: ReceiverDefaultConfig{Multicore: &m, NumEventLoop: 12, PayloadLogMaxBytes: 222},
 			Sender:   SenderDefaultConfig{Concurrency: 16},
 		},
@@ -23,7 +23,7 @@ func TestSystemBusinessDefaultsAppliedToBusinessConfig(t *testing.T) {
 	cfg.ApplyDefaults()
 
 	tc := cfg.Tasks["t1"]
-	if tc.PoolSize != 100 || tc.QueueSize != 200 || tc.ChannelQueueSize != 300 || tc.ExecutionModel != "channel" || tc.PayloadLogMaxBytes != 111 {
+	if tc.PoolSize != 100 || tc.ChannelQueueSize != 300 || tc.ExecutionModel != "channel" || tc.PayloadLogMaxBytes != 111 {
 		t.Fatalf("unexpected task defaults: %+v", tc)
 	}
 	rc := cfg.Receivers["r1"]

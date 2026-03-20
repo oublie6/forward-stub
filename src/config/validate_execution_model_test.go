@@ -35,3 +35,20 @@ func TestValidateTaskExecutionModel(t *testing.T) {
 		t.Fatal("expected invalid channel_queue_size error")
 	}
 }
+
+func TestDocumentedTaskExecutionModelExamplesValidate(t *testing.T) {
+	tests := []TaskConfig{
+		{ExecutionModel: "fastpath", Pipelines: []string{"p"}, Senders: []string{"s"}},
+		{ExecutionModel: "pool", PoolSize: 32, Pipelines: []string{"p"}, Senders: []string{"s"}},
+		{ExecutionModel: "channel", ChannelQueueSize: 64, Pipelines: []string{"p"}, Senders: []string{"s"}},
+	}
+
+	for _, tc := range tests {
+		cfg := baseConfigForTaskModel()
+		cfg.Tasks["t"] = tc
+		cfg.ApplyDefaults()
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("expected documented task config valid for %+v: %v", tc, err)
+		}
+	}
+}

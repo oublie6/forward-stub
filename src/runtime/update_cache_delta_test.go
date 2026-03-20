@@ -159,7 +159,7 @@ func TestPlanBusinessDeltaCartesianThreeByThreeByThreeByThree(t *testing.T) {
 			delete(next, "t1")
 		case opModify:
 			tc := next["t1"]
-			tc.QueueSize = 2048
+			tc.ChannelQueueSize = 2048
 			next["t1"] = tc
 		}
 		return next
@@ -248,7 +248,7 @@ func TestApplyTaskDeltaAddUpdateRemove(t *testing.T) {
 		Senders:   map[string]config.SenderConfig{"s1": {Type: "tcp_gnet", Remote: "127.0.0.1:12345"}},
 		Pipelines: map[string][]config.StageConfig{"p1": {}},
 		Tasks: map[string]config.TaskConfig{
-			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "pool", QueueSize: 1024},
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "pool", PoolSize: 1024},
 			"t2": {Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"},
 		},
 		Logging: config.LoggingConfig{},

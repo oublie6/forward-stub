@@ -106,7 +106,6 @@
 | 字段 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `pool_size` | int | 无 | 当 `task.pool_size <= 0` 时作为系统级默认值。 |
-| `queue_size` | int | 无 | 当 `task.queue_size <= 0` 时作为系统级默认值。 |
 | `channel_queue_size` | int | 无 | 当 `task.channel_queue_size <= 0` 时作为系统级默认值。 |
 | `execution_model` | string | 无 | 当 `task.execution_model` 为空时作为系统级默认值。 |
 | `payload_log_max_bytes` | int | 无 | 当 `task.payload_log_max_bytes <= 0` 时作为系统级默认值。 |
@@ -448,8 +447,7 @@
 | `pool_size` | int | 否 | `4096` | 仅 `execution_model=pool` 真正影响 worker 池大小。 |
 | `fast_path` | bool | 否 | `false` | 兼容旧配置；仅当 `execution_model` 为空时才会决定执行模型。 |
 | `execution_model` | string | 否 | 空；最终回退为 `pool` | 支持 `fastpath`、`pool`、`channel`。 |
-| `queue_size` | int | 否 | `8192` | pool 模式下的最大阻塞任务数；`<=0` 回退默认值。 |
-| `channel_queue_size` | int | 否 | 回退到 `queue_size` | 仅 `channel` 模式生效。 |
+| `channel_queue_size` | int | 否 | `8192` | 仅 `channel` 模式生效；未配置或 `<=0` 时回退默认值。 |
 | `pipelines` | []string | 否 | 空数组 | 按顺序执行的 pipeline 名称列表。 |
 | `senders` | []string | 是 | 无 | 输出 sender 列表；不能为空。 |
 | `log_payload_send` | bool | 否 | `false` | 是否在发送前打印 payload 摘要。 |
@@ -543,8 +541,7 @@
 | 字段 | 默认值 |
 |---|---|
 | `pool_size` | `4096` |
-| `queue_size` | `8192` |
-| `channel_queue_size` | 回退到 `queue_size` |
+| `channel_queue_size` | `8192` |
 | `payload_log_max_bytes` | 回退到 `logging.payload_log_max_bytes` |
 | 最终执行模型 | `pool`（当 `execution_model` 为空且 `fast_path=false`） |
 

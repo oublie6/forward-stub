@@ -30,6 +30,13 @@
 - task 侧：任务发送流量。统计句柄在 `Task.Start()` 时创建。
 - `trafficStatsHub` 后台 flush 线程会在第一次 `AcquireTrafficCounter()` 时惰性启动。
 
+当前 task 聚合统计会附带执行模型专属运行时字段：
+
+- 公共字段：`execution_model`、`inflight`
+- pool 模式附加：`pool_size`、`worker_pool.running`、`worker_pool.free`、`worker_pool.waiting`
+- channel 模式附加：`channel.queue_size`、`channel.queue_used`、`channel.queue_available`
+- fastpath 模式：只输出最小必要字段，不再伪造 pool/channel 指标
+
 ### 2.3 payload 摘要日志
 
 #### receiver 侧

@@ -85,7 +85,7 @@ nc -vz 127.0.0.1 9092
 优先检查：
 
 1. `execution_model` 是否合适。
-2. `pool_size` / `queue_size` / `channel_queue_size` 是否过小。
+2. `pool_size` / `channel_queue_size` 是否过小。
 3. sender 下游是否变慢。
 4. 是否误开 payload 摘要日志导致日志放大。
 

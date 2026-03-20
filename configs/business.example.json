@@ -257,8 +257,6 @@
     "task_fast_udp": {
       "pool_size": 4096,
       "fast_path": true,
-      "queue_size": 8192,
-      "channel_queue_size": 8192,
       "pipelines": [
         "pipe_match_and_replace"
       ],
@@ -273,8 +271,6 @@
       "pool_size": 2048,
       "fast_path": false,
       "execution_model": "pool",
-      "queue_size": 4096,
-      "channel_queue_size": 4096,
       "pipelines": [
         "pipe_route_sender"
       ],
@@ -288,7 +284,6 @@
     "task_channel_archive": {
       "pool_size": 1024,
       "execution_model": "channel",
-      "queue_size": 2048,
       "channel_queue_size": 1024,
       "pipelines": [
         "pipe_match_and_replace"
