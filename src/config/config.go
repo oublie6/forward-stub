@@ -187,6 +187,16 @@ type LoggingConfig struct {
 	GCStatsLogInterval string `json:"gc_stats_log_interval,omitempty"`
 }
 
+// ReceiverMatchKeyConfig 描述 receiver 自身的 match key 生成配置。
+type ReceiverMatchKeyConfig struct {
+	// Mode 指定当前 receiver 采用哪一种 match key 生成模式。
+	// 用法：留空时保持各协议的历史默认行为；显式填写后会在 receiver 初始化阶段编译为专用 builder。
+	Mode string `json:"mode,omitempty"`
+	// FixedValue 是 fixed 模式下写入 match key 的固定值。
+	// 用法：仅在 mode=fixed 时生效；初始化时会预先编码，热路径直接复用。
+	FixedValue string `json:"fixed_value,omitempty"`
+}
+
 // ReceiverConfig 描述单个接收端实例。
 type ReceiverConfig struct {
 	// Type 指定接收端实现类型（udp_gnet/tcp_gnet/kafka/sftp）。
@@ -213,6 +223,9 @@ type ReceiverConfig struct {
 	// Selector 是当前 receiver 绑定的 selector 名称。
 	// 用法：receiver 只负责生成 match key，selector 再把 key 映射到 task set。
 	Selector string `json:"selector"`
+	// MatchKey 描述该 receiver 的 match key 生成策略。
+	// 用法：配置会在 receiver 初始化或热重载时编译成专用 builder；留空时保持当前协议的兼容默认行为。
+	MatchKey ReceiverMatchKeyConfig `json:"match_key,omitempty"`
 	// Topic 是 Kafka 消费主题名。
 	// 用法：Type=kafka 时必填，指向要订阅的数据流。
 	Topic string `json:"topic,omitempty"`

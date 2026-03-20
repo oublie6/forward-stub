@@ -41,6 +41,9 @@ type SFTPReceiver struct {
 	// onPacket 是上游注入的投递回调。
 	// 用法：每读到一个 chunk 就调用一次，把数据送入 task 流程。
 	onPacket func(*packet.Packet)
+	// matchKeyBuilder / matchKeyMode 是初始化阶段编译好的 match key 逻辑与模式。
+	matchKeyBuilder sftpMatchKeyBuilder
+	matchKeyMode    string
 
 	// mu 保护 cancel/done/seen 等可变状态。
 	mu sync.Mutex
@@ -75,7 +78,17 @@ func NewSFTPReceiver(name string, rc config.ReceiverConfig) (*SFTPReceiver, erro
 	if err := config.ValidateSSHHostKeyFingerprint(rc.HostKeyFingerprint); err != nil {
 		return nil, fmt.Errorf("sftp receiver invalid host_key_fingerprint: %w", err)
 	}
-	return &SFTPReceiver{name: name, cfg: rc, seen: make(map[string]string)}, nil
+	builder, mode, err := compileSFTPMatchKeyBuilder(rc.MatchKey, rc.RemoteDir)
+	if err != nil {
+		return nil, err
+	}
+	return &SFTPReceiver{
+		name:            name,
+		cfg:             rc,
+		seen:            make(map[string]string),
+		matchKeyBuilder: builder,
+		matchKeyMode:    mode,
+	}, nil
 }
 
 // Name 返回 receiver 名称（配置 key）。
@@ -85,6 +98,9 @@ func (r *SFTPReceiver) Name() string { return r.name }
 func (r *SFTPReceiver) Key() string {
 	return "sftp|" + strings.TrimSpace(r.cfg.Listen) + "|" + strings.TrimSpace(r.cfg.RemoteDir)
 }
+
+// MatchKeyMode 返回 SFTP receiver 当前生效的 match key 模式。
+func (r *SFTPReceiver) MatchKeyMode() string { return r.matchKeyMode }
 
 // Start 启动轮询循环并持续产出 packet。
 // 用法：通常由 runtime 调用一次；成功后会阻塞直到 ctx 取消或 Stop 被调用。
@@ -210,6 +226,8 @@ func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePa
 	buf := make([]byte, chunkSize)
 	offset := int64(0)
 	transferID := fmt.Sprintf("%s|%d", filePath, totalSize)
+	matchKey := r.matchKeyBuilder(filePath)
+	fileName := path.Base(filePath)
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -223,11 +241,6 @@ func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePa
 				r.stats.AddBytes(n)
 			}
 			h := sha256.Sum256(buf[:n])
-			matchKey := BuildMatchKey(
-				"sftp",
-				MatchKeyField{Name: "remote_dir", Value: strings.TrimSpace(r.cfg.RemoteDir)},
-				MatchKeyField{Name: "file_name", Value: path.Base(filePath)},
-			)
 			r.onPacket(&packet.Packet{
 				Envelope: packet.Envelope{
 					Kind:    packet.PayloadKindFileChunk,
@@ -237,7 +250,7 @@ func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePa
 						Remote:     filePath,
 						Local:      r.cfg.Listen,
 						MatchKey:   matchKey,
-						FileName:   path.Base(filePath),
+						FileName:   fileName,
 						FilePath:   filePath,
 						TransferID: transferID,
 						Offset:     offset,

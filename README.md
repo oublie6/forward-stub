@@ -146,8 +146,16 @@ receiver -> selector -> task(pipeline + sender)
 - `task_sets` 只做复用；运行时会在编译期直接展开为 task 切片。
 - `task.fast_path` 是兼容字段：仅当 `execution_model` 为空时才会把 `fast_path=true` 解释为 `fastpath`。
 - Kafka、SFTP、gnet、组播等字段都只在对应 `type` 下生效，不能跨协议混用。
+- `receiver.match_key` 为 receiver 局部配置：留空时保持历史兼容 key；显式配置后会在 receiver 初始化/热重载时编译成专用 builder，热路径不再走统一公共拼接函数。
 - 字符串 duration 字段必须是合法且大于 0 的 `time.ParseDuration` 文本，例如 `250ms`、`10s`、`5m`。
 - `control.pprof_port`：`-1` 表示禁用，`0` 表示回退默认值 `6060`，`1~65535` 表示监听对应端口。
+
+## 5.1 receiver match key 改造说明
+
+- match key 生成职责已经收敛到各类 receiver 自身；selector 只做完整字符串精确匹配。
+- `receiver.match_key.mode` 留空时保持兼容默认行为：UDP/TCP 继续输出历史 `src_addr`，Kafka 继续输出 `topic + partition`，SFTP 继续输出 `remote_dir + file_name`。
+- 显式配置模式后，会在 receiver 初始化或热重载时预编译为协议专属 builder；UDP/TCP 热路径只做一次轻量函数调用，TCP/SFTP 还会尽量按连接/文件复用已生成的 key。
+- 详见 `docs/configuration.md` 与 `docs/receivers-and-senders.md`。
 
 ## 6. 本次文档治理覆盖范围
 

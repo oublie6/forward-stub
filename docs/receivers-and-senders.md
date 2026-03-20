@@ -2,6 +2,8 @@
 
 本文从**协议类型**而不是顶层 JSON 结构出发，解释每种 receiver / sender 的有效字段、match key、默认值来源和注意事项。
 
+补充说明：`match_key` 已下沉到 receiver 自身实现。各协议会在初始化阶段把 `match_key.mode` 编译成专用 builder，避免热路径继续经过统一公共拼接函数。
+
 ## 1. Receiver：负责接入并构造 match key
 
 ### 1.1 UDP gnet receiver
@@ -9,7 +11,8 @@
 - `type=udp_gnet`
 - 关键字段：`listen`、`selector`
 - 可选字段：`multicore`、`num_event_loop`、`read_buffer_cap`、`socket_recv_buffer`、`log_payload_recv`、`payload_log_max_bytes`
-- `match key` 生成规则：`udp|src_addr=<源地址>`
+- `match key` 默认保持兼容输出：`udp|src_addr=<源地址>`。
+- `match_key.mode` 支持：`remote_addr`、`remote_ip`、`local_addr`、`local_ip`、`fixed`。
 
 适用说明：
 
@@ -21,7 +24,8 @@
 - `type=tcp_gnet`
 - 关键字段：`listen`、`selector`
 - 额外字段：`frame`
-- `match key` 生成规则：`tcp|src_addr=<源地址>`
+- `match key` 默认保持兼容输出：`tcp|src_addr=<源地址>`。
+- `match_key.mode` 支持：`remote_addr`、`remote_ip`、`local_addr`、`local_port`、`fixed`。
 
 `frame` 说明：
 
@@ -34,7 +38,8 @@
 - `type=kafka`
 - 关键字段：`listen`、`selector`、`topic`
 - `group_id` 可选，未配置时自动生成为 `forward-stub-<receiver_name>`。
-- `match key` 生成规则：`kafka|topic=<topic>|partition=<partition>`
+- `match key` 默认保持兼容输出：`kafka|topic=<topic>|partition=<partition>`。
+- `match_key.mode` 支持：`topic`、`topic_partition`、`fixed`。
 
 #### 1.3.1 Kafka receiver 常用配置分组
 
@@ -80,7 +85,8 @@
 
 - `type=sftp`
 - 关键字段：`listen`、`selector`、`username`、`password`、`remote_dir`、`host_key_fingerprint`
-- `match key` 生成规则：`sftp|remote_dir=<remote_dir>|file_name=<文件名>`
+- `match key` 默认保持兼容输出：`sftp|remote_dir=<remote_dir>|file_name=<文件名>`。
+- `match_key.mode` 支持：`remote_path`、`filename`、`fixed`。
 
 #### 1.4.1 运行时行为
 

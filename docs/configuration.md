@@ -141,6 +141,8 @@
 | `type` | string | 是 | 无 | 全部 receiver | 当前支持 `udp_gnet`、`tcp_gnet`、`kafka`、`sftp`。 |
 | `listen` | string | 大多数场景是 | 无 | 全部 receiver | UDP/TCP 填监听地址；Kafka 填 broker CSV；SFTP 填 `host:port`。 |
 | `selector` | string | 是 | 无 | 全部 receiver | 必须引用已存在 selector。 |
+| `match_key.mode` | string | 否 | 留空表示兼容默认行为 | 全部 receiver | receiver 自身的 match key 生成模式；初始化/热重载时会预编译成专用 builder。 |
+| `match_key.fixed_value` | string | 否 | 空 | `match_key.mode=fixed` | fixed 模式下写入的固定值；仅在 `mode=fixed` 时允许配置。 |
 | `multicore` | bool | 否 | `true` | 仅 `udp_gnet` / `tcp_gnet` | gnet 多核事件循环开关。 |
 | `num_event_loop` | int | 否 | `max(8, runtime.NumCPU())` | 仅 `udp_gnet` / `tcp_gnet` | gnet event loop 数量。 |
 | `read_buffer_cap` | int | 否 | gnet 默认值 | 仅 `udp_gnet` / `tcp_gnet` | gnet 每连接/会话的读缓冲上限。 |
@@ -154,15 +156,29 @@
 #### `type=udp_gnet`
 
 - 必填：`listen`、`selector`。
-- 可选：`multicore`、`num_event_loop`、`read_buffer_cap`、`socket_recv_buffer`、`log_payload_recv`、`payload_log_max_bytes`。
-- `match key` 固定格式：`udp|src_addr=<remote_addr>`。
+- 可选：`match_key`、`multicore`、`num_event_loop`、`read_buffer_cap`、`socket_recv_buffer`、`log_payload_recv`、`payload_log_max_bytes`。
+- `match_key.mode` 支持：
+  - 留空：兼容默认模式，输出 `udp|src_addr=<remote_addr>`。
+  - `remote_addr`：输出 `udp|remote_addr=<remote_addr>`。
+  - `remote_ip`：输出 `udp|remote_ip=<remote_ip>`。
+  - `local_addr`：输出 `udp|local_addr=<local_addr>`。
+  - `local_ip`：输出 `udp|local_ip=<local_ip>`。
+  - `fixed`：输出 `udp|fixed=<fixed_value>`。
+- 性能注意：`remote_addr` / 兼容默认模式会直接复用已有 `RemoteAddr().String()`；只有 `remote_ip` / `local_ip` 才做最小必要的地址解析。
 
 #### `type=tcp_gnet`
 
 - 必填：`listen`、`selector`。
 - 可选：同上，另外支持 `frame`。
 - `frame="u16be"` 表示输入流按 2 字节大端长度前缀拆帧。
-- `match key` 固定格式：`tcp|src_addr=<remote_addr>`。
+- `match_key.mode` 支持：
+  - 留空：兼容默认模式，输出 `tcp|src_addr=<remote_addr>`。
+  - `remote_addr`：输出 `tcp|remote_addr=<remote_addr>`。
+  - `remote_ip`：输出 `tcp|remote_ip=<remote_ip>`。
+  - `local_addr`：输出 `tcp|local_addr=<local_addr>`。
+  - `local_port`：输出 `tcp|local_port=<local_port>`。
+  - `fixed`：输出 `tcp|fixed=<fixed_value>`。
+- 性能注意：TCP 会在连接建立时一次性编译并缓存本连接的 match key，后续每帧直接复用。
 
 ### 6.3 Kafka receiver
 
@@ -200,7 +216,16 @@
 | `isolation_level` | string | `read_uncommitted` | `kgo.FetchIsolationLevel` | 支持 `read_uncommitted`、`read_committed`。 |
 | `fetch_max_wait_ms` | int | `100` | `kgo.FetchMaxWait` | 拉取最大等待毫秒数。 |
 
-#### 6.3.3 Kafka receiver 校验规则
+#### 6.3.3 Kafka receiver match key
+
+- `match_key.mode` 支持：
+  - 留空：兼容默认模式，输出 `kafka|topic=<topic>|partition=<partition>`。
+  - `topic`：输出 `kafka|topic=<topic>`。
+  - `topic_partition`：输出 `kafka|topic_partition=<topic>|<partition>`。
+  - `fixed`：输出 `kafka|fixed=<fixed_value>`。
+- 性能注意：`topic` / `fixed` 会在初始化时预生成整串 key；`topic_partition` 只在热路径追加分区号。
+
+#### 6.3.4 Kafka receiver 校验规则
 
 - `listen` 必须非空。
 - `topic` 必须非空。
@@ -225,9 +250,14 @@
 
 #### 6.4.1 SFTP receiver 行为说明
 
-- `match key` 固定格式：`sftp|remote_dir=<remote_dir>|file_name=<base(file)>`。
+- `match_key.mode` 支持：
+  - 留空：兼容默认模式，输出 `sftp|remote_dir=<remote_dir>|file_name=<base(file)>`。
+  - `remote_path`：输出 `sftp|remote_path=<remote_path>`。
+  - `filename`：输出 `sftp|filename=<base(file)>`。
+  - `fixed`：输出 `sftp|fixed=<fixed_value>`。
 - 每次扫描目录时会按文件名排序，保证处理顺序稳定。
 - receiver 通过 `seen` 指纹避免重复消费未变化文件；该行为是运行时逻辑，不需要额外配置。
+- 性能注意：SFTP 会在单文件开始流式读取前先生成一次 match key，后续所有 chunk 直接复用。
 
 ## 7. selectors 配置
 
