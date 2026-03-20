@@ -28,9 +28,6 @@ func (c *Config) ApplyBusinessDefaults(d BusinessDefaultsConfig) {
 		if tc.PoolSize <= 0 && d.Task.PoolSize > 0 {
 			tc.PoolSize = d.Task.PoolSize
 		}
-		if tc.QueueSize <= 0 && d.Task.QueueSize > 0 {
-			tc.QueueSize = d.Task.QueueSize
-		}
 		if tc.ChannelQueueSize <= 0 && d.Task.ChannelQueueSize > 0 {
 			tc.ChannelQueueSize = d.Task.ChannelQueueSize
 		}
@@ -117,11 +114,8 @@ func (c *Config) ApplyDefaults() {
 		if tc.PoolSize <= 0 {
 			tc.PoolSize = DefaultTaskPoolSize
 		}
-		if tc.QueueSize <= 0 {
-			tc.QueueSize = DefaultTaskQueueSize
-		}
 		if tc.ChannelQueueSize <= 0 {
-			tc.ChannelQueueSize = tc.QueueSize
+			tc.ChannelQueueSize = DefaultTaskChannelQueueSize
 		}
 		if tc.PayloadLogMaxBytes <= 0 {
 			tc.PayloadLogMaxBytes = c.Logging.PayloadLogMaxBytes

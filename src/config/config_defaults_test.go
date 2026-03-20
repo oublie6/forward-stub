@@ -29,6 +29,19 @@ func TestApplyDefaultsSetsReceiverMulticoreWhenUnset(t *testing.T) {
 		t.Fatalf("unexpected receiver multicore default: %+v", rc.Multicore)
 	}
 }
+
+func TestApplyDefaultsSetsTaskChannelQueueSizeIndependently(t *testing.T) {
+	cfg := Config{
+		Tasks: map[string]TaskConfig{
+			"t1": {ExecutionModel: "channel"},
+		},
+	}
+	cfg.ApplyDefaults()
+	if got := cfg.Tasks["t1"].ChannelQueueSize; got != DefaultTaskChannelQueueSize {
+		t.Fatalf("unexpected channel_queue_size default: got=%d want=%d", got, DefaultTaskChannelQueueSize)
+	}
+}
+
 func TestApplyDefaultsSetsSocketBufferDefaults(t *testing.T) {
 	cfg := Config{
 		Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000"}},

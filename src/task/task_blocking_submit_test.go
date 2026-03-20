@@ -33,9 +33,9 @@ func trackedPacket(payload []byte, released *atomic.Int32) *packet.Packet {
 	return &packet.Packet{Envelope: packet.Envelope{Payload: out}, ReleaseFn: func() { rel(); released.Add(1) }}
 }
 
-func TestTaskSubmitBlocksAndQueuesWhenPoolBusy(t *testing.T) {
+func TestTaskSubmitBlocksWhenPoolBusyWithoutQueueSizeConfig(t *testing.T) {
 	s := &gateSender{testNamedSender: testNamedSender{name: "gate"}, entered: make(chan struct{}, 2), release: make(chan struct{})}
-	tk := &Task{PoolSize: 1, QueueSize: 1, Senders: []sender.Sender{s}}
+	tk := &Task{PoolSize: 1, Senders: []sender.Sender{s}}
 	if err := tk.Start(); err != nil {
 		t.Fatalf("start task: %v", err)
 	}

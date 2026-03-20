@@ -5,22 +5,20 @@ import (
 	"time"
 )
 
-// TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats 验证 task 聚合日志不仅统计流量，
-// 还会把运行时 worker pool / queue / inflight 状态一起写入摘要。
+// TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats 验证 pool 模式 task 聚合日志不仅统计流量，
+// 还会把运行时 worker pool / inflight 状态一起写入摘要。
 //
 // 该用例覆盖“有流量 + 有 runtime stats”的主路径，是后续维护聚合日志字段时的回归基线。
 func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
 	// 注册一个 task 运行时回调，模拟 task.Start 后聚合线程读取执行模型快照。
 	RegisterTaskRuntimeStats("task-a", func() TaskRuntimeStats {
 		return TaskRuntimeStats{
-			PoolSize:       64,
-			PoolRunning:    8,
-			PoolFree:       56,
-			PoolWaiting:    2,
-			QueueSize:      128,
-			QueueAvailable: 126,
-			Inflight:       3,
-			FastPath:       false,
+			ExecutionModel:    "pool",
+			PoolSize:          64,
+			WorkerPoolRunning: 8,
+			WorkerPoolFree:    56,
+			WorkerPoolWaiting: 2,
+			Inflight:          3,
 		}
 	})
 	defer UnregisterTaskRuntimeStats("task-a")
@@ -45,21 +43,28 @@ func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
 	if item.PPS != 10 || item.BPS != 100 {
 		t.Fatalf("unexpected rates: %+v", item)
 	}
+	if item.ExecutionModel != "pool" || item.Inflight != 3 || item.PoolSize != 64 {
+		t.Fatalf("unexpected runtime summary: %+v", item)
+	}
 	if item.WorkerPool == nil {
 		t.Fatalf("worker pool stats missing: %+v", item)
 	}
-	if item.WorkerPool.Size != 64 || item.WorkerPool.Running != 8 || item.WorkerPool.Free != 56 ||
-		item.WorkerPool.Waiting != 2 || item.WorkerPool.QueueSize != 128 || item.WorkerPool.QueueAvailable != 126 ||
-		item.WorkerPool.Inflight != 3 || item.WorkerPool.FastPath {
+	if item.WorkerPool.Running != 8 || item.WorkerPool.Free != 56 || item.WorkerPool.Waiting != 2 {
 		t.Fatalf("unexpected worker pool stats: %+v", item.WorkerPool)
+	}
+	if item.Channel != nil {
+		t.Fatalf("pool task should not expose channel stats: %+v", item.Channel)
 	}
 }
 
-// TestTrafficSummaryIncludesRuntimeOnlyTaskWithoutTraffic 验证“当前周期零流量”的 task
-// 仍会因为 runtimeStats 注册而进入摘要，避免运维误判 task 已丢失或未启动。
-func TestTrafficSummaryIncludesRuntimeOnlyTaskWithoutTraffic(t *testing.T) {
-	// 仅提供运行时状态，不注入任何 packets/bytes。
-	stats := TaskRuntimeStats{PoolSize: 16, QueueSize: 64}
+func TestTrafficSummaryIncludesChannelRuntimeOnlyTaskWithoutTraffic(t *testing.T) {
+	stats := TaskRuntimeStats{
+		ExecutionModel:        "channel",
+		ChannelQueueSize:      64,
+		ChannelQueueUsed:      2,
+		ChannelQueueAvailable: 62,
+		Inflight:              1,
+	}
 	s := newTrafficSummary(time.Second)
 	s.addRuntimeOnlyTask("task-empty", stats)
 	if len(s.Tasks) != 1 {
@@ -72,7 +77,29 @@ func TestTrafficSummaryIncludesRuntimeOnlyTaskWithoutTraffic(t *testing.T) {
 	if item.TotalPackets != 0 || item.TotalBytes != 0 {
 		t.Fatalf("runtime-only task should have zero counters: %+v", item)
 	}
-	if item.WorkerPool == nil || item.WorkerPool.Size != 16 || item.WorkerPool.QueueSize != 64 {
-		t.Fatalf("unexpected runtime-only worker stats: %+v", item.WorkerPool)
+	if item.ExecutionModel != "channel" || item.Inflight != 1 {
+		t.Fatalf("unexpected runtime-only channel summary: %+v", item)
+	}
+	if item.WorkerPool != nil {
+		t.Fatalf("channel task should not expose worker_pool stats: %+v", item.WorkerPool)
+	}
+	if item.Channel == nil || item.Channel.QueueSize != 64 || item.Channel.QueueUsed != 2 || item.Channel.QueueAvailable != 62 {
+		t.Fatalf("unexpected runtime-only channel stats: %+v", item.Channel)
+	}
+}
+
+func TestTrafficSummaryFastPathOmitsPoolAndChannelStats(t *testing.T) {
+	stats := TaskRuntimeStats{ExecutionModel: "fastpath", Inflight: 4}
+	s := newTrafficSummary(time.Second)
+	s.addRuntimeOnlyTask("task-fastpath", stats)
+	if len(s.Tasks) != 1 {
+		t.Fatalf("expected one runtime-only task, got %d", len(s.Tasks))
+	}
+	item := s.Tasks[0]
+	if item.ExecutionModel != "fastpath" || item.Inflight != 4 {
+		t.Fatalf("unexpected fastpath runtime summary: %+v", item)
+	}
+	if item.WorkerPool != nil || item.Channel != nil || item.PoolSize != 0 {
+		t.Fatalf("fastpath should not expose pool/channel stats: %+v", item)
 	}
 }

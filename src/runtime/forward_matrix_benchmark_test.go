@@ -77,7 +77,6 @@ func BenchmarkDispatchMatrixPoolSizesNoPayloadLog(b *testing.B) {
 					Name:           "bench-task-pool",
 					ExecutionModel: task.ExecutionModelPool,
 					PoolSize:       poolSize,
-					QueueSize:      poolSize,
 					Senders:        []sender.Sender{sinkSender},
 				}
 				if err := tk.Start(); err != nil {

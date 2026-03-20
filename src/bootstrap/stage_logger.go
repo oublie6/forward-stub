@@ -175,16 +175,30 @@ func logConfigSummary(l *stageLogger, systemPath, businessPath string, cfg confi
 	taskNames := sortedTaskNames(cfg.Tasks)
 	for _, name := range taskNames {
 		tc := cfg.Tasks[name]
-		l.Info("task_config", "任务配置已确认",
+		fields := []any{
 			"组件名称", name,
-			"执行模型", tc.ExecutionModel,
-			"协程池大小", tc.PoolSize,
-			"排队长度", tc.QueueSize,
-			"channel队列长度", tc.ChannelQueueSize,
+			"执行模型", effectiveTaskExecutionModel(tc),
 			"流水线列表", strings.Join(tc.Pipelines, ","),
 			"发送端列表", strings.Join(tc.Senders, ","),
-		)
+		}
+		switch effectiveTaskExecutionModel(tc) {
+		case "pool":
+			fields = append(fields, "协程池大小", tc.PoolSize)
+		case "channel":
+			fields = append(fields, "channel队列长度", tc.ChannelQueueSize)
+		}
+		l.Info("task_config", "任务配置已确认", fields...)
 	}
+}
+
+func effectiveTaskExecutionModel(tc config.TaskConfig) string {
+	if tc.ExecutionModel != "" {
+		return tc.ExecutionModel
+	}
+	if tc.FastPath {
+		return "fastpath"
+	}
+	return "pool"
 }
 
 func sortedReceiverNames(m map[string]config.ReceiverConfig) []string {

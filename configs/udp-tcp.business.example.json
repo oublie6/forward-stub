@@ -75,7 +75,6 @@
     "task_tcp": {
       "execution_model": "pool",
       "pool_size": 1024,
-      "queue_size": 2048,
       "pipelines": [
         "pipe_header_check"
       ],

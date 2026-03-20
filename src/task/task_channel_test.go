@@ -42,7 +42,7 @@ func pktNum(v uint32) *packet.Packet {
 
 func TestChannelExecutionModelKeepsOrder(t *testing.T) {
 	cap := &captureSender{testNamedSender: testNamedSender{name: "capture"}}
-	tk := &Task{Name: "ch", ExecutionModel: ExecutionModelChannel, QueueSize: 64, Senders: []sender.Sender{cap}}
+	tk := &Task{Name: "ch", ExecutionModel: ExecutionModelChannel, ChannelQueueSize: 64, Senders: []sender.Sender{cap}}
 	if err := tk.Start(); err != nil {
 		t.Fatalf("start task: %v", err)
 	}
@@ -62,8 +62,20 @@ func TestChannelExecutionModelKeepsOrder(t *testing.T) {
 	}
 }
 
-func TestChannelExecutionModelDefaultsChannelQueueSizeFromQueueSize(t *testing.T) {
-	tk := &Task{Name: "ch-default", ExecutionModel: ExecutionModelChannel, QueueSize: 32}
+func TestChannelExecutionModelDefaultsChannelQueueSize(t *testing.T) {
+	tk := &Task{Name: "ch-default", ExecutionModel: ExecutionModelChannel}
+	if err := tk.Start(); err != nil {
+		t.Fatalf("start task: %v", err)
+	}
+	defer tk.StopGraceful()
+
+	if cap(tk.ch) != defaultChannelQueueSize {
+		t.Fatalf("unexpected channel capacity: got=%d want=%d", cap(tk.ch), defaultChannelQueueSize)
+	}
+}
+
+func TestChannelExecutionModelUsesExplicitChannelQueueSize(t *testing.T) {
+	tk := &Task{Name: "ch-explicit", ExecutionModel: ExecutionModelChannel, ChannelQueueSize: 32}
 	if err := tk.Start(); err != nil {
 		t.Fatalf("start task: %v", err)
 	}

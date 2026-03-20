@@ -354,7 +354,7 @@ business 配置主要控制：
 | 模型 | 适用场景 | 风险与注意点 |
 | --- | --- | --- |
 | `fastpath` | 最低延迟、链路简单 | sender 慢会直接反压到热路径 |
-| `pool` | 常规生产默认选择 | 要关注 `pool_size` 与 `queue_size` |
+| `pool` | 常规生产默认选择 | 要关注 `pool_size` 与下游处理/发送耗时 |
 | `channel` | 需要单 task 内顺序处理 | 单 worker 容易成为瓶颈 |
 
 ### 6.8 何时建议开启 payload / traffic stats / GC / pprof
@@ -588,7 +588,7 @@ curl http://127.0.0.1:6060/debug/pprof/
 
 1. `task send traffic stats` 与 `receiver traffic stats` 的差距
 2. 是否有 `发送端发送失败`
-3. 是否有 `任务丢弃数据包：协程池队列已满`
+3. 是否有 `任务丢弃数据包：协程池提交失败` 或 `任务丢弃数据包：channel入队时上下文已取消`
 4. 是否启用了大量 payload 摘要日志
 5. 是否需要开启 pprof 分析 CPU / heap / goroutine
 
@@ -808,7 +808,7 @@ curl http://127.0.0.1:6060/debug/pprof/
 **排查步骤**：
 1. 看 receiver / task send traffic stats 差距
 2. 看是否有 queue 满、发送失败、receiver 异常退出日志
-3. 评估 `execution_model`、`pool_size`、`queue_size`
+3. 评估 `execution_model`、`pool_size`、`channel_queue_size`
 4. 必要时启用 pprof
 **建议处理**：先恢复最关键瓶颈，再做参数优化。
 

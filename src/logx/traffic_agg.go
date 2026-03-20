@@ -83,22 +83,24 @@ func trafficStatsInterval() time.Duration {
 // 这些字段不直接来自流量累计器，而是由 task 在 flush 慢路径上按需回调提供，
 // 用于把“吞吐统计”和“执行模型/池状态”放到同一条设计说明式日志里。
 type TaskRuntimeStats struct {
-	// PoolSize 是 task 配置的 worker 池容量；channel 模型下主要用于保留原始配置值。
+	// ExecutionModel 是 task 当前执行模型（fastpath/pool/channel）。
+	ExecutionModel string
+	// PoolSize 是 task 配置的 worker 池容量，仅 pool 模型有意义。
 	PoolSize int
-	// PoolRunning 是当前 ants 池中正在执行的 worker 数量。
-	PoolRunning int
-	// PoolFree 是 ants 池空闲 worker 数量，便于判断是否接近饱和。
-	PoolFree int
-	// PoolWaiting 是正在等待 worker 或排队中的请求数；channel 模型下复用为队列当前长度。
-	PoolWaiting int
-	// QueueSize 是当前执行模型下可排队容量的上限。
-	QueueSize int
-	// QueueAvailable 是仍可接受的新排队请求数量；可用于观察背压余量。
-	QueueAvailable int
+	// WorkerPoolRunning 是当前 ants 池中正在执行的 worker 数量。
+	WorkerPoolRunning int
+	// WorkerPoolFree 是 ants 池空闲 worker 数量，便于判断是否接近饱和。
+	WorkerPoolFree int
+	// WorkerPoolWaiting 是 ants 当前等待 worker 的请求数。
+	WorkerPoolWaiting int
+	// ChannelQueueSize 是 channel 模型队列容量上限。
+	ChannelQueueSize int
+	// ChannelQueueUsed 是 channel 模型当前已使用的队列槽位数。
+	ChannelQueueUsed int
+	// ChannelQueueAvailable 是 channel 模型当前剩余可用槽位数。
+	ChannelQueueAvailable int
 	// Inflight 是任务当前仍未完成的包数量，覆盖 fastpath / pool / channel 三种模型。
 	Inflight int64
-	// FastPath 标识 task 是否处于同步直通模型，便于解释为何没有池状态。
-	FastPath bool
 }
 
 // taskRuntimeStatsMu 保护 taskRuntimeStatsFn 的注册表。
@@ -106,13 +108,13 @@ type TaskRuntimeStats struct {
 var taskRuntimeStatsMu sync.RWMutex
 
 // taskRuntimeStatsFn 保存“task 名称 -> 运行时状态采样函数”的映射。
-// task.Start 注册、task.StopGraceful 注销，flush 时读取这份表构造 worker_pool 摘要。
+// task.Start 注册、task.StopGraceful 注销，flush 时读取这份表构造 task 运行态摘要。
 var taskRuntimeStatsFn = make(map[string]func() TaskRuntimeStats)
 
 // RegisterTaskRuntimeStats 注册 task 运行时统计回调。
 //
 // 为什么存在：
-// 聚合统计日志不仅要输出字节/包量，还要把 task 当前 worker 池、队列、inflight
+// 聚合统计日志不仅要输出字节/包量，还要把 task 当前执行模型、worker 池/队列、inflight
 // 一起打出来，帮助维护者判断瓶颈是在入口流量、执行队列还是发送端。
 //
 // 生命周期：task.Start 调用一次；同名 task 热重载重建时会覆盖旧回调。
@@ -404,20 +406,25 @@ type taskAggregateStats struct {
 	IntervalBytes   uint64           `json:"interval_bytes,omitempty"`
 	PPS             float64          `json:"pps,omitempty"`
 	BPS             float64          `json:"bps,omitempty"`
+	ExecutionModel  string           `json:"execution_model,omitempty"`
+	Inflight        int64            `json:"inflight,omitempty"`
+	PoolSize        int              `json:"pool_size,omitempty"`
 	WorkerPool      *workerPoolStats `json:"worker_pool,omitempty"`
+	Channel         *channelStats    `json:"channel,omitempty"`
 }
 
-// workerPoolStats 描述 task 执行模型在 flush 时刻的运行状态。
-// fastpath 下大多数池字段为 0，channel/pool 模型则会填充队列与并发数据。
+// workerPoolStats 描述 pool 执行模型在 flush 时刻的运行状态。
 type workerPoolStats struct {
-	Size           int   `json:"size"`
-	Running        int   `json:"running"`
-	Free           int   `json:"free"`
-	Waiting        int   `json:"waiting"`
-	QueueSize      int   `json:"queue_size,omitempty"`
-	QueueAvailable int   `json:"queue_available,omitempty"`
-	Inflight       int64 `json:"inflight"`
-	FastPath       bool  `json:"fast_path"`
+	Running int `json:"running"`
+	Free    int `json:"free"`
+	Waiting int `json:"waiting"`
+}
+
+// channelStats 描述 channel 执行模型在 flush 时刻的队列状态。
+type channelStats struct {
+	QueueSize      int `json:"queue_size,omitempty"`
+	QueueUsed      int `json:"queue_used,omitempty"`
+	QueueAvailable int `json:"queue_available,omitempty"`
 }
 
 // newTrafficSummary 创建单次 flush 使用的摘要容器。
@@ -457,16 +464,7 @@ func (s *trafficSummary) add(c *trafficCounter, packets, bytes uint64, interval 
 	}
 
 	if runtime, ok := lookupTaskRuntimeStats(c.name); ok {
-		item.WorkerPool = &workerPoolStats{
-			Size:           runtime.PoolSize,
-			Running:        runtime.PoolRunning,
-			Free:           runtime.PoolFree,
-			Waiting:        runtime.PoolWaiting,
-			QueueSize:      runtime.QueueSize,
-			QueueAvailable: runtime.QueueAvailable,
-			Inflight:       runtime.Inflight,
-			FastPath:       runtime.FastPath,
-		}
+		item.applyRuntime(runtime)
 	}
 
 	s.Tasks = append(s.Tasks, item)
@@ -499,21 +497,31 @@ func (s *trafficSummary) log() {
 }
 
 // addRuntimeOnlyTask 为“当前周期无流量、但 task 仍在运行”的场景补一条摘要记录。
-// 这样维护者可以看到空闲 task 的队列/并发状态，而不会误以为该 task 已消失。
+// 这样维护者可以看到空闲 task 的运行态，而不会误以为该 task 已消失。
 func (s *trafficSummary) addRuntimeOnlyTask(task string, runtime TaskRuntimeStats) {
-	s.Tasks = append(s.Tasks, taskAggregateStats{
-		Task: task,
-		WorkerPool: &workerPoolStats{
-			Size:           runtime.PoolSize,
-			Running:        runtime.PoolRunning,
-			Free:           runtime.PoolFree,
-			Waiting:        runtime.PoolWaiting,
-			QueueSize:      runtime.QueueSize,
-			QueueAvailable: runtime.QueueAvailable,
-			Inflight:       runtime.Inflight,
-			FastPath:       runtime.FastPath,
-		},
-	})
+	item := taskAggregateStats{Task: task}
+	item.applyRuntime(runtime)
+	s.Tasks = append(s.Tasks, item)
+}
+
+func (t *taskAggregateStats) applyRuntime(runtime TaskRuntimeStats) {
+	t.ExecutionModel = runtime.ExecutionModel
+	t.Inflight = runtime.Inflight
+	switch runtime.ExecutionModel {
+	case "pool":
+		t.PoolSize = runtime.PoolSize
+		t.WorkerPool = &workerPoolStats{
+			Running: runtime.WorkerPoolRunning,
+			Free:    runtime.WorkerPoolFree,
+			Waiting: runtime.WorkerPoolWaiting,
+		}
+	case "channel":
+		t.Channel = &channelStats{
+			QueueSize:      runtime.ChannelQueueSize,
+			QueueUsed:      runtime.ChannelQueueUsed,
+			QueueAvailable: runtime.ChannelQueueAvailable,
+		}
+	}
 }
 
 // parseTrafficMeta 从创建 counter 时的 kv fields 中抽取聚合维度。

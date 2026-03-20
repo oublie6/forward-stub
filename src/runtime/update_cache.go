@@ -749,7 +749,6 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 		PoolSize:         tc.PoolSize,
 		FastPath:         tc.FastPath,
 		ExecutionModel:   tc.ExecutionModel,
-		QueueSize:        tc.QueueSize,
 		ChannelQueueSize: tc.ChannelQueueSize,
 		LogPayloadSend:   logOpts.send,
 		PayloadLogMax:    logOpts.max,
@@ -916,13 +915,19 @@ func (st *Store) taskSnapshot() []map[string]any {
 	defer st.mu.RUnlock()
 	out := make([]map[string]any, 0, len(st.tasks))
 	for name, ts := range st.tasks {
-		out = append(out, map[string]any{
+		item := map[string]any{
 			"task":            name,
 			"pipelines":       ts.Cfg.Pipelines,
 			"senders":         ts.Cfg.Senders,
 			"execution_model": ts.T.ExecutionModel,
-			"queue_size":      ts.T.QueueSize,
-		})
+		}
+		switch ts.T.ExecutionModel {
+		case task.ExecutionModelPool:
+			item["pool_size"] = ts.T.PoolSize
+		case task.ExecutionModelChannel:
+			item["channel_queue_size"] = ts.T.ChannelQueueSize
+		}
+		out = append(out, item)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i]["task"].(string) < out[j]["task"].(string)

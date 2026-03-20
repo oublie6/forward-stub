@@ -38,8 +38,7 @@
 - `control.pprof_port=6060`（仅当原值为 `0`）
 - `logging.*` 一整套默认值
 - `task.pool_size=4096`
-- `task.queue_size=8192`
-- `task.channel_queue_size` 默认跟随 `queue_size`
+- `task.channel_queue_size=8192`
 - `receiver.multicore=true`
 - `receiver.num_event_loop=max(8, runtime.NumCPU())`
 - `receiver.socket_recv_buffer=1073741824`

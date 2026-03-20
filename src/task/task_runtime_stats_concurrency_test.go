@@ -10,9 +10,9 @@ import (
 func TestRuntimeStatsConcurrentWithStopGraceful(t *testing.T) {
 	// 选择 channel 模型，覆盖 StopGraceful 中 close(ch)+wg.Wait 的并发窗口。
 	tk := &Task{
-		Name:           "task-concurrency",
-		ExecutionModel: ExecutionModelChannel,
-		QueueSize:      64,
+		Name:             "task-concurrency",
+		ExecutionModel:   ExecutionModelChannel,
+		ChannelQueueSize: 64,
 	}
 	if err := tk.Start(); err != nil {
 		t.Fatalf("start task: %v", err)

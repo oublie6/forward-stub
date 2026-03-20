@@ -7,7 +7,6 @@
 - `execution_model`
 - `fast_path`
 - `pool_size`
-- `queue_size`
 - `channel_queue_size`
 
 ## 2. 字段解释
@@ -17,8 +16,7 @@
 | `execution_model` | string | 空，最终回退 `pool` | 支持 `fastpath`、`pool`、`channel`。 |
 | `fast_path` | bool | `false` | 兼容旧配置；仅在 `execution_model` 为空时生效。 |
 | `pool_size` | int | `4096` | pool 模式 worker 池大小。 |
-| `queue_size` | int | `8192` | pool 模式最大阻塞任务数。 |
-| `channel_queue_size` | int | 回退到 `queue_size` | channel 模式队列长度。 |
+| `channel_queue_size` | int | `8192` | channel 模式队列长度；仅 `execution_model=channel` 生效。 |
 
 ## 3. 生效规则
 
@@ -45,31 +43,41 @@
 | `pool` | `execution_model=pool` | ants worker pool 异步处理 | 通用生产场景 |
 | `channel` | `execution_model=channel` | 单 worker + 有界 channel 顺序处理 | 顺序敏感链路 |
 
-## 5. 队列参数怎么理解
+## 5. 运行时容量语义
 
-### 5.1 `queue_size`
+### 5.1 `pool_size`
 
-- 只对 `pool` 模式真正决定排队能力。
-- 值越大，削峰能力越强，但排队时延可能越长。
+- 只对 `pool` 模式真正生效。
+- 控制 ants worker 并发上限。
+- pool 模式不再暴露 `queue_size` 配置，也不再把配置解释为“队列长度”。
 
 ### 5.2 `channel_queue_size`
 
 - 只对 `channel` 模式生效。
-- 未配置或 `<=0` 时自动回退到 `queue_size`。
+- 未配置或 `<=0` 时自动回退到默认值 `8192`。
+- 聚合统计会输出 `channel.queue_size`、`channel.queue_used`、`channel.queue_available`。
 
 ## 6. 推荐写法
 
-### 6.1 推荐
+### 6.1 pool
 
 ```json
 {
   "execution_model": "pool",
-  "pool_size": 4096,
-  "queue_size": 8192
+  "pool_size": 4096
 }
 ```
 
-### 6.2 兼容旧写法（仍支持，但不推荐继续新增）
+### 6.2 channel
+
+```json
+{
+  "execution_model": "channel",
+  "channel_queue_size": 1024
+}
+```
+
+### 6.3 兼容旧写法（仍支持，但不推荐继续新增）
 
 ```json
 {

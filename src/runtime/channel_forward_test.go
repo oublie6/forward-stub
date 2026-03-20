@@ -53,10 +53,10 @@ func TestForwardUDPToUDPWithChannelTaskModel(t *testing.T) {
 		},
 		Tasks: map[string]config.TaskConfig{
 			"t1": {
-				ExecutionModel: "channel",
-				QueueSize:      128,
-				Pipelines:      []string{"p"},
-				Senders:        []string{"s1"},
+				ExecutionModel:   "channel",
+				ChannelQueueSize: 128,
+				Pipelines:        []string{"p"},
+				Senders:          []string{"s1"},
 			},
 		},
 		Pipelines: map[string][]config.StageConfig{"p": {}},
