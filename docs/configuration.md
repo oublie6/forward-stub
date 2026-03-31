@@ -86,7 +86,6 @@
 | `logging.traffic_stats_interval` | string(duration) | 否 | `1s` | 流量统计日志输出周期。启动阶段会直接解析，非法时启动失败。 |
 | `logging.traffic_stats_sample_every` | int | 否 | `1` | 流量统计采样倍率；`<=0` 回退为 `1`。 |
 | `logging.payload_log_max_bytes` | int | 否 | `256` | receiver/task 局部未配置时的默认 payload 摘要截断长度。 |
-| `logging.payload_pool_max_cached_bytes` | int64 | 否 | `0` | payload 池总缓存上限。`0` 表示默认不限制；负数会被默认值回写为 `0`，校验阶段也要求 `>=0`。 |
 | `logging.gc_stats_log_enabled` | bool | 否 | `false` | 是否开启周期性 GC / 内存 / goroutine 日志。 |
 | `logging.gc_stats_log_interval` | string(duration) | 否 | `1m` | GC 周期日志间隔。校验时要求合法且 `>0`。 |
 
@@ -95,7 +94,6 @@
 - `receiver.payload_log_max_bytes <= 0` 时回退到 `logging.payload_log_max_bytes`。
 - `task.payload_log_max_bytes <= 0` 时回退到 `logging.payload_log_max_bytes`。
 - `logging.gc_stats_log_enabled=false` 时，即使配置了 `gc_stats_log_interval` 也不会启动 GC 统计任务。
-- `logging.payload_pool_max_cached_bytes` 会直接传给 payload 内存池，影响缓存内存上限，而不是日志行为。
 
 ## 5. business_defaults（system 专属）
 
@@ -497,7 +495,6 @@
 | `logging.traffic_stats_interval` | `1s` |
 | `logging.traffic_stats_sample_every` | `1` |
 | `logging.payload_log_max_bytes` | `256` |
-| `logging.payload_pool_max_cached_bytes` | `0` |
 | `logging.gc_stats_log_enabled` | `false` |
 | `logging.gc_stats_log_interval` | `1m` |
 

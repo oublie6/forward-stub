@@ -53,7 +53,6 @@
 
 ### 2.4 payload 池上限
 
-- `logging.payload_pool_max_cached_bytes` 控制 payload 内存池总缓存上限。
 - `0` 表示默认不限制。
 - 负数会被默认值逻辑修正为 `0`，同时校验也要求它不能小于 `0`。
 

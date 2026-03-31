@@ -107,9 +107,6 @@ func (c *Config) ApplyDefaults() {
 	if c.Logging.PayloadLogMaxBytes <= 0 {
 		c.Logging.PayloadLogMaxBytes = DefaultPayloadLogMaxBytes
 	}
-	if c.Logging.PayloadPoolMaxCachedBytes < 0 {
-		c.Logging.PayloadPoolMaxCachedBytes = DefaultPayloadPoolMaxCachedBytes
-	}
 	for name, tc := range c.Tasks {
 		if tc.PoolSize <= 0 {
 			tc.PoolSize = DefaultTaskPoolSize

@@ -60,7 +60,6 @@ receiver -> selector -> task(pipeline + sender)
     "traffic_stats_interval": "1s",
     "traffic_stats_sample_every": 1,
     "payload_log_max_bytes": 256,
-    "payload_pool_max_cached_bytes": 0,
     "gc_stats_log_enabled": false,
     "gc_stats_log_interval": "1m"
   }

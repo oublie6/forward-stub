@@ -30,9 +30,6 @@ func (c *Config) Validate() error {
 		return errors.New("pipelines missing")
 	}
 
-	if c.Logging.PayloadPoolMaxCachedBytes < 0 {
-		return errors.New("logging payload_pool_max_cached_bytes must be >= 0")
-	}
 	if strings.TrimSpace(c.Logging.GCStatsLogInterval) != "" {
 		d, err := time.ParseDuration(c.Logging.GCStatsLogInterval)
 		if err != nil || d <= 0 {

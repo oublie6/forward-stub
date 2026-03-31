@@ -29,7 +29,6 @@ const (
 	DefaultSenderSocketSendBuffer    = 1 << 30
 	DefaultTaskPoolSize              = 4096
 	DefaultTaskChannelQueueSize      = 8192
-	DefaultPayloadPoolMaxCachedBytes = int64(0)
 	DefaultKafkaDialTimeout          = "10s"
 	DefaultKafkaSenderRequestTimeout = "30s"
 	DefaultKafkaRetryTimeout         = "1m"
@@ -175,9 +174,6 @@ type LoggingConfig struct {
 	// PayloadLogMaxBytes 是 payload 摘要日志的默认最大字节数。
 	// 用法：receiver/task 未单独配置时使用该值；建议设置为 64~1024。
 	PayloadLogMaxBytes int `json:"payload_log_max_bytes,omitempty"`
-	// PayloadPoolMaxCachedBytes 控制 payload 内存池可缓存的总字节上限。
-	// 用法：<=0 表示不限制（默认）；>0 可限制缓存内存占用峰值。
-	PayloadPoolMaxCachedBytes int64 `json:"payload_pool_max_cached_bytes,omitempty"`
 	// GCStatsLogEnabled 控制是否开启周期性 GC / 内存 / goroutine 信息日志。
 	// 用法：排障或容量评估时开启；常规生产环境可按需关闭。
 	GCStatsLogEnabled *bool `json:"gc_stats_log_enabled,omitempty"`

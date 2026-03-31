@@ -61,7 +61,6 @@ func payloadLogMaxBytes(localMax int, loggingMax int) int {
 //
 // 注意：这里仅负责“切换运行时对象”，不做配置合法性校验（校验应在更上层完成）。
 func UpdateCache(ctx context.Context, st *Store, cfg config.Config) error {
-	packet.SetPayloadPoolMaxCachedBytes(cfg.Logging.PayloadPoolMaxCachedBytes)
 	st.setPayloadLogDefaultMax(cfg.Logging.PayloadLogMaxBytes)
 	lg := logx.L()
 	start := time.Now()
