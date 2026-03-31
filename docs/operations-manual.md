@@ -16,10 +16,9 @@
 
 ### 1.2 适用运行方式
 
-当前项目支持两种运行方式：
+当前项目使用双配置运行方式：
 
 - **双配置模式**：`system` + `business` 分离，生产环境推荐
-- **单文件模式**：兼容模式，适合最小示例、快速验证、开发联调
 
 ### 1.3 适用协议类型
 
@@ -106,7 +105,6 @@ receiver -> selector -> task(pipeline + sender)
 | --- | --- |
 | `configs/system.example.json` | system 全量示例 |
 | `configs/business.example.json` | business 全量示例 |
-| `configs/example.json` | 单文件全量示例 |
 | `configs/minimal.system.example.json` | 最小 system 示例 |
 | `configs/minimal.business.example.json` | 最小 business 示例 |
 | `configs/kafka.business.example.json` | Kafka 专项示例 |
@@ -214,29 +212,14 @@ nc -vz 127.0.0.1 22
 
 适用场景：生产、预发、长期运行环境。
 
-### 5.2 单文件模式启动
-
-标准命令：
-
-```bash
-./bin/forward-stub -config ./configs/example.json
-```
-
-说明：
-
-- 单文件模式不支持 `business_defaults`
-- 若同一文件同时改动了 system 字段和 business 字段，热重载时 system 变更会被拒绝
-- 不建议把单文件模式作为长期生产运维形态
-
-### 5.3 参数说明
+### 5.2 参数说明
 
 | 参数 | 作用 |
 | --- | --- |
-| `-config` | 单文件模式 |
 | `-system-config` | system 配置路径 |
 | `-business-config` | business 配置路径 |
 
-### 5.4 最小启动示例
+### 5.3 最小启动示例
 
 ```bash
 ./bin/forward-stub \
@@ -867,7 +850,7 @@ curl http://127.0.0.1:6060/debug/pprof/
 
 ```bash
 ./bin/forward-stub -system-config ./configs/system.example.json -business-config ./configs/business.example.json
-./bin/forward-stub -config ./configs/example.json
+./bin/forward-stub -system-config ./configs/system.example.json -business-config ./configs/business.example.json
 ```
 
 ### 13.2 常用重载命令

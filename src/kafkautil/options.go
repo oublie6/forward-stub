@@ -66,7 +66,7 @@ func CompressionCodec(v string, level int) (kgo.CompressionCodec, bool, error) {
 		return codec.WithLevel(level)
 	}
 	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "", "none":
+	case "":
 		return kgo.NoCompression(), false, nil
 	case "gzip":
 		return withLevel(kgo.GzipCompression()), true, nil

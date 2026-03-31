@@ -9,17 +9,6 @@ func configPath(name string) string {
 	return filepath.Clean(filepath.Join("..", "..", "configs", name))
 }
 
-func TestExampleSingleFileConfigParsesAndValidates(t *testing.T) {
-	cfg, err := LoadLocal(configPath("example.json"))
-	if err != nil {
-		t.Fatalf("load single example config: %v", err)
-	}
-	cfg.ApplyDefaults()
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("validate single example config: %v", err)
-	}
-}
-
 func TestExampleSystemBusinessPairsParseAndValidate(t *testing.T) {
 	tests := []struct {
 		name       string

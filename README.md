@@ -10,9 +10,7 @@ receiver -> selector -> task(pipeline + sender)
 
 ## 1. 配置入口说明
 
-项目支持两种启动方式：
-
-### 1.1 推荐：双配置模式
+项目使用双配置启动方式：
 
 - `system config`：只放**系统级配置**，包含 `control`、`logging`、`business_defaults`。
 - `business config`：只放**业务拓扑配置**，包含 `version`、`receivers`、`selectors`、`task_sets`、`senders`、`pipelines`、`tasks`。
@@ -23,18 +21,6 @@ receiver -> selector -> task(pipeline + sender)
 ./bin/forward-stub \
   -system-config ./configs/system.example.json \
   -business-config ./configs/business.example.json
-```
-
-### 1.2 兼容：单文件模式
-
-单文件模式只支持 `config.Config` 中的字段，也就是：`version`、`control`、`logging`、`receivers`、`selectors`、`task_sets`、`senders`、`pipelines`、`tasks`。
-
-**不支持** `business_defaults`；如需系统级业务默认值，请使用双配置模式。
-
-单文件示例：
-
-```bash
-./bin/forward-stub -config ./configs/example.json
 ```
 
 > 说明：当前实现要求 JSON 严格匹配代码结构，未知字段会直接报错；因此示例文件和文档必须与代码保持一致。
@@ -115,7 +101,6 @@ receiver -> selector -> task(pipeline + sender)
 
 ### 3.1 全量/主示例
 
-- `configs/example.json`：**单文件全量示例**。覆盖单文件模式当前真实支持的全部字段；注意它**不包含** `business_defaults`。
 - `configs/system.example.json`：**system 全量示例**。覆盖 `control`、`logging`、`business_defaults` 全字段。
 - `configs/business.example.json`：**business 全量示例**。覆盖 receiver / selector / task_set / sender / pipeline / task 全部配置域，并尽量展示不同协议与执行模型。
 
@@ -146,7 +131,6 @@ receiver -> selector -> task(pipeline + sender)
 - `receiver.selector` 必填；receiver 不再由 task 反向绑定。
 - `selector.matches` 的 value 必须是 `task_set` 名称，而不是 task 名称。
 - `task_sets` 只做复用；运行时会在编译期直接展开为 task 切片。
-- `task.fast_path` 是兼容字段：仅当 `execution_model` 为空时才会把 `fast_path=true` 解释为 `fastpath`。
 - Kafka、SFTP、gnet、组播等字段都只在对应 `type` 下生效，不能跨协议混用。
 - `receiver.match_key` 为 receiver 局部配置：留空时保持历史兼容 key；显式配置后会在 receiver 初始化/热重载时编译成协议专属 builder，热路径不再走统一公共拼接函数。
 - Kafka receiver / sender 的多项字段会直接映射到 franz-go / `kgo` 选项；其中一部分默认值在 `ApplyDefaults()` 层回写，另一部分保留到具体组件构建时按实现回退。

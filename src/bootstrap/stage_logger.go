@@ -195,9 +195,6 @@ func effectiveTaskExecutionModel(tc config.TaskConfig) string {
 	if tc.ExecutionModel != "" {
 		return tc.ExecutionModel
 	}
-	if tc.FastPath {
-		return "fastpath"
-	}
 	return "pool"
 }
 

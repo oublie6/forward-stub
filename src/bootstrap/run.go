@@ -38,20 +38,20 @@ func Run(args []string) int {
 
 	fs := flag.NewFlagSet("forward-stub", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	legacyPath := fs.String("config", "", "legacy config json path (same file for system and business)")
 	systemPath := fs.String("system-config", "", "system config json path")
 	businessPath := fs.String("business-config", "", "business config json path")
 	if err := fs.Parse(args); err != nil {
 		bootLog.Error("args_parse", "参数解析失败", err)
 		return 2
 	}
-	bootLog.Info("args_parse", "参数解析完成", "兼容单文件模式", *legacyPath != "", "参数数量", len(args))
+	bootLog.Info("args_parse", "参数解析完成", "参数数量", len(args))
 
-	sysPath, bizPath, err := config.ResolveConfigPaths(*legacyPath, *systemPath, *businessPath)
-	if err != nil {
+	if *systemPath == "" || *businessPath == "" {
+		err := fmt.Errorf("必须同时提供 -system-config 和 -business-config")
 		bootLog.Error("config_path_resolve", "配置文件路径解析失败", err)
 		return 1
 	}
+	sysPath, bizPath := *systemPath, *businessPath
 	bootLog.Info("config_path_resolve", "配置文件路径解析完成", "系统配置文件", sysPath, "业务配置文件", bizPath)
 
 	bootLog.Info("config_load", "开始加载配置文件")

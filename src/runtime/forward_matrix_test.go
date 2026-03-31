@@ -54,7 +54,7 @@ func runSingleForward(t *testing.T, recv config.ReceiverConfig, sendCfg config.S
 		TaskSets:  map[string][]string{"ts1": []string{"t1"}},
 		Senders:   map[string]config.SenderConfig{"s1": sendCfg},
 		Tasks: map[string]config.TaskConfig{
-			"t1": {PoolSize: 1, FastPath: true, Senders: []string{"s1"}},
+			"t1": {PoolSize: 1, ExecutionModel: "fastpath", Senders: []string{"s1"}},
 		},
 		Pipelines: map[string][]config.StageConfig{},
 	}
@@ -142,7 +142,7 @@ func TestForwardMatrixTCPToTCP_Actual(t *testing.T) {
 
 	runSingleForward(t,
 		config.ReceiverConfig{Type: "tcp_gnet", Listen: fmt.Sprintf("tcp://127.0.0.1:%d", recvPort)},
-		config.SenderConfig{Type: "tcp_gnet", Remote: fmt.Sprintf("127.0.0.1:%d", sendPort), Concurrency: 1, Frame: "none"},
+		config.SenderConfig{Type: "tcp_gnet", Remote: fmt.Sprintf("127.0.0.1:%d", sendPort), Concurrency: 1, Frame: ""},
 		func(payload []byte) error {
 			conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", recvPort))
 			if err != nil {
@@ -197,7 +197,7 @@ func TestSimulatedDispatchAcrossProtocolCombinations(t *testing.T) {
 		for _, out := range types {
 			t.Run(in+"_to_"+out, func(t *testing.T) {
 				cap := &captureSender{testNamedSender: testNamedSender{name: out}}
-				tk := &task.Task{Name: "task", FastPath: true, Senders: []sender.Sender{cap}}
+				tk := &task.Task{Name: "task", ExecutionModel: task.ExecutionModelFastPath, Senders: []sender.Sender{cap}}
 				if err := tk.Start(); err != nil {
 					t.Fatalf("task start: %v", err)
 				}

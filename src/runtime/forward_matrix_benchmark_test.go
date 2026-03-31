@@ -40,7 +40,7 @@ func BenchmarkDispatchMatrix(b *testing.B) {
 			for _, payloadSize := range payloadSizes {
 				b.Run(fmt.Sprintf("%s_to_%s_%dB", in, out, payloadSize), func(b *testing.B) {
 					sinkSender := &benchCounterSender{testNamedSender: testNamedSender{name: out}}
-					tk := &task.Task{Name: "bench-task", FastPath: true, Senders: []sender.Sender{sinkSender}}
+					tk := &task.Task{Name: "bench-task", ExecutionModel: task.ExecutionModelFastPath, Senders: []sender.Sender{sinkSender}}
 					if err := tk.Start(); err != nil {
 						b.Fatalf("task start: %v", err)
 					}

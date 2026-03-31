@@ -26,13 +26,7 @@
 - `pipelines`
 - `tasks`
 
-### 1.2 单文件模式
-
-单文件模式的字段结构与 `config.Config` 完全一致，当前只支持：`version`、`control`、`logging`、`receivers`、`selectors`、`task_sets`、`senders`、`pipelines`、`tasks`。
-
-注意：**单文件模式不支持 `business_defaults`**，因为该字段只存在于 `SystemConfig`。如果需要系统级业务默认值，请使用双配置模式。示例见 `configs/example.json`。
-
-### 1.3 加载与校验顺序
+### 1.2 加载与校验顺序
 
 当前实现的顺序为：
 
@@ -47,16 +41,16 @@
 
 | 配置块 | 所在文件 | 是否必填 | 说明 |
 |---|---|---:|---|
-| `version` | business / 单文件 | 否 | 配置版本号，通常由控制面递增；代码未强制要求大于 0，但建议显式设置。 |
-| `control` | system / 单文件 | 否 | 控制面接口、配置监听周期、pprof 端口。 |
-| `logging` | system / 单文件 | 是 | 日志、流量统计、payload 默认截断、payload 池、GC 日志。 |
-| `business_defaults` | 仅 system | 否 | 只给 business 中的 task / receiver / sender 提供系统级默认值；单文件模式不支持。 |
-| `receivers` | business / 单文件 | 是 | 输入端实例表。 |
-| `selectors` | business / 单文件 | 是 | `match key -> task_set` 精确匹配规则。 |
-| `task_sets` | business / 单文件 | 是 | task 名称数组，用于复用。 |
-| `senders` | business / 单文件 | 是 | 输出端实例表。 |
-| `pipelines` | business / 单文件 | 是 | stage 数组。 |
-| `tasks` | business / 单文件 | 是 | pipeline + sender + execution model 组合。 |
+| `version` | business | 否 | 配置版本号，通常由控制面递增；代码未强制要求大于 0，但建议显式设置。 |
+| `control` | system | 否 | 控制面接口、配置监听周期、pprof 端口。 |
+| `logging` | system | 是 | 日志、流量统计、payload 默认截断、GC 日志。 |
+| `business_defaults` | 仅 system | 否 | 只给 business 中的 task / receiver / sender 提供系统级默认值。 |
+| `receivers` | business | 是 | 输入端实例表。 |
+| `selectors` | business | 是 | `match key -> task_set` 精确匹配规则。 |
+| `task_sets` | business | 是 | task 名称数组，用于复用。 |
+| `senders` | business | 是 | 输出端实例表。 |
+| `pipelines` | business | 是 | stage 数组。 |
+| `tasks` | business | 是 | pipeline + sender + execution model 组合。 |
 
 ## 3. control 配置
 
@@ -443,7 +437,6 @@
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---:|---|---|
 | `pool_size` | int | 否 | `4096` | 仅 `execution_model=pool` 真正影响 worker 池大小。 |
-| `fast_path` | bool | 否 | `false` | 兼容旧配置；仅当 `execution_model` 为空时才会决定执行模型。 |
 | `execution_model` | string | 否 | 空；最终回退为 `pool` | 支持 `fastpath`、`pool`、`channel`。 |
 | `channel_queue_size` | int | 否 | `8192` | 仅 `channel` 模式生效；未配置或 `<=0` 时回退默认值。 |
 | `pipelines` | []string | 否 | 空数组 | 按顺序执行的 pipeline 名称列表。 |
@@ -451,18 +444,7 @@
 | `log_payload_send` | bool | 否 | `false` | 是否在发送前打印 payload 摘要。 |
 | `payload_log_max_bytes` | int | 否 | 回退到 `logging.payload_log_max_bytes` | task 局部 payload 摘要截断长度。 |
 
-### 11.1 `fast_path` 与 `execution_model` 的关系
-
-当前代码的决策顺序如下：
-
-1. 如果 `execution_model` 明确配置为 `fastpath` / `pool` / `channel`，则以它为准。
-2. 只有当 `execution_model` 为空时，才会检查 `fast_path`。
-3. `execution_model` 为空且 `fast_path=true` 时，实际执行模型为 `fastpath`。
-4. `execution_model` 为空且 `fast_path=false` 时，实际执行模型为 `pool`。
-
-因此：**推荐新配置只写 `execution_model`，把 `fast_path` 视为兼容字段。**
-
-### 11.2 三种执行模型的差异
+### 11.1 三种执行模型的差异
 
 | 模型 | 配置值 | 行为 | 适用场景 |
 |---|---|---|---|
@@ -540,7 +522,7 @@
 | `pool_size` | `4096` |
 | `channel_queue_size` | `8192` |
 | `payload_log_max_bytes` | 回退到 `logging.payload_log_max_bytes` |
-| 最终执行模型 | `pool`（当 `execution_model` 为空且 `fast_path=false`） |
+| 最终执行模型 | `pool`（当 `execution_model` 为空） |
 
 ## 13. 常见互斥、依赖与回退关系
 
@@ -561,7 +543,7 @@
 
 | 需求 | 推荐文件 |
 |---|---|
-| 想看所有字段 | `configs/system.example.json`、`configs/business.example.json`（单文件模式请另看 `configs/example.json`，其中不含 `business_defaults`） |
+| 想看所有字段 | `configs/system.example.json`、`configs/business.example.json` |
 | 想先跑通最小链路 | `configs/minimal.system.example.json` + `configs/minimal.business.example.json` |
 | 只看 UDP/TCP | `configs/udp-tcp.business.example.json` |
 | 只看 Kafka | `configs/kafka.business.example.json` |

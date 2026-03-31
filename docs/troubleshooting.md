@@ -14,12 +14,6 @@
 ./bin/forward-stub -system-config ./configs/system.example.json -business-config ./configs/business.example.json
 ```
 
-### 1.2 单文件模式命令
-
-```bash
-./bin/forward-stub -config ./configs/example.json
-```
-
 ## 2. 最常见的配置错误
 
 ### 2.1 selector 相关
@@ -94,4 +88,4 @@ nc -vz 127.0.0.1 9092
 - 顶层和所有字段：`docs/configuration.md`
 - 协议专属字段：`docs/receivers-and-senders.md`
 - 执行模型：`docs/execution-model.md`
-- 示例文件：优先看 `README.md` 中的示例索引，或直接查看 `configs/example.json`、`configs/system.example.json`、`configs/business.example.json`
+- 示例文件：优先看 `README.md` 中的示例索引，或直接查看 `configs/system.example.json`、`configs/business.example.json`

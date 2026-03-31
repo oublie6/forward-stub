@@ -40,7 +40,7 @@ sequenceDiagram
 
     main->>bootstrap: Run(os.Args[1:])
     bootstrap->>bootstrap: 解析 CLI 参数
-    bootstrap->>config: ResolveConfigPaths + loadConfigPair
+    bootstrap->>config: loadConfigPair
     config->>config: LoadLocalPair
     config->>config: Merge(system,business)
     config->>config: ApplyDefaults
@@ -82,10 +82,7 @@ sequenceDiagram
 
 1. `main.main` 仅调用 `bootstrap.Run(os.Args[1:])`。
 2. `bootstrap.Run` 创建 `stageLogger`，记录进程、Go 版本、CPU 等启动基线。
-3. 启动参数支持：
-   - `-config`：兼容单文件模式；
-   - `-system-config` / `-business-config`：推荐双配置模式；
-4. `config.ResolveConfigPaths` 会把兼容参数统一成 system/business 两条路径。
+3. 启动参数要求同时提供 `-system-config` / `-business-config`。
 
 #### 阶段 B：配置加载、默认值填充与校验
 

@@ -55,8 +55,6 @@ type Task struct {
 
 	// PoolSize 是 pool 模型的 worker 数；小于等于 0 时 Start 会回退到默认值。
 	PoolSize int
-	// FastPath 是旧配置兼容字段；当未显式指定 ExecutionModel 时会影响默认模型选择。
-	FastPath bool
 	// ChannelQueueSize 是 channel 模型的有界缓冲大小；未配置时回退到默认值。
 	ChannelQueueSize int
 	// ExecutionModel 是最终生效的执行模型，Start 后会被 resolveExecutionModel 规范化。
@@ -226,21 +224,14 @@ func (t *Task) channelWorker() {
 }
 
 // resolveExecutionModel 统一解析最终生效的执行模型。
-// 兼容逻辑：若未显式指定 ExecutionModel，则继续沿用历史 FastPath 布尔开关。
 func (t *Task) resolveExecutionModel() string {
 	if t.ExecutionModel == "" {
-		if t.FastPath {
-			return ExecutionModelFastPath
-		}
 		return ExecutionModelPool
 	}
 	switch t.ExecutionModel {
 	case ExecutionModelFastPath, ExecutionModelPool, ExecutionModelChannel:
 		return t.ExecutionModel
 	default:
-		if t.FastPath {
-			return ExecutionModelFastPath
-		}
 		return ExecutionModelPool
 	}
 }

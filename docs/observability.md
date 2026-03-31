@@ -124,7 +124,6 @@
 | `multicore` | 是否启用多核。 |
 | `udp_sink_readers` | UDP sink reader 数。 |
 | `udp_sink_read_buf` | UDP sink 读缓冲。 |
-| `task_fast_path` | benchmark 中是否使用 fast path。 |
 | `task_pool_size` | benchmark 中 task pool 大小。 |
 | `log_level` | benchmark 日志级别。 |
 | `log_file` | benchmark 日志文件。 |

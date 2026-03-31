@@ -31,7 +31,7 @@ func BenchmarkPayloadLogSwitchThroughput(b *testing.B) {
 					sinkSender := &benchCounterSender{testNamedSender: testNamedSender{name: proto + "-sink"}}
 					tk := &task.Task{
 						Name:           "bench-" + proto,
-						FastPath:       true,
+						ExecutionModel: task.ExecutionModelFastPath,
 						Senders:        []sender.Sender{sinkSender},
 						LogPayloadSend: payloadLogEnabled,
 						PayloadLogMax:  128,

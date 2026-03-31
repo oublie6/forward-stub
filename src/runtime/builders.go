@@ -59,7 +59,7 @@ func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (send
 	case "tcp_gnet":
 		with := false
 		switch sc.Frame {
-		case "", "none":
+		case "":
 			with = false
 		case "u16be":
 			with = true

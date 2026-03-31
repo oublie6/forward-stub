@@ -14,7 +14,7 @@ import (
 // newFastTask 创建一个 fastpath 测试任务，减少各个路由测试中的重复搭建代码。
 func newFastTask(t *testing.T, name string, s sender.Sender) *task.Task {
 	t.Helper()
-	tk := &task.Task{Name: name, FastPath: true, Senders: []sender.Sender{s}}
+	tk := &task.Task{Name: name, ExecutionModel: task.ExecutionModelFastPath, Senders: []sender.Sender{s}}
 	if err := tk.Start(); err != nil {
 		t.Fatalf("start task %s: %v", name, err)
 	}

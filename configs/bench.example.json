@@ -9,7 +9,6 @@
   "multicore": true,
   "udp_sink_readers": 8,
   "udp_sink_read_buf": 16777216,
-  "task_fast_path": false,
   "task_pool_size": 4096,
   "log_level": "warn",
   "log_file": "",

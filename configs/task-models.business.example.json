@@ -32,7 +32,7 @@
   },
   "tasks": {
     "task_fastpath": {
-      "fast_path": true,
+      "execution_model": "fastpath",
       "pipelines": [
         "pipe_passthrough"
       ],

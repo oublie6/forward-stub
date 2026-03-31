@@ -66,8 +66,8 @@ func TestDispatchClonesForEveryTaskAndReleasesOriginal(t *testing.T) {
 	s1 := &captureSender{testNamedSender: testNamedSender{name: "s1"}}
 	s2 := &captureSender{testNamedSender: testNamedSender{name: "s2"}}
 
-	t1 := &task.Task{Name: "t1", FastPath: true, Senders: []sender.Sender{s1}}
-	t2 := &task.Task{Name: "t2", FastPath: true, Senders: []sender.Sender{s2}}
+	t1 := &task.Task{Name: "t1", ExecutionModel: task.ExecutionModelFastPath, Senders: []sender.Sender{s1}}
+	t2 := &task.Task{Name: "t2", ExecutionModel: task.ExecutionModelFastPath, Senders: []sender.Sender{s2}}
 	if err := t1.Start(); err != nil {
 		t.Fatalf("t1 start: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestDispatchSingleSubscriberReusesOriginalPacket(t *testing.T) {
 	ctx := context.Background()
 
 	s1 := &spyPacketSender{testNamedSender: testNamedSender{name: "s1"}}
-	t1 := &task.Task{Name: "t1", FastPath: true, Senders: []sender.Sender{s1}}
+	t1 := &task.Task{Name: "t1", ExecutionModel: task.ExecutionModelFastPath, Senders: []sender.Sender{s1}}
 	if err := t1.Start(); err != nil {
 		t.Fatalf("t1 start: %v", err)
 	}

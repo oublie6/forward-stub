@@ -752,7 +752,6 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 		Pipelines:        pipes,
 		Senders:          sends,
 		PoolSize:         tc.PoolSize,
-		FastPath:         tc.FastPath,
 		ExecutionModel:   tc.ExecutionModel,
 		ChannelQueueSize: tc.ChannelQueueSize,
 		LogPayloadSend:   logOpts.send,

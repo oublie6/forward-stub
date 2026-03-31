@@ -255,7 +255,7 @@
   "tasks": {
     "task_fast_udp": {
       "pool_size": 4096,
-      "fast_path": true,
+      "execution_model": "fastpath",
       "pipelines": [
         "pipe_match_and_replace"
       ],
@@ -268,7 +268,6 @@
     },
     "task_pool_route": {
       "pool_size": 2048,
-      "fast_path": false,
       "execution_model": "pool",
       "pipelines": [
         "pipe_route_sender"

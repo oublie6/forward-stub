@@ -73,11 +73,10 @@ task 决定的是“命中之后怎么处理”：
 - 采用哪种 execution model。
 - 是否打印发送前 payload 摘要。
 
-### 4.1 `fast_path` 与 `execution_model`
+### 4.1 `execution_model`
 
-- 新配置优先使用 `execution_model`。
-- `fast_path` 只是兼容旧配置的简写开关。
-- 当 `execution_model` 已经明确填写时，`fast_path` 不再参与决策。
+- task 执行模型只通过 `execution_model` 指定。
+- 未显式填写时，默认执行模型为 `pool`。
 
 ## 5. dispatch 的真实热路径
 

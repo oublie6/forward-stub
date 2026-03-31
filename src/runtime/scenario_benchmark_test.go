@@ -159,7 +159,6 @@ func benchmarkTask(model string, snd sender.Sender) (*task.Task, func()) {
 	tk := &task.Task{
 		Name:             "bench-task",
 		ExecutionModel:   model,
-		FastPath:         model == task.ExecutionModelFastPath,
 		PoolSize:         1024,
 		ChannelQueueSize: 1024,
 		Senders:          []sender.Sender{snd},
