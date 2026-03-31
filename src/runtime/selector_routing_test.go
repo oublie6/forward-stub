@@ -70,8 +70,8 @@ func TestDispatchUsesMatchKeyAndDefaultTasks(t *testing.T) {
 
 	rs := &ReceiverState{Name: "rx", LogPayloadRecv: false}
 	selector := newCompiledSelector("sel1", 1)
-	selector.TasksByKey["kafka|topic=orders|partition=3"] = []*TaskState{{Name: "kafka-task", T: tKafka}}
-	selector.DefaultTasks = []*TaskState{{Name: "default-task", T: tDefault}}
+	selector.ValuesByKey["kafka|topic=orders|partition=3"] = []*TaskState{{Name: "kafka-task", T: tKafka}}
+	selector.DefaultValues = []*TaskState{{Name: "default-task", T: tDefault}}
 	rs.Selector.Store(selector)
 
 	dispatchToSelector(ctx, rs, &packet.Packet{

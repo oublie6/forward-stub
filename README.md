@@ -128,6 +128,7 @@ receiver -> selector -> task(pipeline + sender)
 - `configs/sftp.business.example.json`：SFTP receiver / sender 专项示例。
 - `configs/task-models.business.example.json`：`fastpath` / `pool` / `channel` 三种 task 执行模型示例。
 - `configs/bench.example.json`：benchmark 驱动配置，不属于运行时主配置。
+- `deploy/k8s/`：默认使用 `system.json + business.json` 双配置挂载方式，不再示例单文件 `config.json`。
 
 ## 4. 文档索引
 
@@ -183,3 +184,11 @@ go test ./src/config ./src/bootstrap ./...
 ```bash
 go test ./src/config -run Example
 ```
+
+如需运行仓库内现有 benchmark，请使用：
+
+```bash
+make perf
+```
+
+当前 `make perf` 只运行 `src/runtime` 中已存在的 benchmark，仓库内不存在 `cmd/bench` 入口。

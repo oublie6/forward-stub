@@ -13,7 +13,6 @@ import (
 	"forward-stub/src/logx"
 	"forward-stub/src/packet"
 	"forward-stub/src/pipeline"
-	"forward-stub/src/receiver"
 	"forward-stub/src/sender"
 	"forward-stub/src/task"
 
@@ -288,8 +287,11 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 		st.taskSets = cloneTaskSetMap(cfg.TaskSets)
 		st.mu.Unlock()
 	}
+	var senderClosers []sender.Sender
 	if senderChanged {
-		if err := st.applySenderDelta(cfg.Senders, cfg.Logging.Level); err != nil {
+		var err error
+		senderClosers, err = st.applySenderDelta(cfg.Senders, cfg.Logging.Level)
+		if err != nil {
 			return err
 		}
 	}
@@ -328,6 +330,9 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 		if err := st.rebuildReceiverSelectors(); err != nil {
 			return err
 		}
+	}
+	for _, snd := range senderClosers {
+		_ = snd.Close(context.Background())
 	}
 	if logx.Enabled(zapcore.InfoLevel) {
 		logx.L().Infow(
@@ -581,7 +586,7 @@ func taskUsesChangedPipeline(tc config.TaskConfig, changed map[string]struct{}) 
 //  1. 未变更 sender 直接复用；
 //  2. 变更项先创建新 sender，再替换 Store 中引用，最后关闭旧 sender；
 //  3. 对已不存在且引用计数为 0 的 sender 做回收。
-func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLevel string) error {
+func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLevel string) ([]sender.Sender, error) {
 	st.mu.RLock()
 	oldStates := make(map[string]*SenderState, len(st.senders))
 	for n, ss := range st.senders {
@@ -589,6 +594,7 @@ func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLe
 	}
 	st.mu.RUnlock()
 
+	toClose := make([]sender.Sender, 0)
 	for name, sc := range next {
 		old, ok := oldStates[name]
 		if ok && reflect.DeepEqual(old.Cfg, sc) {
@@ -596,7 +602,7 @@ func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLe
 		}
 		s, err := buildSender(name, sc, gnetLogLevel)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		st.mu.Lock()
 		refs := 0
@@ -606,7 +612,7 @@ func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLe
 		st.senders[name] = &SenderState{Name: name, Cfg: sc, S: s, Refs: refs}
 		st.mu.Unlock()
 		if ok {
-			_ = old.S.Close(context.Background())
+			toClose = append(toClose, old.S)
 		}
 	}
 
@@ -621,7 +627,7 @@ func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLe
 		}
 	}
 	st.mu.Unlock()
-	return nil
+	return toClose, nil
 }
 
 // applyReceiverDelta 增量更新 receiver 集合。
@@ -1005,14 +1011,14 @@ func (st *Store) rebuildReceiverSelectors() error {
 			if err != nil {
 				return err
 			}
-			cs.TasksByKey[key] = taskStates
+			cs.ValuesByKey[key] = taskStates
 		}
 		if sc.DefaultTaskSet != "" {
 			defaultTasks, err := resolveTaskSetStates(name, sc.DefaultTaskSet, taskSets, tasksByName)
 			if err != nil {
 				return err
 			}
-			cs.DefaultTasks = defaultTasks
+			cs.DefaultValues = defaultTasks
 		}
 		compiled[name] = cs
 	}
@@ -1127,78 +1133,4 @@ func payloadHex(b []byte, max int) string {
 		return hex.EncodeToString(b[:max]) + "...(已截断)"
 	}
 	return hex.EncodeToString(b)
-}
-
-// buildReceiver 根据 receiver 配置创建具体接收端实例。
-//
-// 该函数只做实例构造，不负责启动；调用方应在成功后自行接入 Store 与生命周期管理。
-func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (receiver.Receiver, error) {
-	multicore := config.DefaultReceiverMulticore
-	if rc.Multicore != nil {
-		multicore = *rc.Multicore
-	}
-	numEventLoop := rc.NumEventLoop
-	if numEventLoop <= 0 {
-		numEventLoop = config.DefaultReceiverNumEventLoop
-	}
-	switch rc.Type {
-	case "udp_gnet":
-		return receiver.NewGnetUDP(name, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, rc.SocketRecvBuffer, gnetLogLevel, rc.MatchKey)
-	case "tcp_gnet":
-		var fr receiver.Framer
-		switch rc.Frame {
-		case "":
-			fr = nil
-		case "u16be":
-			fr = receiver.U16BEFramer{}
-		default:
-			return nil, fmt.Errorf("receiver %s unknown frame %s", name, rc.Frame)
-		}
-		return receiver.NewGnetTCP(name, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, rc.SocketRecvBuffer, fr, gnetLogLevel, rc.MatchKey)
-	case "kafka":
-		return receiver.NewKafkaReceiver(name, rc)
-	case "sftp":
-		return receiver.NewSFTPReceiver(name, rc)
-	default:
-		return nil, fmt.Errorf("receiver %s unknown type %s", name, rc.Type)
-	}
-}
-
-// buildSender 根据 sender 配置创建具体发送端实例。
-//
-// 该函数只做实例构造，不负责引用计数或关闭旧实例；这些工作由调用方在更新流程中处理。
-func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (sender.Sender, error) {
-	conc := sc.Concurrency
-	if conc <= 0 {
-		conc = config.DefaultSenderConcurrency
-	}
-	switch sc.Type {
-	case "udp_unicast":
-		if sc.LocalPort <= 0 {
-			return nil, fmt.Errorf("sender %s udp_unicast requires local_port", name)
-		}
-		return sender.NewUDPUnicastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.SocketSendBuffer, conc)
-	case "udp_multicast":
-		if sc.LocalPort <= 0 {
-			return nil, fmt.Errorf("sender %s udp_multicast requires local_port", name)
-		}
-		return sender.NewUDPMulticastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.Iface, sc.TTL, sc.Loop, sc.SocketSendBuffer, conc)
-	case "tcp_gnet":
-		with := false
-		switch sc.Frame {
-		case "", "none":
-			with = false
-		case "u16be":
-			with = true
-		default:
-			return nil, fmt.Errorf("sender %s unknown frame %s", name, sc.Frame)
-		}
-		return sender.NewGnetTCPSender(name, sc.Remote, with, conc, sc.SocketSendBuffer, gnetLogLevel)
-	case "kafka":
-		return sender.NewKafkaSender(name, sc)
-	case "sftp":
-		return sender.NewSFTPSender(name, sc)
-	default:
-		return nil, fmt.Errorf("sender %s unknown type %s", name, sc.Type)
-	}
 }

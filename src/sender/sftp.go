@@ -36,9 +36,15 @@ type sftpTransferState struct {
 	// eofSeen 表示是否已收到结束分块。
 	// 用法：避免仅凭字节数达到阈值就过早提交。
 	eofSeen bool
-	// writtenMax 是已写入的最大末尾偏移。
-	// 用法：支持乱序 chunk 到达时估算当前写入进度。
-	writtenMax int64
+	// coveredBytes 是当前已确认无空洞覆盖的总字节数。
+	coveredBytes int64
+	// ranges 保存当前已收到的无重叠区间，用于判断是否存在空洞。
+	ranges []fileRange
+}
+
+type fileRange struct {
+	start int64
+	end   int64
 }
 
 // SFTPSender 是按分块写入并最终 rename 提交的 SFTP 发送端。
@@ -113,7 +119,10 @@ func NewSFTPSender(name string, sc config.SenderConfig) (*SFTPSender, error) {
 		remoteDir:          strings.TrimSpace(sc.RemoteDir),
 		tempSuffix:         suffix,
 		hostKeyFingerprint: strings.TrimSpace(sc.HostKeyFingerprint),
-		concurrency:        kafkaIntDefault(sc.Concurrency, 1),
+		concurrency:        config.DefaultSenderConcurrency,
+	}
+	if sc.Concurrency > 0 {
+		s.concurrency = sc.Concurrency
 	}
 	s.shardMask = s.concurrency - 1
 	s.locks = make([]sync.Mutex, s.concurrency)
@@ -208,15 +217,12 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 		s.invalidateConnLocked(idx)
 		return err
 	}
-	end := p.Meta.Offset + int64(len(p.Payload))
-	if end > st.writtenMax {
-		st.writtenMax = end
-	}
+	st.addRange(p.Meta.Offset, p.Meta.Offset+int64(len(p.Payload)))
 	if p.Meta.EOF {
 		st.eofSeen = true
 	}
 
-	if st.eofSeen && (st.totalSize <= 0 || st.writtenMax >= st.totalSize) {
+	if st.readyToCommit() {
 		_ = s.sftpClis[idx].Remove(st.finalPath)
 		if err := s.sftpClis[idx].Rename(st.tempPath, st.finalPath); err != nil {
 			s.invalidateConnLocked(idx)
@@ -317,4 +323,60 @@ func (s *SFTPSender) hostKeyCallback() ssh.HostKeyCallback {
 		}
 		return fmt.Errorf("sftp host key mismatch for %s: got=%s want=%s", hostname, got, want)
 	}
+}
+
+func (st *sftpTransferState) addRange(start, end int64) {
+	if end <= start {
+		return
+	}
+	newRange := fileRange{start: start, end: end}
+	if len(st.ranges) == 0 {
+		st.ranges = append(st.ranges, newRange)
+		st.coveredBytes += end - start
+		return
+	}
+
+	merged := make([]fileRange, 0, len(st.ranges)+1)
+	inserted := false
+	covered := int64(0)
+	for _, cur := range st.ranges {
+		switch {
+		case cur.end < newRange.start:
+			merged = append(merged, cur)
+		case newRange.end < cur.start:
+			if !inserted {
+				merged = append(merged, newRange)
+				inserted = true
+			}
+			merged = append(merged, cur)
+		default:
+			if cur.start < newRange.start {
+				newRange.start = cur.start
+			}
+			if cur.end > newRange.end {
+				newRange.end = cur.end
+			}
+		}
+	}
+	if !inserted {
+		merged = append(merged, newRange)
+	}
+	for _, r := range merged {
+		covered += r.end - r.start
+	}
+	st.ranges = merged
+	st.coveredBytes = covered
+}
+
+func (st *sftpTransferState) readyToCommit() bool {
+	if !st.eofSeen {
+		return false
+	}
+	if st.totalSize <= 0 {
+		return len(st.ranges) == 1
+	}
+	if st.coveredBytes < st.totalSize {
+		return false
+	}
+	return len(st.ranges) == 1 && st.ranges[0].start == 0 && st.ranges[0].end >= st.totalSize
 }

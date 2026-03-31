@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -83,7 +84,7 @@ func (s *GnetTCPSender) Send(ctx context.Context, p *packet.Packet) error {
 
 	n := len(p.Payload)
 	if n > 65535 {
-		return nil
+		return fmt.Errorf("tcp sender %s u16be payload too large: %d > 65535", s.name, n)
 	}
 	bufPtr := s.framePool.Get().(*[]byte)
 	buf := *bufPtr

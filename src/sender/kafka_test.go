@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"forward-stub/src/config"
+	"forward-stub/src/kafkautil"
 	"forward-stub/src/packet"
 
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -125,19 +126,19 @@ func TestKafkaRecordKeyUsesConfiguredSource(t *testing.T) {
 			},
 		},
 	}
-	if got := string(kafkaRecordKey([]byte("fixed"), "", pkt)); got != "fixed" {
+	if got := string(kafkautil.RecordKey([]byte("fixed"), "", pkt)); got != "fixed" {
 		t.Fatalf("unexpected fixed key: %q", got)
 	}
-	if got := string(kafkaRecordKey(nil, "match_key", pkt)); got != pkt.Meta.MatchKey {
+	if got := string(kafkautil.RecordKey(nil, "match_key", pkt)); got != pkt.Meta.MatchKey {
 		t.Fatalf("unexpected match_key source: %q", got)
 	}
-	if got := string(kafkaRecordKey(nil, "payload", pkt)); got != "payload" {
+	if got := string(kafkautil.RecordKey(nil, "payload", pkt)); got != "payload" {
 		t.Fatalf("unexpected payload source: %q", got)
 	}
 }
 
 func TestKafkaCompressionCodecAppliesLevel(t *testing.T) {
-	codec, enabled, err := kafkaCompressionCodec("zstd", 7)
+	codec, enabled, err := kafkautil.CompressionCodec("zstd", 7)
 	if err != nil {
 		t.Fatalf("compression codec: %v", err)
 	}

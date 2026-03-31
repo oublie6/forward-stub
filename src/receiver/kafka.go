@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"forward-stub/src/config"
+	"forward-stub/src/kafkautil"
 	"forward-stub/src/logx"
 	"forward-stub/src/packet"
 
 	"github.com/twmb/franz-go/pkg/kgo"
-	"github.com/twmb/franz-go/pkg/sasl"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -52,35 +52,35 @@ func NewKafkaReceiver(name string, rc config.ReceiverConfig) (*KafkaReceiver, er
 	if groupID == "" {
 		groupID = "forward-stub-" + name
 	}
-	brs := splitCSV(rc.Listen)
+	brs := kafkautil.SplitCSV(rc.Listen)
 	if len(brs) == 0 {
 		return nil, errors.New("kafka receiver requires brokers in listen/remote")
 	}
-	dialTimeout, err := kafkaDurationOrDefault(rc.DialTimeout, config.DefaultKafkaDialTimeout)
+	dialTimeout, err := kafkautil.DurationOrDefault(rc.DialTimeout, config.DefaultKafkaDialTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("kafka receiver dial_timeout 配置非法: %w", err)
 	}
-	connIdleTimeout, err := kafkaDurationOrDefault(rc.ConnIdleTimeout, config.DefaultKafkaConnIdleTimeout)
+	connIdleTimeout, err := kafkautil.DurationOrDefault(rc.ConnIdleTimeout, config.DefaultKafkaConnIdleTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("kafka receiver conn_idle_timeout 配置非法: %w", err)
 	}
-	metadataMaxAge, err := kafkaDurationOrDefault(rc.MetadataMaxAge, config.DefaultKafkaMetadataMaxAge)
+	metadataMaxAge, err := kafkautil.DurationOrDefault(rc.MetadataMaxAge, config.DefaultKafkaMetadataMaxAge)
 	if err != nil {
 		return nil, fmt.Errorf("kafka receiver metadata_max_age 配置非法: %w", err)
 	}
-	retryBackoff, err := kafkaDurationOrDefault(rc.RetryBackoff, config.DefaultKafkaRetryBackoff)
+	retryBackoff, err := kafkautil.DurationOrDefault(rc.RetryBackoff, config.DefaultKafkaRetryBackoff)
 	if err != nil {
 		return nil, fmt.Errorf("kafka receiver retry_backoff 配置非法: %w", err)
 	}
-	sessionTimeout, err := kafkaDurationOrDefault(rc.SessionTimeout, config.DefaultKafkaReceiverSessionTTL)
+	sessionTimeout, err := kafkautil.DurationOrDefault(rc.SessionTimeout, config.DefaultKafkaReceiverSessionTTL)
 	if err != nil {
 		return nil, fmt.Errorf("kafka receiver session_timeout 配置非法: %w", err)
 	}
-	heartbeatInterval, err := kafkaDurationOrDefault(rc.HeartbeatInterval, config.DefaultKafkaReceiverHeartbeat)
+	heartbeatInterval, err := kafkautil.DurationOrDefault(rc.HeartbeatInterval, config.DefaultKafkaReceiverHeartbeat)
 	if err != nil {
 		return nil, fmt.Errorf("kafka receiver heartbeat_interval 配置非法: %w", err)
 	}
-	rebalanceTimeout, err := kafkaDurationOrDefault(rc.RebalanceTimeout, config.DefaultKafkaReceiverRebalanceTTL)
+	rebalanceTimeout, err := kafkautil.DurationOrDefault(rc.RebalanceTimeout, config.DefaultKafkaReceiverRebalanceTTL)
 	if err != nil {
 		return nil, fmt.Errorf("kafka receiver rebalance_timeout 配置非法: %w", err)
 	}
@@ -90,16 +90,16 @@ func NewKafkaReceiver(name string, rc config.ReceiverConfig) (*KafkaReceiver, er
 	}
 	autoCommitInterval := time.Duration(0)
 	if autoCommit {
-		autoCommitInterval, err = kafkaDurationOrDefault(rc.AutoCommitInterval, config.DefaultKafkaReceiverAutoCommitIv)
+		autoCommitInterval, err = kafkautil.DurationOrDefault(rc.AutoCommitInterval, config.DefaultKafkaReceiverAutoCommitIv)
 		if err != nil {
 			return nil, fmt.Errorf("kafka receiver auto_commit_interval 配置非法: %w", err)
 		}
 	}
-	balancers, err := kafkaGroupBalancers(rc.Balancers)
+	balancers, err := kafkautil.GroupBalancers(rc.Balancers)
 	if err != nil {
 		return nil, err
 	}
-	isolationLevel, err := kafkaIsolationLevel(rc.IsolationLevel)
+	isolationLevel, err := kafkautil.IsolationLevel(rc.IsolationLevel)
 	if err != nil {
 		return nil, err
 	}
@@ -116,10 +116,10 @@ func NewKafkaReceiver(name string, rc config.ReceiverConfig) (*KafkaReceiver, er
 		kgo.HeartbeatInterval(heartbeatInterval),
 		kgo.RebalanceTimeout(rebalanceTimeout),
 		kgo.Balancers(balancers...),
-		kgo.FetchMinBytes(int32(kafkaIntDefault(rc.FetchMinBytes, 1))),
-		kgo.FetchMaxBytes(int32(kafkaIntDefault(rc.FetchMaxBytes, 16<<20))),
-		kgo.FetchMaxPartitionBytes(int32(kafkaIntDefault(rc.FetchMaxPartitionBytes, config.DefaultKafkaFetchMaxPartBytes))),
-		kgo.FetchMaxWait(time.Duration(kafkaIntDefault(rc.FetchMaxWaitMS, 100)) * time.Millisecond),
+		kgo.FetchMinBytes(int32(kafkautil.IntDefault(rc.FetchMinBytes, 1))),
+		kgo.FetchMaxBytes(int32(kafkautil.IntDefault(rc.FetchMaxBytes, 16<<20))),
+		kgo.FetchMaxPartitionBytes(int32(kafkautil.IntDefault(rc.FetchMaxPartitionBytes, config.DefaultKafkaFetchMaxPartBytes))),
+		kgo.FetchMaxWait(time.Duration(kafkautil.IntDefault(rc.FetchMaxWaitMS, 100)) * time.Millisecond),
 		kgo.FetchIsolationLevel(isolationLevel),
 	}
 	if autoCommit {
@@ -139,7 +139,7 @@ func NewKafkaReceiver(name string, rc config.ReceiverConfig) (*KafkaReceiver, er
 	if rc.TLS {
 		opts = append(opts, kgo.DialTLSConfig(&tls.Config{InsecureSkipVerify: rc.TLSSkipVerify}))
 	}
-	if mech, err := buildKafkaSASLMechanism(rc.SASLMechanism, rc.Username, rc.Password); err != nil {
+	if mech, err := kafkautil.BuildSASLMechanism(rc.SASLMechanism, rc.Username, rc.Password); err != nil {
 		return nil, err
 	} else if mech != nil {
 		opts = append(opts, kgo.SASL(mech))
@@ -285,112 +285,4 @@ func (r *KafkaReceiver) Stop(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-}
-
-// splitCSV 把逗号分隔配置解析为 broker 列表，并去除空白项。
-func splitCSV(v string) []string {
-	parts := strings.Split(v, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-// kafkaIntDefault 为 Kafka 整数配置提供统一回退值。
-func kafkaIntDefault(v, d int) int {
-	if v <= 0 {
-		return d
-	}
-	return v
-}
-
-// kafkaDurationOrDefault 解析 Kafka duration 配置，并确保结果大于 0。
-func kafkaDurationOrDefault(value, fallback string) (time.Duration, error) {
-	raw := strings.TrimSpace(value)
-	if raw == "" {
-		raw = fallback
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil {
-		return 0, err
-	}
-	if d <= 0 {
-		return 0, fmt.Errorf("duration must be > 0")
-	}
-	return d, nil
-}
-
-// kafkaIsolationLevel 解析 Kafka 消费隔离级别。
-func kafkaIsolationLevel(v string) (kgo.IsolationLevel, error) {
-	switch strings.TrimSpace(v) {
-	case "", "read_uncommitted":
-		return kgo.ReadUncommitted(), nil
-	case "read_committed":
-		return kgo.ReadCommitted(), nil
-	default:
-		return kgo.ReadUncommitted(), fmt.Errorf("kafka isolation_level %s unsupported", v)
-	}
-}
-
-// kafkaGroupBalancers 解析 consumer group rebalance 策略列表。
-// 若未显式配置，则回退到项目默认平衡器集合。
-func kafkaGroupBalancers(values []string) ([]kgo.GroupBalancer, error) {
-	if len(values) == 0 {
-		values = config.DefaultKafkaReceiverBalancers
-	}
-	out := make([]kgo.GroupBalancer, 0, len(values))
-	for _, value := range values {
-		switch strings.TrimSpace(value) {
-		case "range":
-			out = append(out, kgo.RangeBalancer())
-		case "round_robin":
-			out = append(out, kgo.RoundRobinBalancer())
-		case "cooperative_sticky":
-			out = append(out, kgo.CooperativeStickyBalancer())
-		default:
-			return nil, fmt.Errorf("kafka balancer %s unsupported", value)
-		}
-	}
-	return out, nil
-}
-
-type kafkaPlainMechanism struct {
-	username string
-	password string
-}
-
-func (m kafkaPlainMechanism) Name() string { return "PLAIN" }
-
-func (m kafkaPlainMechanism) Authenticate(_ context.Context, _ string) (sasl.Session, []byte, error) {
-	msg := []byte("\x00" + m.username + "\x00" + m.password)
-	return kafkaPlainSession{}, msg, nil
-}
-
-type kafkaPlainSession struct{}
-
-func (kafkaPlainSession) Challenge(_ []byte) (bool, []byte, error) {
-	return true, nil, nil
-}
-
-func buildKafkaSASLMechanism(mechanism, username, password string) (sasl.Mechanism, error) {
-	mech := strings.ToUpper(strings.TrimSpace(mechanism))
-	u := strings.TrimSpace(username)
-	p := strings.TrimSpace(password)
-	if mech == "" && (u != "" || p != "") {
-		mech = "PLAIN"
-	}
-	if mech == "" {
-		return nil, nil
-	}
-	if u == "" || p == "" {
-		return nil, fmt.Errorf("kafka sasl %s requires username and password", mech)
-	}
-	if mech != "PLAIN" {
-		return nil, fmt.Errorf("kafka sasl mechanism %s unsupported, only PLAIN is supported", mech)
-	}
-	return kafkaPlainMechanism{username: u, password: p}, nil
 }

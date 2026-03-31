@@ -1,20 +1,62 @@
-// pool.go 封装 payload 缓冲池，减少高频内存分配。
 package packet
 
-import "github.com/valyala/bytebufferpool"
+import (
+	"sync"
+	"sync/atomic"
+)
 
-var payloadPool bytebufferpool.Pool
+var (
+	payloadPool sync.Pool
 
-// SetPayloadPoolMaxCachedBytes 设置 payload 池可缓存的最大字节数。
-// 当前使用底层内存池自适应策略，该设置保留为兼容入口。
-func SetPayloadPoolMaxCachedBytes(_ int64) {}
+	payloadPoolMaxCachedBytes atomic.Int64
+	payloadPoolCachedBytes    atomic.Int64
+)
 
-// CopyFrom 负责该函数对应的核心逻辑，详见实现细节。
-func CopyFrom(in []byte) (out []byte, release func()) {
-	bb := payloadPool.Get()
-	bb.B = append(bb.B[:0], in...)
-	return bb.B, func() {
-		bb.Reset()
-		payloadPool.Put(bb)
+func SetPayloadPoolMaxCachedBytes(maxCachedBytes int64) {
+	if maxCachedBytes < 0 {
+		maxCachedBytes = 0
 	}
+	payloadPoolMaxCachedBytes.Store(maxCachedBytes)
+}
+
+func CopyFrom(in []byte) (out []byte, release func()) {
+	bufPtr := payloadPool.Get()
+	var buf []byte
+	if bufPtr != nil {
+		buf = *(bufPtr.(*[]byte))
+		payloadPoolCachedBytes.Add(-int64(cap(buf)))
+	} else {
+		buf = make([]byte, 0, len(in))
+	}
+	if cap(buf) < len(in) {
+		buf = make([]byte, len(in))
+	} else {
+		buf = buf[:len(in)]
+	}
+	copy(buf, in)
+	return buf, func() {
+		releasePayloadBuffer(buf)
+	}
+}
+
+func releasePayloadBuffer(buf []byte) {
+	if buf == nil {
+		return
+	}
+	size := int64(cap(buf))
+	maxCached := payloadPoolMaxCachedBytes.Load()
+	if maxCached > 0 {
+		for {
+			cached := payloadPoolCachedBytes.Load()
+			if cached+size > maxCached {
+				return
+			}
+			if payloadPoolCachedBytes.CompareAndSwap(cached, cached+size) {
+				break
+			}
+		}
+	}
+	buf = buf[:0]
+	bufPtr := &buf
+	payloadPool.Put(bufPtr)
 }

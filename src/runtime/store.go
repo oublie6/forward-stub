@@ -87,7 +87,7 @@ func (s *Store) getDispatchTasks(receiver string) []*TaskState {
 	if selectorAny == nil {
 		return nil
 	}
-	return selectorAny.(*CompiledSelector).DefaultTasks
+	return selectorAny.(*CompiledSelector).DefaultValues
 }
 
 // StopAll 停止当前 store 中已注册的全部 runtime 组件。

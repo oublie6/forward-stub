@@ -10,7 +10,6 @@
       "read_buffer_cap": 2097152,
       "socket_recv_buffer": 1073741824,
       "frame": "",
-      "selector": "sel_ingress",
       "log_payload_recv": true,
       "payload_log_max_bytes": 128
     },
