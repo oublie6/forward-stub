@@ -68,6 +68,8 @@ func (r *SkyDDSReceiver) Key() string {
 func (r *SkyDDSReceiver) MatchKeyMode() string { return r.mode }
 
 func (r *SkyDDSReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
+	const waitTimeout = 500 * time.Millisecond
+	const drainMaxItems = 2048
 	for {
 		select {
 		case <-ctx.Done():
