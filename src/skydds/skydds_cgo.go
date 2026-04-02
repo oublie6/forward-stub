@@ -56,6 +56,49 @@ func (w *cgoWriter) Write(payload []byte) error {
 	return nil
 }
 
+func (w *cgoWriter) WriteBatch(payloads [][]byte) error {
+	if w == nil || w.ptr == nil {
+		return fmt.Errorf("skydds writer is nil")
+	}
+	if len(payloads) == 0 {
+		return nil
+	}
+
+	count := len(payloads)
+	ptrBytes := make([]*C.uint8_t, count)
+	cLens := make([]C.int, count)
+	allocs := make([]unsafe.Pointer, 0, count)
+	defer func() {
+		for _, p := range allocs {
+			C.free(p)
+		}
+	}()
+
+	for i := range payloads {
+		cLens[i] = C.int(len(payloads[i]))
+		if len(payloads[i]) == 0 {
+			ptrBytes[i] = nil
+			continue
+		}
+		p := C.CBytes(payloads[i])
+		allocs = append(allocs, p)
+		ptrBytes[i] = (*C.uint8_t)(p)
+	}
+
+	var errBuf [512]C.char
+	if code := C.skydds_writer_send_batch(
+		w.ptr,
+		(**C.uint8_t)(unsafe.Pointer(&ptrBytes[0])),
+		(*C.int)(unsafe.Pointer(&cLens[0])),
+		C.int(count),
+		&errBuf[0],
+		C.int(len(errBuf)),
+	); code != 0 {
+		return fmt.Errorf("skydds writer send_batch failed (code=%d): %s", int(code), C.GoString(&errBuf[0]))
+	}
+	return nil
+}
+
 func (w *cgoWriter) Close() error {
 	if w == nil || w.ptr == nil {
 		return nil
@@ -82,7 +125,50 @@ func (r *cgoReader) Poll(timeout time.Duration) ([]byte, error) {
 	if outLen <= 0 {
 		return nil, nil
 	}
-	return buf[:int(outLen)], nil
+	return append([]byte(nil), buf[:int(outLen)]...), nil
+}
+
+func (r *cgoReader) PollBatch(timeout time.Duration) ([][]byte, error) {
+	if r == nil || r.ptr == nil {
+		return nil, fmt.Errorf("skydds reader is nil")
+	}
+	buf := make([]byte, 4<<20)
+	lens := make([]C.int, 2048)
+	var outCount C.int
+	var outTotal C.int
+	var errBuf [512]C.char
+	code := C.skydds_reader_poll_batch(
+		r.ptr,
+		(*C.uint8_t)(unsafe.Pointer(&buf[0])),
+		C.int(len(buf)),
+		(*C.int)(unsafe.Pointer(&lens[0])),
+		C.int(len(lens)),
+		C.int(timeout.Milliseconds()),
+		&outCount,
+		&outTotal,
+		&errBuf[0],
+		C.int(len(errBuf)),
+	)
+	if code == 1 {
+		return nil, nil
+	}
+	if code != 0 {
+		return nil, fmt.Errorf("skydds reader poll_batch failed (code=%d): %s", int(code), C.GoString(&errBuf[0]))
+	}
+	if outCount <= 0 {
+		return nil, nil
+	}
+	out := make([][]byte, 0, int(outCount))
+	off := 0
+	for i := 0; i < int(outCount); i++ {
+		l := int(lens[i])
+		if l < 0 || off+l > int(outTotal) || off+l > len(buf) {
+			return nil, fmt.Errorf("invalid batch payload layout")
+		}
+		out = append(out, append([]byte(nil), buf[off:off+l]...))
+		off += l
+	}
+	return out, nil
 }
 
 func (r *cgoReader) Close() error {

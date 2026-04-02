@@ -8,8 +8,12 @@ source scripts/skydds/env.sh
 echo "[INFO] building with SkyDDS tag"
 CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 
-echo "[INFO] running config validation for SkyDDS sender"
+echo "[INFO] config/unit checks for octet + batch"
 go test ./src/config -run SkyDDS -count=1
+go test ./src/sender -run SkyDDS -count=1
 
-echo "[INFO] sender path smoke command (requires a running SkyDDS subscriber)"
+echo "[INFO] octet sender smoke command"
 echo "./bin/forward-stub -system-config ./configs/minimal.system.example.json -business-config ./configs/skydds.business.example.json"
+
+echo "[INFO] batch_octet sender smoke command"
+echo "./bin/forward-stub -system-config ./configs/minimal.system.example.json -business-config ./configs/skydds-batch.business.example.json"

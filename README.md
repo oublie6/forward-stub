@@ -179,7 +179,7 @@ make perf
 
 ## 8. SkyDDS（dds_skydds）轻量字节桥接
 
-当前新增 `dds_skydds` receiver/sender，用于把 SkyDDS `OctetMsg` 接入统一 packet/payload 链路（不是完整 DDS 框架）。
+当前新增 `dds_skydds` receiver/sender，支持 SkyDDS `OctetMsg` 与 `BatchOctetMsg` 字节桥接（不是完整 DDS 框架）。
 
 目录约定：
 
@@ -196,5 +196,9 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 ./scripts/skydds/test_receiver.sh
 ./scripts/skydds/test_loop.sh
 ```
+
+示例配置：
+- Octet: `configs/skydds.business.example.json`
+- Batch: `configs/skydds-batch.business.example.json`
 
 详见 `docs/skydds.md`。

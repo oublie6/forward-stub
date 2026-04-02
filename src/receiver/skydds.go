@@ -18,6 +18,7 @@ type SkyDDSReceiver struct {
 	reader  skydds.Reader
 	builder func() string
 	mode    string
+	model   string
 }
 
 func NewSkyDDSReceiver(name string, rc config.ReceiverConfig) (*SkyDDSReceiver, error) {
@@ -37,7 +38,7 @@ func NewSkyDDSReceiver(name string, rc config.ReceiverConfig) (*SkyDDSReceiver, 
 		builder = func() string { return fixed }
 		mode = "fixed"
 	}
-	return &SkyDDSReceiver{name: name, cfg: rc, reader: r, builder: builder, mode: mode}, nil
+	return &SkyDDSReceiver{name: name, cfg: rc, reader: r, builder: builder, mode: mode, model: strings.ToLower(strings.TrimSpace(rc.MessageModel))}, nil
 }
 
 func (r *SkyDDSReceiver) Name() string { return r.name }
@@ -53,6 +54,21 @@ func (r *SkyDDSReceiver) Start(ctx context.Context, onPacket func(*packet.Packet
 			return nil
 		default:
 		}
+		if r.model == "batch_octet" {
+			payloads, err := r.reader.PollBatch(500 * time.Millisecond)
+			if err != nil {
+				return fmt.Errorf("skydds batch poll: %w", err)
+			}
+			for i := range payloads {
+				if len(payloads[i]) == 0 {
+					logx.L().Warnw("SkyDDS batch sub-message empty; skip", "receiver", r.name, "index", i)
+					continue
+				}
+				r.emitPacket(payloads[i], onPacket)
+			}
+			continue
+		}
+
 		payload, err := r.reader.Poll(500 * time.Millisecond)
 		if err != nil {
 			return fmt.Errorf("skydds poll: %w", err)
@@ -60,11 +76,15 @@ func (r *SkyDDSReceiver) Start(ctx context.Context, onPacket func(*packet.Packet
 		if len(payload) == 0 {
 			continue
 		}
-		buf, rel := packet.CopyFrom(payload)
-		onPacket(&packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: buf, Meta: packet.Meta{
-			Proto: packet.ProtoSkyDDS, Remote: r.cfg.TopicName, Local: fmt.Sprintf("domain:%d", r.cfg.DomainID), MatchKey: r.builder(),
-		}}, ReleaseFn: rel})
+		r.emitPacket(payload, onPacket)
 	}
+}
+
+func (r *SkyDDSReceiver) emitPacket(payload []byte, onPacket func(*packet.Packet)) {
+	buf, rel := packet.CopyFrom(payload)
+	onPacket(&packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: buf, Meta: packet.Meta{
+		Proto: packet.ProtoSkyDDS, Remote: r.cfg.TopicName, Local: fmt.Sprintf("domain:%d", r.cfg.DomainID), MatchKey: r.builder(),
+	}}, ReleaseFn: rel})
 }
 
 func (r *SkyDDSReceiver) Stop(ctx context.Context) error {

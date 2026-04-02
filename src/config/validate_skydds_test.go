@@ -27,10 +27,36 @@ func TestValidateSkyDDSOK(t *testing.T) {
 	}
 }
 
-func TestValidateSkyDDSMessageModel(t *testing.T) {
+func TestValidateSkyDDSBatchOK(t *testing.T) {
 	cfg := baseSkyDDSConfig()
 	rx := cfg.Receivers["rx"]
 	rx.MessageModel = "batch_octet"
+	cfg.Receivers["rx"] = rx
+	tx := cfg.Senders["tx"]
+	tx.MessageModel = "batch_octet"
+	tx.BatchNum = 16
+	tx.BatchSize = 4096
+	tx.BatchDelay = "200ms"
+	cfg.Senders["tx"] = tx
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("validate failed: %v", err)
+	}
+}
+
+func TestValidateSkyDDSBatchMissingParams(t *testing.T) {
+	cfg := baseSkyDDSConfig()
+	tx := cfg.Senders["tx"]
+	tx.MessageModel = "batch_octet"
+	cfg.Senders["tx"] = tx
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestValidateSkyDDSMessageModelInvalid(t *testing.T) {
+	cfg := baseSkyDDSConfig()
+	rx := cfg.Receivers["rx"]
+	rx.MessageModel = "abc"
 	cfg.Receivers["rx"] = rx
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected error")

@@ -11,11 +11,13 @@ type CommonOptions struct {
 
 type Writer interface {
 	Write(payload []byte) error
+	WriteBatch(payloads [][]byte) error
 	Close() error
 }
 
 type Reader interface {
 	Poll(timeout time.Duration) ([]byte, error)
+	PollBatch(timeout time.Duration) ([][]byte, error)
 	Close() error
 }
 

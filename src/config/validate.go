@@ -156,8 +156,9 @@ func (c *Config) Validate() error {
 			if strings.TrimSpace(r.TopicName) == "" {
 				return fmt.Errorf("receiver %s dds_skydds requires topic_name", rn)
 			}
-			if strings.ToLower(strings.TrimSpace(r.MessageModel)) != "octet" {
-				return fmt.Errorf("receiver %s dds_skydds message_model only supports octet", rn)
+			model := strings.ToLower(strings.TrimSpace(r.MessageModel))
+			if model != "octet" && model != "batch_octet" {
+				return fmt.Errorf("receiver %s dds_skydds message_model must be octet or batch_octet", rn)
 			}
 		case "sftp":
 			if r.Listen == "" {
@@ -237,11 +238,24 @@ func (c *Config) Validate() error {
 			if strings.TrimSpace(s.TopicName) == "" {
 				return fmt.Errorf("sender %s dds_skydds requires topic_name", sn)
 			}
-			if strings.ToLower(strings.TrimSpace(s.MessageModel)) != "octet" {
-				return fmt.Errorf("sender %s dds_skydds message_model only supports octet", sn)
+			model := strings.ToLower(strings.TrimSpace(s.MessageModel))
+			if model != "octet" && model != "batch_octet" {
+				return fmt.Errorf("sender %s dds_skydds message_model must be octet or batch_octet", sn)
 			}
-			if s.BatchNum != 0 || s.BatchSize != 0 || s.BatchDelay != 0 {
-				return fmt.Errorf("sender %s dds_skydds batch_* not supported in v1", sn)
+			if model == "batch_octet" {
+				if s.BatchNum <= 0 {
+					return fmt.Errorf("sender %s dds_skydds batch_num must be > 0 when message_model=batch_octet", sn)
+				}
+				if s.BatchSize <= 0 {
+					return fmt.Errorf("sender %s dds_skydds batch_size must be > 0 when message_model=batch_octet", sn)
+				}
+				if err := validatePositiveDurationField("sender", sn, "batch_delay", s.BatchDelay); err != nil {
+					return err
+				}
+			} else {
+				if s.BatchNum != 0 || s.BatchSize != 0 || strings.TrimSpace(s.BatchDelay) != "" {
+					return fmt.Errorf("sender %s dds_skydds batch_* only allowed when message_model=batch_octet", sn)
+				}
 			}
 		case "sftp":
 			if s.Remote == "" {

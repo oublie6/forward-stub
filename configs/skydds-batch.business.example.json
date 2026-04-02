@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "receivers": {
+    "rx_skydds_batch": {
+      "type": "dds_skydds",
+      "selector": "sel_skydds_batch",
+      "dcps_config_file": "./third_party/skydds/sdk/etc/dds_tcp_conf.ini",
+      "domain_id": 0,
+      "topic_name": "pdxpBatchInputTopic",
+      "message_model": "batch_octet",
+      "match_key": {
+        "mode": "fixed",
+        "fixed_value": "pdxp-batch-ingress"
+      }
+    }
+  },
+  "selectors": {
+    "sel_skydds_batch": {
+      "default_task_set": "ts_skydds_batch"
+    }
+  },
+  "task_sets": {
+    "ts_skydds_batch": [
+      "task_skydds_batch_forward"
+    ]
+  },
+  "senders": {
+    "tx_skydds_batch": {
+      "type": "dds_skydds",
+      "dcps_config_file": "./third_party/skydds/sdk/etc/dds_tcp_conf.ini",
+      "domain_id": 0,
+      "topic_name": "pdxpBatchOutputTopic",
+      "message_model": "batch_octet",
+      "batch_num": 64,
+      "batch_size": 262144,
+      "batch_delay": "20ms"
+    }
+  },
+  "pipelines": {
+    "pipe_passthrough": []
+  },
+  "tasks": {
+    "task_skydds_batch_forward": {
+      "pipelines": [
+        "pipe_passthrough"
+      ],
+      "senders": [
+        "tx_skydds_batch"
+      ],
+      "execution_model": "fastpath"
+    }
+  }
+}

@@ -108,17 +108,17 @@
 
 - `type=dds_skydds`
 - 必填：`selector`、`dcps_config_file`、`domain_id`、`topic_name`、`message_model`
-- `message_model` 第一版仅支持 `octet`
+- `message_model` 支持 `octet` 与 `batch_octet`
 - `match_key.mode` 仅支持留空（默认 `skydds|topic_name=<topic>`）或 `fixed`
-- 接收模型：C++ DataReader listener 入队，Go 侧轮询 `Poll` 拉取后进入 selector/task/pipeline。
+- 接收模型：C++ DataReader listener 入队，Go 侧轮询；`octet` 走单条 `Poll`，`batch_octet` 走 `PollBatch` 后按子消息顺序拆批下发。
 
 ### 2.6 SkyDDS sender
 
 - `type=dds_skydds`
 - 必填：`dcps_config_file`、`domain_id`、`topic_name`、`message_model`
-- `message_model` 第一版仅支持 `octet`
-- 通过 C ABI + C++ wrapper 调用 SkyDDS `DataWriter` 写 `OctetMsg`
-- `batch_num`/`batch_size`/`batch_delay` 在第一版校验为不支持
+- `message_model` 支持 `octet` 与 `batch_octet`
+- 通过 C ABI + C++ wrapper 调用 SkyDDS `DataWriter` 写 `OctetMsg` / `BatchOctetMsg`
+- 当 `message_model=batch_octet` 时必须配置 `batch_num`/`batch_size`/`batch_delay`，并按三阈值（条数/字节/等待时长）触发 flush
 
 ## 2. Sender：负责最终输出
 

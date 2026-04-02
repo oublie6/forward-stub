@@ -318,7 +318,7 @@ type ReceiverConfig struct {
 	// 用法：Type=dds_skydds 时必填，需与对端一致。
 	TopicName string `json:"topic_name,omitempty"`
 	// MessageModel 指定 SkyDDS 消息模型。
-	// 用法：第一版仅支持 octet；不支持 batch_octet。
+	// 用法：支持 octet 与 batch_octet。
 	MessageModel string `json:"message_model,omitempty"`
 
 	// LogPayloadRecv 控制该 receiver 是否打印接收 payload 日志。
@@ -437,12 +437,13 @@ type SenderConfig struct {
 	// 用法：Type=dds_skydds 时必填，需与对端一致。
 	TopicName string `json:"topic_name,omitempty"`
 	// MessageModel 指定 SkyDDS 消息模型。
-	// 用法：第一版仅支持 octet；不支持 batch_octet。
+	// 用法：支持 octet 与 batch_octet。
 	MessageModel string `json:"message_model,omitempty"`
-	// BatchNum/BatchSize/BatchDelay 为后续 BatchOctetMsg 预留。
-	BatchNum   int `json:"batch_num,omitempty"`
-	BatchSize  int `json:"batch_size,omitempty"`
-	BatchDelay int `json:"batch_delay,omitempty"`
+	// BatchNum/BatchSize/BatchDelay 是 SkyDDS BatchOctetMsg 聚合参数。
+	// 用法：仅 message_model=batch_octet 时生效；分别表示单批条数阈值、字节阈值与等待时长阈值。
+	BatchNum   int    `json:"batch_num,omitempty"`
+	BatchSize  int    `json:"batch_size,omitempty"`
+	BatchDelay string `json:"batch_delay,omitempty"`
 
 	// LocalIP 是 UDP sender 绑定的本地出接口 IP。
 	// 用法：多网卡机器可显式指定出口网络。
