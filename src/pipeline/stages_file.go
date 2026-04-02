@@ -10,7 +10,7 @@ import (
 
 // MarkAsFileChunk 将实时数据标记为“文件分块语义”，用于 stream->file 转换。
 func MarkAsFileChunk(defaultPath string, eof bool) StageFunc {
-	return func(p *packet.Packet) bool {
+	return mapStage(func(p *packet.Packet) bool {
 		filePath := strings.TrimSpace(p.Meta.FilePath)
 		if filePath == "" {
 			filePath = strings.TrimSpace(defaultPath)
@@ -29,12 +29,12 @@ func MarkAsFileChunk(defaultPath string, eof bool) StageFunc {
 		p.Meta.Offset = 0
 		p.Meta.EOF = eof
 		return true
-	}
+	})
 }
 
 // ClearFileMeta 清理文件元信息，实现 file_chunk->stream 语义转换。
 func ClearFileMeta() StageFunc {
-	return func(p *packet.Packet) bool {
+	return mapStage(func(p *packet.Packet) bool {
 		p.Meta.FilePath = ""
 		p.Meta.TransferID = ""
 		p.Meta.Offset = 0
@@ -42,5 +42,5 @@ func ClearFileMeta() StageFunc {
 		p.Meta.EOF = false
 		p.Kind = packet.PayloadKindStream
 		return true
-	}
+	})
 }

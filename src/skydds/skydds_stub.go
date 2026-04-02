@@ -19,6 +19,14 @@ func (stubWriter) Close() error { return nil }
 
 type stubReader struct{}
 
+func (stubReader) Wait(time.Duration) (bool, error) {
+	return false, fmt.Errorf("skydds support disabled: build with -tags skydds and CGO_ENABLED=1")
+}
+
+func (stubReader) Drain(int) ([][]byte, error) {
+	return nil, fmt.Errorf("skydds support disabled: build with -tags skydds and CGO_ENABLED=1")
+}
+
 func (stubReader) Poll(time.Duration) ([]byte, error) {
 	return nil, fmt.Errorf("skydds support disabled: build with -tags skydds and CGO_ENABLED=1")
 }

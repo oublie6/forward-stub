@@ -160,6 +160,12 @@ func (c *Config) Validate() error {
 			if model != "octet" && model != "batch_octet" {
 				return fmt.Errorf("receiver %s dds_skydds message_model must be octet or batch_octet", rn)
 			}
+			if err := validatePositiveDurationByType("receiver", rn, "dds_skydds", "wait_timeout", r.WaitTimeout); err != nil {
+				return err
+			}
+			if r.DrainMaxItems <= 0 {
+				return fmt.Errorf("receiver %s dds_skydds drain_max_items must be > 0", rn)
+			}
 		case "sftp":
 			if r.Listen == "" {
 				return fmt.Errorf("receiver %s sftp requires listen", rn)
@@ -451,12 +457,16 @@ func validateKafkaSenderOptions(name string, sc SenderConfig) error {
 }
 
 func validatePositiveDurationField(kind, name, field, value string) error {
+	return validatePositiveDurationByType(kind, name, "kafka", field, value)
+}
+
+func validatePositiveDurationByType(kind, name, typ, field, value string) error {
 	if strings.TrimSpace(value) == "" {
 		return nil
 	}
 	d, err := time.ParseDuration(value)
 	if err != nil || d <= 0 {
-		return fmt.Errorf("%s %s kafka %s must be a valid duration > 0", kind, name, field)
+		return fmt.Errorf("%s %s %s %s must be a valid duration > 0", kind, name, typ, field)
 	}
 	return nil
 }

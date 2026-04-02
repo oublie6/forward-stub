@@ -3,7 +3,7 @@ package pipeline
 
 import "forward-stub/src/packet"
 
-type StageFunc func(*packet.Packet) bool
+type StageFunc func([]*packet.Packet) []*packet.Packet
 
 type Pipeline struct {
 	Name   string
@@ -11,11 +11,13 @@ type Pipeline struct {
 }
 
 // Process 负责该函数对应的核心逻辑，详见实现细节。
-func (pl *Pipeline) Process(p *packet.Packet) bool {
+func (pl *Pipeline) Process(p *packet.Packet) []*packet.Packet {
+	packets := []*packet.Packet{p}
 	for _, st := range pl.Stages {
-		if !st(p) {
-			return false
+		packets = st(packets)
+		if len(packets) == 0 {
+			return nil
 		}
 	}
-	return true
+	return packets
 }

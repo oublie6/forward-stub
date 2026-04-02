@@ -109,8 +109,12 @@
 - `type=dds_skydds`
 - 必填：`selector`、`dcps_config_file`、`domain_id`、`topic_name`、`message_model`
 - `message_model` 支持 `octet` 与 `batch_octet`
+- 可选：`wait_timeout`、`drain_max_items`
+  - `wait_timeout`：通知等待超时（duration，默认 `500ms`）
+  - `drain_max_items`：每次 drain 拉取上限（正整数，默认 `2048`）
 - `match_key.mode` 仅支持留空（默认 `skydds|topic_name=<topic>`）或 `fixed`
-- 接收模型：C++ DataReader listener 入队，Go 侧轮询；`octet` 走单条 `Poll`，`batch_octet` 走 `PollBatch` 后按子消息顺序拆批下发。
+- 接收模型：C++ DataReader listener 入队并通知，Go 侧 `Wait(wait_timeout)` 被唤醒后执行 `Drain(drain_max_items)`；无论 `octet` 还是 `batch_octet`，进入 runtime 前都逐条 packet 下发。
+- 说明：当前主数据面不使用“Go 侧纯轮询 Poll/PollBatch”，也不使用“每条消息 direct callback Go”。
 
 ### 2.6 SkyDDS sender
 
@@ -243,6 +247,12 @@
 - receiver **不会**直接绑定 task。
 - sender **不会**参与 selector 匹配。
 - route stage 只会影响 task 内部的 sender 选择，不会影响 receiver 到 task 的主路由。
+
+补充（文件与实时数据互转边界）：
+
+- `file -> realtime`：SFTP receiver 产出 `file_chunk`，由 pipeline `split_file_chunk_to_packets` 做边界转换，再交给实时 sender。
+- `realtime -> file`：实时 receiver 产出 stream packet，由 pipeline `stream_packets_to_file_segments` 组装为滚动 `file_chunk`，再交给 SFTP sender。
+- sender 仍只负责协议输出；边界适配（切分/组段/命名规则）放在 stage 层。
 
 ## 4. payload 日志配置在哪一层生效
 

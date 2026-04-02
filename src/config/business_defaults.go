@@ -172,6 +172,14 @@ func (c *Config) ApplyDefaults() {
 				rc.IsolationLevel = DefaultKafkaIsolationLevel
 			}
 		}
+		if rc.Type == "dds_skydds" {
+			if rc.WaitTimeout == "" {
+				rc.WaitTimeout = DefaultSkyDDSWaitTimeout
+			}
+			if rc.DrainMaxItems <= 0 {
+				rc.DrainMaxItems = DefaultSkyDDSDrainMaxItems
+			}
+		}
 		c.Receivers[name] = rc
 	}
 	for name, sc := range c.Senders {

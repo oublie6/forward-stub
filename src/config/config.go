@@ -43,6 +43,8 @@ const (
 	DefaultKafkaReceiverAutoCommitIv = "5s"
 	DefaultKafkaFetchMaxPartBytes    = 1 << 20
 	DefaultKafkaIsolationLevel       = "read_uncommitted"
+	DefaultSkyDDSWaitTimeout         = "500ms"
+	DefaultSkyDDSDrainMaxItems       = 2048
 )
 
 var DefaultKafkaReceiverBalancers = []string{"cooperative_sticky"}
@@ -320,6 +322,12 @@ type ReceiverConfig struct {
 	// MessageModel 指定 SkyDDS 消息模型。
 	// 用法：支持 octet 与 batch_octet。
 	MessageModel string `json:"message_model,omitempty"`
+	// WaitTimeout 指定 SkyDDS receiver 在无数据时等待通知的最长时间。
+	// 用法：仅 Type=dds_skydds 时生效，需为 >0 的 duration（如 500ms / 5ms / 100us）。
+	WaitTimeout string `json:"wait_timeout,omitempty"`
+	// DrainMaxItems 指定每次 SkyDDS receiver 批量拉取的最大消息条数。
+	// 用法：仅 Type=dds_skydds 时生效，需为 >0 的整数。
+	DrainMaxItems int `json:"drain_max_items,omitempty"`
 
 	// LogPayloadRecv 控制该 receiver 是否打印接收 payload 日志。
 	// 用法：用于定位输入侧问题；建议仅在排障窗口开启。
@@ -551,6 +559,18 @@ type StageConfig struct {
 	// DefaultSender 是 switch 路由未命中时的默认 sender。
 	// 用法：为空表示未命中直接丢弃（stage 返回 false）。
 	DefaultSender string `json:"default_sender,omitempty"`
+	// PacketSize 是 file_chunk -> stream 拆分 stage 的单包大小（字节）。
+	PacketSize int `json:"packet_size,omitempty"`
+	// PreserveFileMeta 控制 file_chunk -> stream 拆分时是否保留文件元数据。
+	PreserveFileMeta *bool `json:"preserve_file_meta,omitempty"`
+	// SegmentSize 是 stream -> file 段滚动阈值（字节）。
+	SegmentSize int `json:"segment_size,omitempty"`
+	// ChunkSize 是 stream -> file 输出 file_chunk 的分块大小（字节）。
+	ChunkSize int `json:"chunk_size,omitempty"`
+	// FilePrefix 是 stream -> file 生成文件名时的前缀。
+	FilePrefix string `json:"file_prefix,omitempty"`
+	// TimeLayout 是 stream -> file 文件名中的时间格式（Go time layout）。
+	TimeLayout string `json:"time_layout,omitempty"`
 }
 
 // SelectorConfig 描述一个“match key -> task set”的精确匹配器。

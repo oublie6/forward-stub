@@ -7,8 +7,11 @@
 #include <dds/DCPS/StaticIncludes.h>
 #include <ace/OS_NS_string.h>
 #include <ace/Thread_Mutex.h>
+#include <ace/Condition_Thread_Mutex.h>
+#include <ace/Time_Value.h>
 
 #include <cstring>
+#include <cerrno>
 #include <deque>
 #include <string>
 #include <vector>
@@ -59,6 +62,8 @@ class OctetReaderListener : public virtual Satellite::OctetMsgDataReaderListener
 public:
     std::deque<std::vector<uint8_t>> queue_;
     ACE_Thread_Mutex lock_;
+    ACE_Condition_Thread_Mutex cond_{lock_};
+    bool closed_{false};
 
     void on_data_available(DDS::DataReader_ptr reader) override {
         Satellite::OctetMsgDataReader_var dr = Satellite::OctetMsgDataReader::_narrow(reader);
@@ -71,7 +76,9 @@ public:
             data.reserve(static_cast<std::size_t>(msg.dataBody.length()));
             for (CORBA::ULong i = 0; i < msg.dataBody.length(); ++i) data.push_back(msg.dataBody[i]);
             ACE_GUARD(ACE_Thread_Mutex, guard, lock_);
+            const bool was_empty = queue_.empty();
             queue_.push_back(std::move(data));
+            if (was_empty) cond_.signal();
         }
     }
 
@@ -87,6 +94,8 @@ class BatchReaderListener : public virtual Satellite::BatchOctetMsgDataReaderLis
 public:
     std::deque<std::vector<std::vector<uint8_t>>> queue_;
     ACE_Thread_Mutex lock_;
+    ACE_Condition_Thread_Mutex cond_{lock_};
+    bool closed_{false};
 
     void on_data_available(DDS::DataReader_ptr reader) override {
         Satellite::BatchOctetMsgDataReader_var dr = Satellite::BatchOctetMsgDataReader::_narrow(reader);
@@ -105,7 +114,9 @@ public:
                 batch.push_back(std::move(data));
             }
             ACE_GUARD(ACE_Thread_Mutex, guard, lock_);
+            const bool was_empty = queue_.empty();
             queue_.push_back(std::move(batch));
+            if (was_empty) cond_.signal();
         }
     }
 
@@ -344,8 +355,117 @@ int skydds_reader_poll_batch(skydds_reader_t* reader, uint8_t* out_buf, int out_
     return 0;
 }
 
+int skydds_reader_wait(skydds_reader_t* reader, int timeout_ms, char* err, int err_len) {
+    if (!reader) return -1;
+    if (timeout_ms < 0) timeout_ms = 0;
+
+    if (reader->model == Model::BatchOctet) {
+        if (!reader->batch_listener) {
+            set_error(err, err_len, "batch listener is nil");
+            return -1;
+        }
+        ACE_GUARD_RETURN(ACE_Thread_Mutex, guard, reader->batch_listener->lock_, -1);
+        if (!reader->batch_listener->queue_.empty()) return 0;
+        if (reader->batch_listener->closed_) return -2;
+        ACE_Time_Value timeout = ACE_OS::gettimeofday() + ACE_Time_Value(0, static_cast<long>(timeout_ms) * 1000);
+        const int rc = reader->batch_listener->cond_.wait(&timeout);
+        if (rc == -1 && errno == ETIME) return 1;
+        if (reader->batch_listener->closed_) return -2;
+        return reader->batch_listener->queue_.empty() ? 1 : 0;
+    }
+
+    if (!reader->octet_listener) {
+        set_error(err, err_len, "octet listener is nil");
+        return -1;
+    }
+    ACE_GUARD_RETURN(ACE_Thread_Mutex, guard, reader->octet_listener->lock_, -1);
+    if (!reader->octet_listener->queue_.empty()) return 0;
+    if (reader->octet_listener->closed_) return -2;
+    ACE_Time_Value timeout = ACE_OS::gettimeofday() + ACE_Time_Value(0, static_cast<long>(timeout_ms) * 1000);
+    const int rc = reader->octet_listener->cond_.wait(&timeout);
+    if (rc == -1 && errno == ETIME) return 1;
+    if (reader->octet_listener->closed_) return -2;
+    return reader->octet_listener->queue_.empty() ? 1 : 0;
+}
+
+int skydds_reader_drain(skydds_reader_t* reader, uint8_t* out_buf, int out_cap, int* out_lens, int lens_cap, int max_items, int* out_count, int* out_total_len, char* err, int err_len) {
+    if (!reader || !out_count || !out_total_len) return -1;
+    if (max_items <= 0) max_items = lens_cap;
+    *out_count = 0;
+    *out_total_len = 0;
+
+    if (reader->model == Model::BatchOctet) {
+        if (!reader->batch_listener) {
+            set_error(err, err_len, "batch listener is nil");
+            return -1;
+        }
+        ACE_GUARD_RETURN(ACE_Thread_Mutex, guard, reader->batch_listener->lock_, -1);
+        int offset = 0;
+        while (!reader->batch_listener->queue_.empty() && *out_count < max_items && *out_count < lens_cap) {
+            std::vector<std::vector<uint8_t>>& batch = reader->batch_listener->queue_.front();
+            while (!batch.empty() && *out_count < max_items && *out_count < lens_cap) {
+                std::vector<uint8_t>& sub = batch.front();
+                const int len = static_cast<int>(sub.size());
+                if (offset + len > out_cap) {
+                    if (*out_count > 0) {
+                        *out_total_len = offset;
+                        return 0;
+                    }
+                    set_error(err, err_len, "receiver output buffer too small");
+                    return -3;
+                }
+                if (len > 0) std::memcpy(out_buf + offset, sub.data(), static_cast<std::size_t>(len));
+                out_lens[*out_count] = len;
+                offset += len;
+                ++(*out_count);
+                batch.erase(batch.begin());
+            }
+            if (batch.empty()) reader->batch_listener->queue_.pop_front();
+            if (*out_count >= max_items || *out_count >= lens_cap) break;
+        }
+        *out_total_len = offset;
+        return 0;
+    }
+
+    if (!reader->octet_listener) {
+        set_error(err, err_len, "octet listener is nil");
+        return -1;
+    }
+    ACE_GUARD_RETURN(ACE_Thread_Mutex, guard, reader->octet_listener->lock_, -1);
+    int offset = 0;
+    while (!reader->octet_listener->queue_.empty() && *out_count < max_items && *out_count < lens_cap) {
+        std::vector<uint8_t> msg = std::move(reader->octet_listener->queue_.front());
+        reader->octet_listener->queue_.pop_front();
+        const int len = static_cast<int>(msg.size());
+        if (offset + len > out_cap) {
+            if (*out_count > 0) {
+                *out_total_len = offset;
+                return 0;
+            }
+            set_error(err, err_len, "receiver output buffer too small");
+            return -2;
+        }
+        if (len > 0) std::memcpy(out_buf + offset, msg.data(), static_cast<std::size_t>(len));
+        out_lens[*out_count] = len;
+        offset += len;
+        ++(*out_count);
+    }
+    *out_total_len = offset;
+    return 0;
+}
+
 void skydds_reader_close(skydds_reader_t* reader) {
     if (!reader) return;
+    if (reader->octet_listener) {
+        ACE_GUARD(ACE_Thread_Mutex, guard, reader->octet_listener->lock_);
+        reader->octet_listener->closed_ = true;
+        reader->octet_listener->cond_.broadcast();
+    }
+    if (reader->batch_listener) {
+        ACE_GUARD(ACE_Thread_Mutex, guard, reader->batch_listener->lock_);
+        reader->batch_listener->closed_ = true;
+        reader->batch_listener->cond_.broadcast();
+    }
     delete reader->octet_listener;
     delete reader->batch_listener;
     delete reader;
