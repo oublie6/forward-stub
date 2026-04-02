@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd)
 DOCKER_BIN="${DOCKER_BIN:-docker}"
-OUTPUT_FILE="${OUTPUT_FILE:-${ROOT_DIR}/deploy/images/forward-stub-skydds-runtime-bookworm.tar.gz}"
+OUTPUT_FILE="${OUTPUT_FILE:-${ROOT_DIR}/deploy/images/forward-stub-base-bookworm.tar.gz}"
 
 fail() {
   echo "[ERROR] $*" >&2
