@@ -16,6 +16,8 @@ type Writer interface {
 }
 
 type Reader interface {
+	Wait(timeout time.Duration) (bool, error)
+	Drain(maxItems int) ([][]byte, error)
 	Poll(timeout time.Duration) ([]byte, error)
 	PollBatch(timeout time.Duration) ([][]byte, error)
 	Close() error

@@ -18,7 +18,10 @@ import (
 
 type cgoWriter struct{ ptr *C.skydds_writer_t }
 
-type cgoReader struct{ ptr *C.skydds_reader_t }
+type cgoReader struct {
+	ptr   *C.skydds_reader_t
+	model string
+}
 
 func newWriter(opts CommonOptions) (Writer, error) {
 	copts := buildCOptions(opts)
@@ -39,7 +42,7 @@ func newReader(opts CommonOptions) (Reader, error) {
 	if code := C.skydds_reader_open(&copts, &ptr, &errBuf[0], C.int(len(errBuf))); code != 0 {
 		return nil, fmt.Errorf("skydds reader open failed (code=%d): %s", int(code), C.GoString(&errBuf[0]))
 	}
-	return &cgoReader{ptr: ptr}, nil
+	return &cgoReader{ptr: ptr, model: opts.MessageModel}, nil
 }
 
 func (w *cgoWriter) Write(payload []byte) error {
@@ -109,51 +112,71 @@ func (w *cgoWriter) Close() error {
 }
 
 func (r *cgoReader) Poll(timeout time.Duration) ([]byte, error) {
-	if r == nil || r.ptr == nil {
-		return nil, fmt.Errorf("skydds reader is nil")
+	items, err := r.Drain(1)
+	if err != nil {
+		return nil, err
 	}
-	buf := make([]byte, 1<<20)
-	var outLen C.int
-	var errBuf [512]C.char
-	code := C.skydds_reader_poll(r.ptr, (*C.uint8_t)(unsafe.Pointer(&buf[0])), C.int(len(buf)), C.int(timeout.Milliseconds()), &outLen, &errBuf[0], C.int(len(errBuf)))
-	if code == 1 {
+	if len(items) > 0 {
+		return items[0], nil
+	}
+	ok, err := r.Wait(timeout)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
 		return nil, nil
 	}
-	if code != 0 {
-		return nil, fmt.Errorf("skydds reader poll failed (code=%d): %s", int(code), C.GoString(&errBuf[0]))
+	items, err = r.Drain(1)
+	if err != nil || len(items) == 0 {
+		return nil, err
 	}
-	if outLen <= 0 {
-		return nil, nil
-	}
-	return append([]byte(nil), buf[:int(outLen)]...), nil
+	return items[0], nil
 }
 
-func (r *cgoReader) PollBatch(timeout time.Duration) ([][]byte, error) {
+func (r *cgoReader) Wait(timeout time.Duration) (bool, error) {
+	if r == nil || r.ptr == nil {
+		return false, fmt.Errorf("skydds reader is nil")
+	}
+	var errBuf [512]C.char
+	code := C.skydds_reader_wait(r.ptr, C.int(timeout.Milliseconds()), &errBuf[0], C.int(len(errBuf)))
+	switch code {
+	case 0:
+		return true, nil
+	case 1:
+		return false, nil
+	case -2:
+		return false, nil
+	default:
+		return false, fmt.Errorf("skydds reader wait failed (code=%d): %s", int(code), C.GoString(&errBuf[0]))
+	}
+}
+
+func (r *cgoReader) Drain(maxItems int) ([][]byte, error) {
 	if r == nil || r.ptr == nil {
 		return nil, fmt.Errorf("skydds reader is nil")
 	}
+	if maxItems <= 0 {
+		maxItems = 2048
+	}
 	buf := make([]byte, 4<<20)
-	lens := make([]C.int, 2048)
+	lens := make([]C.int, maxItems)
 	var outCount C.int
 	var outTotal C.int
 	var errBuf [512]C.char
-	code := C.skydds_reader_poll_batch(
+	code := C.skydds_reader_drain(
 		r.ptr,
 		(*C.uint8_t)(unsafe.Pointer(&buf[0])),
 		C.int(len(buf)),
 		(*C.int)(unsafe.Pointer(&lens[0])),
 		C.int(len(lens)),
-		C.int(timeout.Milliseconds()),
+		C.int(maxItems),
 		&outCount,
 		&outTotal,
 		&errBuf[0],
 		C.int(len(errBuf)),
 	)
-	if code == 1 {
-		return nil, nil
-	}
 	if code != 0 {
-		return nil, fmt.Errorf("skydds reader poll_batch failed (code=%d): %s", int(code), C.GoString(&errBuf[0]))
+		return nil, fmt.Errorf("skydds reader drain failed (code=%d): %s", int(code), C.GoString(&errBuf[0]))
 	}
 	if outCount <= 0 {
 		return nil, nil
@@ -169,6 +192,24 @@ func (r *cgoReader) PollBatch(timeout time.Duration) ([][]byte, error) {
 		off += l
 	}
 	return out, nil
+}
+
+func (r *cgoReader) PollBatch(timeout time.Duration) ([][]byte, error) {
+	items, err := r.Drain(2048)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) > 0 {
+		if r.model == "batch_octet" {
+			return items, nil
+		}
+		return items[:1], nil
+	}
+	ok, err := r.Wait(timeout)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return r.Drain(2048)
 }
 
 func (r *cgoReader) Close() error {
