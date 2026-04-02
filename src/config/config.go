@@ -43,6 +43,8 @@ const (
 	DefaultKafkaReceiverAutoCommitIv = "5s"
 	DefaultKafkaFetchMaxPartBytes    = 1 << 20
 	DefaultKafkaIsolationLevel       = "read_uncommitted"
+	DefaultSkyDDSWaitTimeout         = "500ms"
+	DefaultSkyDDSDrainMaxItems       = 2048
 )
 
 var DefaultKafkaReceiverBalancers = []string{"cooperative_sticky"}
@@ -320,6 +322,12 @@ type ReceiverConfig struct {
 	// MessageModel 指定 SkyDDS 消息模型。
 	// 用法：支持 octet 与 batch_octet。
 	MessageModel string `json:"message_model,omitempty"`
+	// WaitTimeout 指定 SkyDDS receiver 在无数据时等待通知的最长时间。
+	// 用法：仅 Type=dds_skydds 时生效，需为 >0 的 duration（如 500ms / 5ms / 100us）。
+	WaitTimeout string `json:"wait_timeout,omitempty"`
+	// DrainMaxItems 指定每次 SkyDDS receiver 批量拉取的最大消息条数。
+	// 用法：仅 Type=dds_skydds 时生效，需为 >0 的整数。
+	DrainMaxItems int `json:"drain_max_items,omitempty"`
 
 	// LogPayloadRecv 控制该 receiver 是否打印接收 payload 日志。
 	// 用法：用于定位输入侧问题；建议仅在排障窗口开启。

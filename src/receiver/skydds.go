@@ -12,17 +12,21 @@ import (
 	"forward-stub/src/skydds"
 )
 
+var skyddsReaderFactory = skydds.NewReader
+
 type SkyDDSReceiver struct {
-	name    string
-	cfg     config.ReceiverConfig
-	reader  skydds.Reader
-	builder func() string
-	mode    string
-	model   string
+	name          string
+	cfg           config.ReceiverConfig
+	reader        skydds.Reader
+	builder       func() string
+	mode          string
+	model         string
+	waitTimeout   time.Duration
+	drainMaxItems int
 }
 
 func NewSkyDDSReceiver(name string, rc config.ReceiverConfig) (*SkyDDSReceiver, error) {
-	r, err := skydds.NewReader(skydds.CommonOptions{
+	r, err := skyddsReaderFactory(skydds.CommonOptions{
 		DCPSConfigFile: rc.DCPSConfigFile,
 		DomainID:       rc.DomainID,
 		TopicName:      rc.TopicName,
@@ -38,7 +42,23 @@ func NewSkyDDSReceiver(name string, rc config.ReceiverConfig) (*SkyDDSReceiver, 
 		builder = func() string { return fixed }
 		mode = "fixed"
 	}
-	return &SkyDDSReceiver{name: name, cfg: rc, reader: r, builder: builder, mode: mode, model: strings.ToLower(strings.TrimSpace(rc.MessageModel))}, nil
+	waitTimeout, err := time.ParseDuration(rc.WaitTimeout)
+	if err != nil || waitTimeout <= 0 {
+		return nil, fmt.Errorf("invalid skydds receiver wait_timeout: %q", rc.WaitTimeout)
+	}
+	if rc.DrainMaxItems <= 0 {
+		return nil, fmt.Errorf("invalid skydds receiver drain_max_items: %d", rc.DrainMaxItems)
+	}
+	return &SkyDDSReceiver{
+		name:          name,
+		cfg:           rc,
+		reader:        r,
+		builder:       builder,
+		mode:          mode,
+		model:         strings.ToLower(strings.TrimSpace(rc.MessageModel)),
+		waitTimeout:   waitTimeout,
+		drainMaxItems: rc.DrainMaxItems,
+	}, nil
 }
 
 func (r *SkyDDSReceiver) Name() string { return r.name }
@@ -54,29 +74,32 @@ func (r *SkyDDSReceiver) Start(ctx context.Context, onPacket func(*packet.Packet
 			return nil
 		default:
 		}
-		if r.model == "batch_octet" {
-			payloads, err := r.reader.PollBatch(500 * time.Millisecond)
-			if err != nil {
-				return fmt.Errorf("skydds batch poll: %w", err)
-			}
-			for i := range payloads {
-				if len(payloads[i]) == 0 {
-					logx.L().Warnw("SkyDDS batch sub-message empty; skip", "receiver", r.name, "index", i)
-					continue
-				}
-				r.emitPacket(payloads[i], onPacket)
-			}
+
+		ready, err := r.reader.Wait(r.waitTimeout)
+		if err != nil {
+			return fmt.Errorf("skydds receiver wait: %w", err)
+		}
+		if !ready {
 			continue
 		}
 
-		payload, err := r.reader.Poll(500 * time.Millisecond)
-		if err != nil {
-			return fmt.Errorf("skydds poll: %w", err)
+		for {
+			payloads, err := r.reader.Drain(r.drainMaxItems)
+			if err != nil {
+				return fmt.Errorf("skydds receiver drain: %w", err)
+			}
+			if len(payloads) == 0 {
+				break
+			}
+			for i := range payloads {
+				if len(payloads[i]) == 0 {
+					logx.L().Warnw("SkyDDS sub-message empty; skip", "receiver", r.name, "index", i, "message_model", r.model)
+					continue
+				}
+				// 注意：即使是批量拉取到的一组消息，也必须逐条形成独立 packet 并下发。
+				r.emitPacket(payloads[i], onPacket)
+			}
 		}
-		if len(payload) == 0 {
-			continue
-		}
-		r.emitPacket(payload, onPacket)
 	}
 }
 

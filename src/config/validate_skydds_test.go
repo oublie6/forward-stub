@@ -27,6 +27,17 @@ func TestValidateSkyDDSOK(t *testing.T) {
 	}
 }
 
+func TestApplyDefaultsSkyDDSReceiverKnobs(t *testing.T) {
+	cfg := baseSkyDDSConfig()
+	rx := cfg.Receivers["rx"]
+	if rx.WaitTimeout != DefaultSkyDDSWaitTimeout {
+		t.Fatalf("wait_timeout default mismatch: got=%q want=%q", rx.WaitTimeout, DefaultSkyDDSWaitTimeout)
+	}
+	if rx.DrainMaxItems != DefaultSkyDDSDrainMaxItems {
+		t.Fatalf("drain_max_items default mismatch: got=%d want=%d", rx.DrainMaxItems, DefaultSkyDDSDrainMaxItems)
+	}
+}
+
 func TestValidateSkyDDSBatchOK(t *testing.T) {
 	cfg := baseSkyDDSConfig()
 	rx := cfg.Receivers["rx"]
@@ -60,5 +71,36 @@ func TestValidateSkyDDSMessageModelInvalid(t *testing.T) {
 	cfg.Receivers["rx"] = rx
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestValidateSkyDDSReceiverWaitTimeoutInvalid(t *testing.T) {
+	cfg := baseSkyDDSConfig()
+	rx := cfg.Receivers["rx"]
+	rx.WaitTimeout = "abc"
+	cfg.Receivers["rx"] = rx
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestValidateSkyDDSReceiverDrainMaxItemsInvalid(t *testing.T) {
+	cfg := baseSkyDDSConfig()
+	rx := cfg.Receivers["rx"]
+	rx.DrainMaxItems = 0
+	cfg.Receivers["rx"] = rx
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestValidateSkyDDSReceiverCustomKnobsOK(t *testing.T) {
+	cfg := baseSkyDDSConfig()
+	rx := cfg.Receivers["rx"]
+	rx.WaitTimeout = "5ms"
+	rx.DrainMaxItems = 64
+	cfg.Receivers["rx"] = rx
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("validate failed: %v", err)
 	}
 }

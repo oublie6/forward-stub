@@ -8,6 +8,8 @@
       "domain_id": 0,
       "topic_name": "pdxpBatchInputTopic",
       "message_model": "batch_octet",
+      "wait_timeout": "5ms",
+      "drain_max_items": 1024,
       "match_key": {
         "mode": "fixed",
         "fixed_value": "pdxp-batch-ingress"
