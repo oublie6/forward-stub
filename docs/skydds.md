@@ -38,7 +38,34 @@
 - `Close()` 时会强制 flush 残留批次。
 - flush 失败会记录错误日志，并在定时 flush 场景下恢复缓冲以便重试。
 
-## 5. receiver 拆批语义（batch_octet）
+## 5. receiver 接收模型（通知唤醒 + 批量拉取）
+
+`dds_skydds` receiver 当前采用：
+
+- C/C++ listener 收到数据后，先入本地队列；
+- 队列从空变非空时触发通知，Go 侧被唤醒；
+- Go 侧收到通知后执行一次 `drain`，尽量拉取当前可用数据，减少 Go/C++ 边界往返；
+- `drain` 结果中的每条消息都必须逐条形成独立 packet，逐条进入既有主链路：
+  `receiver -> selector -> task -> pipeline -> sender`。
+
+说明：
+
+- **不采用纯忙轮询** 作为主方案；
+- **不采用每条消息 direct callback Go 处理数据面** 作为主方案；
+- 批量拉取仅用于减少跨语言边界调用次数，不改变 runtime 内部单条 packet 语义。
+
+### 5.1 receiver 可配置参数（仅 `type=dds_skydds`）
+
+- `wait_timeout`（duration，默认 `500ms`）
+  - 作用：控制 Go 侧 `Wait(timeout)` 的等待时长。
+  - 要求：必须是合法且 `>0` 的 duration（例如 `1ms`、`5ms`、`100us`、`20ms`）。
+- `drain_max_items`（int，默认 `2048`）
+  - 作用：控制 Go 侧每次 `Drain(maxItems)` 的单次拉取上限。
+  - 要求：必须是 `>0` 的整数。
+
+这两个参数只影响 receiver 内部“通知唤醒 + 批量拉取”的实现细节，不改变 sender、selector、pipeline 语义，也不改变“逐条 packet 下发”语义。
+
+## 6. receiver 拆批语义（batch_octet）
 
 当 receiver 使用 `message_model=batch_octet`：
 
@@ -46,7 +73,7 @@
 - 按 `batchData` 原顺序逐条拆成独立 packet，并逐条进入 selector/task/pipeline。
 - 空子消息会告警并跳过，不会把整批直接作为单个 packet 下发。
 
-## 6. 环境变量
+## 7. 环境变量
 
 ```bash
 source scripts/skydds/env.sh
@@ -54,7 +81,7 @@ source scripts/skydds/env.sh
 
 导出：`SKY_DDS`、`DDS_ROOT`、`ACE_ROOT`、`TAO_ROOT`、`LD_LIBRARY_PATH`。
 
-## 7. 构建方式
+## 8. 构建方式
 
 ```bash
 CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
@@ -62,12 +89,12 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 
 不加 `-tags skydds` 时，SkyDDS 走 stub，不影响其他协议。
 
-## 8. 运行方式
+## 9. 运行方式
 
 - Octet 示例：`configs/skydds.business.example.json`
 - Batch 示例：`configs/skydds-batch.business.example.json`
 
-## 9. 测试脚本
+## 10. 测试脚本
 
 - `scripts/skydds/setup_linux.sh`
 - `scripts/skydds/env.sh`
@@ -75,7 +102,7 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 - `scripts/skydds/test_receiver.sh`
 - `scripts/skydds/test_loop.sh`
 
-## 10. 已知限制
+## 11. 已知限制
 
 - 需要本地 SDK 中提供 `SatelliteTypeSupportImpl.h / libSatelliteCommon`。
 - 当前批量实现优先正确性与可维护性，尚未做性能优化结论。
