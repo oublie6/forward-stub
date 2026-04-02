@@ -146,6 +146,20 @@ func (c *Config) Validate() error {
 			if err := validateKafkaAuth("receiver", rn, r.SASLMechanism, r.Username, r.Password); err != nil {
 				return err
 			}
+		case "dds_skydds":
+			if strings.TrimSpace(r.DCPSConfigFile) == "" {
+				return fmt.Errorf("receiver %s dds_skydds requires dcps_config_file", rn)
+			}
+			if r.DomainID < 0 {
+				return fmt.Errorf("receiver %s dds_skydds domain_id must be >= 0", rn)
+			}
+			if strings.TrimSpace(r.TopicName) == "" {
+				return fmt.Errorf("receiver %s dds_skydds requires topic_name", rn)
+			}
+			model := strings.ToLower(strings.TrimSpace(r.MessageModel))
+			if model != "octet" && model != "batch_octet" {
+				return fmt.Errorf("receiver %s dds_skydds message_model must be octet or batch_octet", rn)
+			}
 		case "sftp":
 			if r.Listen == "" {
 				return fmt.Errorf("receiver %s sftp requires listen", rn)
@@ -214,6 +228,35 @@ func (c *Config) Validate() error {
 			if err := validateKafkaAuth("sender", sn, s.SASLMechanism, s.Username, s.Password); err != nil {
 				return err
 			}
+		case "dds_skydds":
+			if strings.TrimSpace(s.DCPSConfigFile) == "" {
+				return fmt.Errorf("sender %s dds_skydds requires dcps_config_file", sn)
+			}
+			if s.DomainID < 0 {
+				return fmt.Errorf("sender %s dds_skydds domain_id must be >= 0", sn)
+			}
+			if strings.TrimSpace(s.TopicName) == "" {
+				return fmt.Errorf("sender %s dds_skydds requires topic_name", sn)
+			}
+			model := strings.ToLower(strings.TrimSpace(s.MessageModel))
+			if model != "octet" && model != "batch_octet" {
+				return fmt.Errorf("sender %s dds_skydds message_model must be octet or batch_octet", sn)
+			}
+			if model == "batch_octet" {
+				if s.BatchNum <= 0 {
+					return fmt.Errorf("sender %s dds_skydds batch_num must be > 0 when message_model=batch_octet", sn)
+				}
+				if s.BatchSize <= 0 {
+					return fmt.Errorf("sender %s dds_skydds batch_size must be > 0 when message_model=batch_octet", sn)
+				}
+				if err := validatePositiveDurationField("sender", sn, "batch_delay", s.BatchDelay); err != nil {
+					return err
+				}
+			} else {
+				if s.BatchNum != 0 || s.BatchSize != 0 || strings.TrimSpace(s.BatchDelay) != "" {
+					return fmt.Errorf("sender %s dds_skydds batch_* only allowed when message_model=batch_octet", sn)
+				}
+			}
 		case "sftp":
 			if s.Remote == "" {
 				return fmt.Errorf("sender %s sftp requires remote", sn)
@@ -280,6 +323,12 @@ func validateReceiverMatchKey(name string, rc ReceiverConfig) error {
 	case "sftp":
 		switch mode {
 		case "", "remote_path", "filename", "fixed":
+		default:
+			return fmt.Errorf("receiver %s: %w", name, ErrUnsupportedReceiverMatchKeyMode(rc.Type, mode))
+		}
+	case "dds_skydds":
+		switch mode {
+		case "", "fixed":
 		default:
 			return fmt.Errorf("receiver %s: %w", name, ErrUnsupportedReceiverMatchKeyMode(rc.Type, mode))
 		}

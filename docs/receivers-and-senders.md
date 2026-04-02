@@ -103,6 +103,23 @@
 - `chunk_size` 未配置时按 64 KiB 读文件；若配置小于 1024，则自动抬升到 1024。
 - 读取出的 packet 会携带 `file_name`、`file_path`、`transfer_id`、`offset`、`total_size`、`checksum`、`EOF` 等文件分块元数据。
 
+
+### 1.5 SkyDDS receiver
+
+- `type=dds_skydds`
+- 必填：`selector`、`dcps_config_file`、`domain_id`、`topic_name`、`message_model`
+- `message_model` 支持 `octet` 与 `batch_octet`
+- `match_key.mode` 仅支持留空（默认 `skydds|topic_name=<topic>`）或 `fixed`
+- 接收模型：C++ DataReader listener 入队，Go 侧轮询；`octet` 走单条 `Poll`，`batch_octet` 走 `PollBatch` 后按子消息顺序拆批下发。
+
+### 2.6 SkyDDS sender
+
+- `type=dds_skydds`
+- 必填：`dcps_config_file`、`domain_id`、`topic_name`、`message_model`
+- `message_model` 支持 `octet` 与 `batch_octet`
+- 通过 C ABI + C++ wrapper 调用 SkyDDS `DataWriter` 写 `OctetMsg` / `BatchOctetMsg`
+- 当 `message_model=batch_octet` 时必须配置 `batch_num`/`batch_size`/`batch_delay`，并按三阈值（条数/字节/等待时长）触发 flush
+
 ## 2. Sender：负责最终输出
 
 ### 2.1 UDP 单播 sender

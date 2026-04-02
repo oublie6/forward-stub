@@ -196,7 +196,7 @@ type ReceiverMatchKeyConfig struct {
 type ReceiverConfig struct {
 	// Type 指定接收端实现类型（udp_gnet/tcp_gnet/kafka/sftp）。
 	// 用法：不同 type 决定下列字段的生效范围，应按协议填写配套参数。
-	Type string `json:"type"` // udp_gnet | tcp_gnet | kafka | sftp
+	Type string `json:"type"` // udp_gnet | tcp_gnet | kafka | sftp | dds_skydds
 	// Listen 为监听地址；Kafka 场景下为 brokers 列表。
 	// 用法：udp/tcp 填 host:port；kafka 填逗号分隔 broker；sftp 填服务器 host:port。
 	Listen string `json:"listen"`
@@ -308,6 +308,19 @@ type ReceiverConfig struct {
 	// HostKeyFingerprint 是 SFTP 服务端主机公钥指纹（SSH SHA256 格式）。
 	// 用法：必须与服务端实际指纹一致，防止中间人攻击；示例：SHA256:AbCd....
 	HostKeyFingerprint string `json:"host_key_fingerprint,omitempty"`
+	// DCPSConfigFile 是 SkyDDS DCPS 配置文件路径（例如 dds_tcp_conf.ini）。
+	// 用法：Type=dds_skydds 时必填；SkyDDS discovery/transport/qos 等能力由该文件控制。
+	DCPSConfigFile string `json:"dcps_config_file,omitempty"`
+	// DomainID 是 SkyDDS 通信域编号。
+	// 用法：Type=dds_skydds 时必填，需与对端 publisher/subscriber 保持一致。
+	DomainID int `json:"domain_id,omitempty"`
+	// TopicName 是 SkyDDS 主题名称。
+	// 用法：Type=dds_skydds 时必填，需与对端一致。
+	TopicName string `json:"topic_name,omitempty"`
+	// MessageModel 指定 SkyDDS 消息模型。
+	// 用法：支持 octet 与 batch_octet。
+	MessageModel string `json:"message_model,omitempty"`
+
 	// LogPayloadRecv 控制该 receiver 是否打印接收 payload 日志。
 	// 用法：用于定位输入侧问题；建议仅在排障窗口开启。
 	LogPayloadRecv bool `json:"log_payload_recv,omitempty"`
@@ -320,7 +333,7 @@ type ReceiverConfig struct {
 type SenderConfig struct {
 	// Type 指定发送端实现类型（udp_unicast/udp_multicast/tcp_gnet/kafka/sftp）。
 	// 用法：根据目标协议选择，字段校验与行为由 type 决定。
-	Type string `json:"type"` // udp_unicast | udp_multicast | tcp_gnet | kafka | sftp
+	Type string `json:"type"` // udp_unicast | udp_multicast | tcp_gnet | kafka | sftp | dds_skydds
 	// Remote 是目标地址；Kafka 场景下为 brokers 列表。
 	// 用法：udp/tcp/sftp 填 host:port；kafka 填逗号分隔 broker。
 	Remote string `json:"remote"`
@@ -413,6 +426,24 @@ type SenderConfig struct {
 	// RecordKeySource 指定 Kafka record key 的来源字段。
 	// 用法：当前支持 payload / match_key / remote / local / file_name / file_path / transfer_id / route_sender；与 record_key 互斥。
 	RecordKeySource string `json:"record_key_source,omitempty"`
+
+	// DCPSConfigFile 是 SkyDDS DCPS 配置文件路径（例如 dds_tcp_conf.ini）。
+	// 用法：Type=dds_skydds 时必填；SkyDDS discovery/transport/qos 等能力由该文件控制。
+	DCPSConfigFile string `json:"dcps_config_file,omitempty"`
+	// DomainID 是 SkyDDS 通信域编号。
+	// 用法：Type=dds_skydds 时必填，需与对端 publisher/subscriber 保持一致。
+	DomainID int `json:"domain_id,omitempty"`
+	// TopicName 是 SkyDDS 主题名称。
+	// 用法：Type=dds_skydds 时必填，需与对端一致。
+	TopicName string `json:"topic_name,omitempty"`
+	// MessageModel 指定 SkyDDS 消息模型。
+	// 用法：支持 octet 与 batch_octet。
+	MessageModel string `json:"message_model,omitempty"`
+	// BatchNum/BatchSize/BatchDelay 是 SkyDDS BatchOctetMsg 聚合参数。
+	// 用法：仅 message_model=batch_octet 时生效；分别表示单批条数阈值、字节阈值与等待时长阈值。
+	BatchNum   int    `json:"batch_num,omitempty"`
+	BatchSize  int    `json:"batch_size,omitempty"`
+	BatchDelay string `json:"batch_delay,omitempty"`
 
 	// LocalIP 是 UDP sender 绑定的本地出接口 IP。
 	// 用法：多网卡机器可显式指定出口网络。

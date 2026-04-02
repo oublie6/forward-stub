@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "receivers": {
+    "rx_skydds": {
+      "type": "dds_skydds",
+      "selector": "sel_skydds",
+      "dcps_config_file": "./third_party/skydds/sdk/etc/dds_tcp_conf.ini",
+      "domain_id": 0,
+      "topic_name": "pdxpInputTopic",
+      "message_model": "octet",
+      "match_key": {
+        "mode": "fixed",
+        "fixed_value": "pdxp-ingress"
+      }
+    }
+  },
+  "selectors": {
+    "sel_skydds": {
+      "default_task_set": "ts_skydds"
+    }
+  },
+  "task_sets": {
+    "ts_skydds": [
+      "task_skydds_forward"
+    ]
+  },
+  "senders": {
+    "tx_skydds": {
+      "type": "dds_skydds",
+      "dcps_config_file": "./third_party/skydds/sdk/etc/dds_tcp_conf.ini",
+      "domain_id": 0,
+      "topic_name": "pdxpOutputTopic",
+      "message_model": "octet"
+    }
+  },
+  "pipelines": {
+    "pipe_passthrough": []
+  },
+  "tasks": {
+    "task_skydds_forward": {
+      "pipelines": [
+        "pipe_passthrough"
+      ],
+      "senders": [
+        "tx_skydds"
+      ],
+      "execution_model": "fastpath"
+    }
+  }
+}
