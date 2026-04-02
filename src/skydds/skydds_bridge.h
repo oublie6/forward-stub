@@ -22,6 +22,8 @@ int skydds_writer_send_batch(skydds_writer_t* writer, const uint8_t** payloads, 
 void skydds_writer_close(skydds_writer_t* writer);
 
 int skydds_reader_open(const skydds_common_options_t* opts, skydds_reader_t** out, char* err, int err_len);
+int skydds_reader_wait(skydds_reader_t* reader, int timeout_ms, char* err, int err_len);
+int skydds_reader_drain(skydds_reader_t* reader, uint8_t* out_buf, int out_cap, int* out_lens, int lens_cap, int max_items, int* out_count, int* out_total_len, char* err, int err_len);
 int skydds_reader_poll(skydds_reader_t* reader, uint8_t* out_buf, int out_cap, int timeout_ms, int* out_len, char* err, int err_len);
 int skydds_reader_poll_batch(skydds_reader_t* reader, uint8_t* out_buf, int out_cap, int* out_lens, int lens_cap, int timeout_ms, int* out_count, int* out_total_len, char* err, int err_len);
 void skydds_reader_close(skydds_reader_t* reader);

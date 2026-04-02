@@ -13,6 +13,8 @@ import (
 	"forward-stub/src/skydds"
 )
 
+var skyddsWriterFactory = skydds.NewWriter
+
 type SkyDDSSender struct {
 	name   string
 	cfg    config.SenderConfig
@@ -30,7 +32,7 @@ type SkyDDSSender struct {
 }
 
 func NewSkyDDSSender(name string, sc config.SenderConfig) (*SkyDDSSender, error) {
-	w, err := skydds.NewWriter(skydds.CommonOptions{
+	w, err := skyddsWriterFactory(skydds.CommonOptions{
 		DCPSConfigFile: sc.DCPSConfigFile,
 		DomainID:       sc.DomainID,
 		TopicName:      sc.TopicName,

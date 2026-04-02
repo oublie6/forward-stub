@@ -8,6 +8,8 @@
       "domain_id": 0,
       "topic_name": "pdxpInputTopic",
       "message_model": "octet",
+      "wait_timeout": "5ms",
+      "drain_max_items": 512,
       "match_key": {
         "mode": "fixed",
         "fixed_value": "pdxp-ingress"
