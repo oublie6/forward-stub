@@ -102,7 +102,16 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 - `scripts/skydds/test_receiver.sh`
 - `scripts/skydds/test_loop.sh`
 
-## 11. 已知限制
+## 11. 无 SDK 环境下的 mock 验证
+
+在本地没有 SkyDDS SDK（未配置 `third_party/skydds/sdk`，也不链接真实动态库）时，可直接运行 Go 单元测试验证当前 Go 层逻辑：
+
+- sender：`octet` 单条写出、`batch_octet` 按 `batch_num/batch_size/batch_delay/close` flush、顺序与超大单条行为。
+- receiver：通知唤醒 + 批量 drain、`octet` 多轮 drain、`batch_octet` 拆子消息后逐条 packet 下发、`wait_timeout` / `drain_max_items` 参数接入。
+
+注意：mock 测试只验证 Go 层行为与边界语义，不等同于真实 SkyDDS SDK 联调（cgo/C/C++/DDS 运行时）。
+
+## 12. 已知限制
 
 - 需要本地 SDK 中提供 `SatelliteTypeSupportImpl.h / libSatelliteCommon`。
 - 当前批量实现优先正确性与可维护性，尚未做性能优化结论。

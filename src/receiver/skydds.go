@@ -12,6 +12,8 @@ import (
 	"forward-stub/src/skydds"
 )
 
+var skyddsReaderFactory = skydds.NewReader
+
 type SkyDDSReceiver struct {
 	name          string
 	cfg           config.ReceiverConfig
@@ -24,7 +26,7 @@ type SkyDDSReceiver struct {
 }
 
 func NewSkyDDSReceiver(name string, rc config.ReceiverConfig) (*SkyDDSReceiver, error) {
-	r, err := skydds.NewReader(skydds.CommonOptions{
+	r, err := skyddsReaderFactory(skydds.CommonOptions{
 		DCPSConfigFile: rc.DCPSConfigFile,
 		DomainID:       rc.DomainID,
 		TopicName:      rc.TopicName,
