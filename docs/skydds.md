@@ -54,6 +54,17 @@
 - **不采用每条消息 direct callback Go 处理数据面** 作为主方案；
 - 批量拉取仅用于减少跨语言边界调用次数，不改变 runtime 内部单条 packet 语义。
 
+### 5.1 receiver 可配置参数（仅 `type=dds_skydds`）
+
+- `wait_timeout`（duration，默认 `500ms`）
+  - 作用：控制 Go 侧 `Wait(timeout)` 的等待时长。
+  - 要求：必须是合法且 `>0` 的 duration（例如 `1ms`、`5ms`、`100us`、`20ms`）。
+- `drain_max_items`（int，默认 `2048`）
+  - 作用：控制 Go 侧每次 `Drain(maxItems)` 的单次拉取上限。
+  - 要求：必须是 `>0` 的整数。
+
+这两个参数只影响 receiver 内部“通知唤醒 + 批量拉取”的实现细节，不改变 sender、selector、pipeline 语义，也不改变“逐条 packet 下发”语义。
+
 ## 6. receiver 拆批语义（batch_octet）
 
 当 receiver 使用 `message_model=batch_octet`：
