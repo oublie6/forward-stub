@@ -25,7 +25,68 @@
 - receiver 侧在 `batch_octet` 下读取 `BatchOctetMsg`，拆成多条独立 payload 后逐条下发。
 - C++ 使用 `DomainParticipant/Topic/Publisher|Subscriber/DataWriter|DataReader`；Go 仅通过 C ABI 调用。
 
-## 4. sender 聚合语义（batch_octet）
+## 4. Go / cgo / C ABI / C++ / SkyDDS SDK 调用链
+
+### 4.1 分层关系
+
+- Go sender/receiver（`src/sender/skydds.go`、`src/receiver/skydds.go`）负责业务语义：
+  - sender 负责 `octet` 直发与 `batch_octet` 聚合；
+  - receiver 负责 `Wait(timeout)` + `Drain(maxItems)` 后逐条 packet 下发。
+- cgo 层（`src/skydds/skydds_cgo.go`）负责 Go 与 C ABI 的参数/内存边界转换。
+- C ABI（`src/skydds/skydds_bridge.h`）提供稳定的 C 接口给 cgo 调用。
+- C++ wrapper（`src/skydds/skydds_bridge.cpp`）负责真正调用 SkyDDS SDK：
+  - writer 路径调用 SkyDDS `DataWriter`；
+  - reader 路径由 SkyDDS `DataReader` listener 收包、入本地队列并发通知。
+
+### 4.2 sender 时序（octet / batch_octet）
+
+```mermaid
+sequenceDiagram
+    participant G as Go Sender
+    participant CG as cgo
+    participant C as C ABI
+    participant CPP as C++ wrapper
+    participant DDS as SkyDDS DataWriter
+
+    G->>CG: Write(payload) / WriteBatch(payloads)
+    CG->>C: skydds_writer_send / skydds_writer_send_batch
+    C->>CPP: writer adapter
+    CPP->>DDS: OctetMsg::write / BatchOctetMsg::write
+```
+
+- `message_model=octet`：每次 `Send` 调一次单条写接口。
+- `message_model=batch_octet`：Go 先按 `batch_num/batch_size/batch_delay` 聚合，再一次批量写接口。
+
+### 4.3 receiver 时序（通知唤醒 + 批量拉取 + 逐条下发）
+
+```mermaid
+sequenceDiagram
+    participant DDS as SkyDDS DataReaderListener
+    participant CPP as C++ wrapper queue
+    participant C as C ABI
+    participant CG as cgo
+    participant G as Go Receiver
+    participant RT as selector/task/pipeline
+
+    DDS->>CPP: on_data_available()
+    CPP->>CPP: enqueue message(s)
+    CPP-->>G: notify when queue empty->non-empty
+    G->>CG: Wait(wait_timeout)
+    CG->>C: skydds_reader_wait
+    G->>CG: Drain(drain_max_items)
+    CG->>C: skydds_reader_drain
+    C->>CPP: fetch queued data
+    G->>RT: emit packet #1
+    G->>RT: emit packet #2 ...
+```
+
+补充说明：
+
+- 批量拉取的目的仅是减少 Go/C++ 边界往返，不改变 runtime 内部“单条 packet”语义。
+- `batch_octet` 在进入 runtime 前会拆成子消息并逐条下发，`octet` 同样逐条下发。
+- 主数据面不采用“纯忙轮询”，也不采用“每条消息 direct callback Go”。
+
+## 5. sender 聚合语义（batch_octet）
 
 当 sender 使用 `message_model=batch_octet`：
 
@@ -38,7 +99,7 @@
 - `Close()` 时会强制 flush 残留批次。
 - flush 失败会记录错误日志，并在定时 flush 场景下恢复缓冲以便重试。
 
-## 5. receiver 接收模型（通知唤醒 + 批量拉取）
+## 6. receiver 接收模型（通知唤醒 + 批量拉取）
 
 `dds_skydds` receiver 当前采用：
 
@@ -54,7 +115,7 @@
 - **不采用每条消息 direct callback Go 处理数据面** 作为主方案；
 - 批量拉取仅用于减少跨语言边界调用次数，不改变 runtime 内部单条 packet 语义。
 
-### 5.1 receiver 可配置参数（仅 `type=dds_skydds`）
+### 6.1 receiver 可配置参数（仅 `type=dds_skydds`）
 
 - `wait_timeout`（duration，默认 `500ms`）
   - 作用：控制 Go 侧 `Wait(timeout)` 的等待时长。
@@ -65,7 +126,7 @@
 
 这两个参数只影响 receiver 内部“通知唤醒 + 批量拉取”的实现细节，不改变 sender、selector、pipeline 语义，也不改变“逐条 packet 下发”语义。
 
-## 6. receiver 拆批语义（batch_octet）
+## 7. receiver 拆批语义（batch_octet）
 
 当 receiver 使用 `message_model=batch_octet`：
 
@@ -73,7 +134,7 @@
 - 按 `batchData` 原顺序逐条拆成独立 packet，并逐条进入 selector/task/pipeline。
 - 空子消息会告警并跳过，不会把整批直接作为单个 packet 下发。
 
-## 7. 环境变量
+## 8. 环境变量
 
 ```bash
 source scripts/skydds/env.sh
@@ -81,7 +142,7 @@ source scripts/skydds/env.sh
 
 导出：`SKY_DDS`、`DDS_ROOT`、`ACE_ROOT`、`TAO_ROOT`、`LD_LIBRARY_PATH`。
 
-## 8. 构建方式
+## 9. 构建方式
 
 ```bash
 CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
@@ -89,12 +150,12 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 
 不加 `-tags skydds` 时，SkyDDS 走 stub，不影响其他协议。
 
-## 9. 运行方式
+## 10. 运行方式
 
 - Octet 示例：`configs/skydds.business.example.json`
 - Batch 示例：`configs/skydds-batch.business.example.json`
 
-## 10. 测试脚本
+## 11. 测试脚本
 
 - `scripts/skydds/setup_linux.sh`
 - `scripts/skydds/env.sh`
@@ -102,7 +163,7 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 - `scripts/skydds/test_receiver.sh`
 - `scripts/skydds/test_loop.sh`
 
-## 11. 无 SDK 环境下的 mock 验证
+## 12. 无 SDK 环境下的 mock 验证
 
 在本地没有 SkyDDS SDK（未配置 `third_party/skydds/sdk`，也不链接真实动态库）时，可直接运行 Go 单元测试验证当前 Go 层逻辑：
 
@@ -111,7 +172,7 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 
 注意：mock 测试只验证 Go 层行为与边界语义，不等同于真实 SkyDDS SDK 联调（cgo/C/C++/DDS 运行时）。
 
-## 12. 已知限制
+## 13. 已知限制
 
 - 需要本地 SDK 中提供 `SatelliteTypeSupportImpl.h / libSatelliteCommon`。
 - 当前批量实现优先正确性与可维护性，尚未做性能优化结论。
