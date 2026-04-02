@@ -10,10 +10,11 @@ type Proto uint8
 type PayloadKind uint8
 
 const (
-	ProtoUDP   Proto = 1
-	ProtoTCP   Proto = 2
-	ProtoKafka Proto = 3
-	ProtoSFTP  Proto = 4
+	ProtoUDP    Proto = 1
+	ProtoTCP    Proto = 2
+	ProtoKafka  Proto = 3
+	ProtoSFTP   Proto = 4
+	ProtoSkyDDS Proto = 5
 )
 
 const (

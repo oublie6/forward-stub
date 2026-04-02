@@ -35,6 +35,8 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 		return receiver.NewKafkaReceiver(name, rc)
 	case "sftp":
 		return receiver.NewSFTPReceiver(name, rc)
+	case "dds_skydds":
+		return receiver.NewSkyDDSReceiver(name, rc)
 	default:
 		return nil, fmt.Errorf("receiver %s unknown type %s", name, rc.Type)
 	}
@@ -71,6 +73,8 @@ func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (send
 		return sender.NewKafkaSender(name, sc)
 	case "sftp":
 		return sender.NewSFTPSender(name, sc)
+	case "dds_skydds":
+		return sender.NewSkyDDSSender(name, sc)
 	default:
 		return nil, fmt.Errorf("sender %s unknown type %s", name, sc.Type)
 	}

@@ -146,6 +146,19 @@ func (c *Config) Validate() error {
 			if err := validateKafkaAuth("receiver", rn, r.SASLMechanism, r.Username, r.Password); err != nil {
 				return err
 			}
+		case "dds_skydds":
+			if strings.TrimSpace(r.DCPSConfigFile) == "" {
+				return fmt.Errorf("receiver %s dds_skydds requires dcps_config_file", rn)
+			}
+			if r.DomainID < 0 {
+				return fmt.Errorf("receiver %s dds_skydds domain_id must be >= 0", rn)
+			}
+			if strings.TrimSpace(r.TopicName) == "" {
+				return fmt.Errorf("receiver %s dds_skydds requires topic_name", rn)
+			}
+			if strings.ToLower(strings.TrimSpace(r.MessageModel)) != "octet" {
+				return fmt.Errorf("receiver %s dds_skydds message_model only supports octet", rn)
+			}
 		case "sftp":
 			if r.Listen == "" {
 				return fmt.Errorf("receiver %s sftp requires listen", rn)
@@ -214,6 +227,22 @@ func (c *Config) Validate() error {
 			if err := validateKafkaAuth("sender", sn, s.SASLMechanism, s.Username, s.Password); err != nil {
 				return err
 			}
+		case "dds_skydds":
+			if strings.TrimSpace(s.DCPSConfigFile) == "" {
+				return fmt.Errorf("sender %s dds_skydds requires dcps_config_file", sn)
+			}
+			if s.DomainID < 0 {
+				return fmt.Errorf("sender %s dds_skydds domain_id must be >= 0", sn)
+			}
+			if strings.TrimSpace(s.TopicName) == "" {
+				return fmt.Errorf("sender %s dds_skydds requires topic_name", sn)
+			}
+			if strings.ToLower(strings.TrimSpace(s.MessageModel)) != "octet" {
+				return fmt.Errorf("sender %s dds_skydds message_model only supports octet", sn)
+			}
+			if s.BatchNum != 0 || s.BatchSize != 0 || s.BatchDelay != 0 {
+				return fmt.Errorf("sender %s dds_skydds batch_* not supported in v1", sn)
+			}
 		case "sftp":
 			if s.Remote == "" {
 				return fmt.Errorf("sender %s sftp requires remote", sn)
@@ -280,6 +309,12 @@ func validateReceiverMatchKey(name string, rc ReceiverConfig) error {
 	case "sftp":
 		switch mode {
 		case "", "remote_path", "filename", "fixed":
+		default:
+			return fmt.Errorf("receiver %s: %w", name, ErrUnsupportedReceiverMatchKeyMode(rc.Type, mode))
+		}
+	case "dds_skydds":
+		switch mode {
+		case "", "fixed":
 		default:
 			return fmt.Errorf("receiver %s: %w", name, ErrUnsupportedReceiverMatchKeyMode(rc.Type, mode))
 		}

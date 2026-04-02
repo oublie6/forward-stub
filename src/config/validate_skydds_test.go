@@ -1,0 +1,38 @@
+package config
+
+import "testing"
+
+func baseSkyDDSConfig() Config {
+	cfg := Config{
+		Logging: LoggingConfig{Level: "info", GCStatsLogInterval: "1m"},
+		Receivers: map[string]ReceiverConfig{
+			"rx": {Type: "dds_skydds", Selector: "sel1", DCPSConfigFile: "./dds.ini", DomainID: 0, TopicName: "TopicA", MessageModel: "octet"},
+		},
+		Selectors: map[string]SelectorConfig{"sel1": {DefaultTaskSet: "ts1"}},
+		TaskSets:  map[string][]string{"ts1": {"t1"}},
+		Senders: map[string]SenderConfig{
+			"tx": {Type: "dds_skydds", DCPSConfigFile: "./dds.ini", DomainID: 0, TopicName: "TopicB", MessageModel: "octet"},
+		},
+		Pipelines: map[string][]StageConfig{"p1": {}},
+		Tasks:     map[string]TaskConfig{"t1": {Pipelines: []string{"p1"}, Senders: []string{"tx"}, ExecutionModel: "fastpath"}},
+	}
+	cfg.ApplyDefaults()
+	return cfg
+}
+
+func TestValidateSkyDDSOK(t *testing.T) {
+	cfg := baseSkyDDSConfig()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("validate failed: %v", err)
+	}
+}
+
+func TestValidateSkyDDSMessageModel(t *testing.T) {
+	cfg := baseSkyDDSConfig()
+	rx := cfg.Receivers["rx"]
+	rx.MessageModel = "batch_octet"
+	cfg.Receivers["rx"] = rx
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error")
+	}
+}

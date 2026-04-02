@@ -1,1 +1,5 @@
 .idea
+third_party/skydds/packages/*
+third_party/skydds/sdk/*
+!third_party/skydds/packages/.gitkeep
+!third_party/skydds/sdk/.gitkeep

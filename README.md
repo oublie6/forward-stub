@@ -175,3 +175,26 @@ make perf
 ```
 
 当前 `make perf` 只运行 `src/runtime` 中已存在的 benchmark，仓库内不存在 `cmd/bench` 入口。
+
+
+## 8. SkyDDS（dds_skydds）轻量字节桥接
+
+当前新增 `dds_skydds` receiver/sender，用于把 SkyDDS `OctetMsg` 接入统一 packet/payload 链路（不是完整 DDS 框架）。
+
+目录约定：
+
+- 安装包：`third_party/skydds/packages/`
+- SDK 解压目录：`third_party/skydds/sdk/`
+
+快速步骤：
+
+```bash
+./scripts/skydds/setup_linux.sh
+source ./scripts/skydds/env.sh
+CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
+./scripts/skydds/test_sender.sh
+./scripts/skydds/test_receiver.sh
+./scripts/skydds/test_loop.sh
+```
+
+详见 `docs/skydds.md`。
