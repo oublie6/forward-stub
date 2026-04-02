@@ -12,6 +12,7 @@ RUN set -eux; \
       file \
       gcc \
       g++ \
+      gzip \
       libstdc++6 \
       make \
       perl \
