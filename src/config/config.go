@@ -559,6 +559,18 @@ type StageConfig struct {
 	// DefaultSender 是 switch 路由未命中时的默认 sender。
 	// 用法：为空表示未命中直接丢弃（stage 返回 false）。
 	DefaultSender string `json:"default_sender,omitempty"`
+	// PacketSize 是 file_chunk -> stream 拆分 stage 的单包大小（字节）。
+	PacketSize int `json:"packet_size,omitempty"`
+	// PreserveFileMeta 控制 file_chunk -> stream 拆分时是否保留文件元数据。
+	PreserveFileMeta *bool `json:"preserve_file_meta,omitempty"`
+	// SegmentSize 是 stream -> file 段滚动阈值（字节）。
+	SegmentSize int `json:"segment_size,omitempty"`
+	// ChunkSize 是 stream -> file 输出 file_chunk 的分块大小（字节）。
+	ChunkSize int `json:"chunk_size,omitempty"`
+	// FilePrefix 是 stream -> file 生成文件名时的前缀。
+	FilePrefix string `json:"file_prefix,omitempty"`
+	// TimeLayout 是 stream -> file 文件名中的时间格式（Go time layout）。
+	TimeLayout string `json:"time_layout,omitempty"`
 }
 
 // SelectorConfig 描述一个“match key -> task set”的精确匹配器。

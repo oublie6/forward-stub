@@ -302,23 +302,41 @@ func (t *Task) StopGraceful() {
 // 3. 若 pipeline 指定 RouteSender，则只向命中的 sender 投递；
 // 4. 否则广播到 task 绑定的全部 sender。
 func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
+	packets := []*packet.Packet{pkt}
 	for _, pl := range t.Pipelines {
-		// pipeline 是 task 内最靠前的处理环节，任何 stage 返回 false 都表示该包到此结束。
-		if !pl.Process(pkt) {
+		next := make([]*packet.Packet, 0, len(packets))
+		for _, inPkt := range packets {
+			// pipeline 是 task 内最靠前的处理环节；stage 可能丢弃、改写或扩展为多个包。
+			out := pl.Process(inPkt)
+			if len(out) > 0 {
+				next = append(next, out...)
+			}
+		}
+		if len(next) == 0 {
 			return
 		}
+		packets = next
 	}
-	if pkt.Meta.RouteSender != "" {
-		// 路由 sender 是单任务内的精确分流能力，可避免把同一包广播给全部 sender。
-		if s, ok := t.sendersByName[pkt.Meta.RouteSender]; ok {
-			t.sendToSender(ctx, pkt, s)
-			return
+	releaseLater := make(map[*packet.Packet]struct{})
+	for _, outPkt := range packets {
+		if outPkt != pkt {
+			releaseLater[outPkt] = struct{}{}
 		}
-		logx.L().Warnw("路由发送端未命中任务内发送端", "任务名称", t.Name, "路由发送端", pkt.Meta.RouteSender)
-		return
+		if outPkt.Meta.RouteSender != "" {
+			// 路由 sender 是单任务内的精确分流能力，可避免把同一包广播给全部 sender。
+			if s, ok := t.sendersByName[outPkt.Meta.RouteSender]; ok {
+				t.sendToSender(ctx, outPkt, s)
+				continue
+			}
+			logx.L().Warnw("路由发送端未命中任务内发送端", "任务名称", t.Name, "路由发送端", outPkt.Meta.RouteSender)
+			continue
+		}
+		for _, s := range t.Senders {
+			t.sendToSender(ctx, outPkt, s)
+		}
 	}
-	for _, s := range t.Senders {
-		t.sendToSender(ctx, pkt, s)
+	for p := range releaseLater {
+		p.Release()
 	}
 }
 

@@ -14,13 +14,15 @@ func TestCompilePipelineFileStages(t *testing.T) {
 		"p": {
 			{Type: "mark_as_file_chunk", Path: "/tmp/a.bin", Bool: &eof},
 			{Type: "clear_file_meta"},
+			{Type: "split_file_chunk_to_packets", PacketSize: 1024},
+			{Type: "stream_packets_to_file_segments", SegmentSize: 4096, ChunkSize: 1024, FilePrefix: "stream"},
 		},
 	}
 	compiled, err := CompilePipelines(cfg)
 	if err != nil {
 		t.Fatalf("compile pipelines failed: %v", err)
 	}
-	if compiled["p"] == nil || len(compiled["p"].P.Stages) != 2 {
+	if compiled["p"] == nil || len(compiled["p"].P.Stages) != 4 {
 		t.Fatalf("unexpected compiled pipeline: %+v", compiled["p"])
 	}
 }

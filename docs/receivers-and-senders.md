@@ -248,6 +248,12 @@
 - sender **不会**参与 selector 匹配。
 - route stage 只会影响 task 内部的 sender 选择，不会影响 receiver 到 task 的主路由。
 
+补充（文件与实时数据互转边界）：
+
+- `file -> realtime`：SFTP receiver 产出 `file_chunk`，由 pipeline `split_file_chunk_to_packets` 做边界转换，再交给实时 sender。
+- `realtime -> file`：实时 receiver 产出 stream packet，由 pipeline `stream_packets_to_file_segments` 组装为滚动 `file_chunk`，再交给 SFTP sender。
+- sender 仍只负责协议输出；边界适配（切分/组段/命名规则）放在 stage 层。
+
 ## 4. payload 日志配置在哪一层生效
 
 ### receiver 侧

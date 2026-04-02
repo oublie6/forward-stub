@@ -5,13 +5,13 @@ import "forward-stub/src/packet"
 // RouteSenderByOffsetBytes 根据固定偏移字段选择目标 sender。
 func RouteSenderByOffsetBytes(offset int, keyLen int, routes map[string]string, defaultSender string) StageFunc {
 	if offset < 0 || keyLen <= 0 {
-		return func(*packet.Packet) bool { return false }
+		return mapStage(func(*packet.Packet) bool { return false })
 	}
 	end := offset + keyLen
 	if end < offset {
-		return func(*packet.Packet) bool { return false }
+		return mapStage(func(*packet.Packet) bool { return false })
 	}
-	return func(p *packet.Packet) bool {
+	return mapStage(func(p *packet.Packet) bool {
 		if end > len(p.Payload) {
 			return false
 		}
@@ -24,5 +24,5 @@ func RouteSenderByOffsetBytes(offset int, keyLen int, routes map[string]string, 
 			return true
 		}
 		return false
-	}
+	})
 }

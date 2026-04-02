@@ -42,6 +42,26 @@ receiver -> selector -> task -> pipeline -> sender
 - 作用：从 payload 某个偏移读固定长度字节，映射到 sender 名称，并写入 `packet.Meta.RouteSender`。
 - 常用字段：`offset`、`cases`、`default_sender`
 
+### 2.6 `split_file_chunk_to_packets`
+
+- 作用：把一个 `file_chunk` packet 拆成多个实时 packet（`PayloadKindStream`）。
+- 常用字段：`packet_size`、`preserve_file_meta`
+- 关键语义：
+  - 按 `packet_size` 顺序切分 payload；
+  - 子包 `offset` 递增；
+  - 仅最后一个子包继承 `EOF=true`（前提是输入包本身 EOF）；
+  - `preserve_file_meta=false` 时清理 `transfer_id/file_name/file_path/total_size/checksum`。
+
+### 2.7 `stream_packets_to_file_segments`
+
+- 作用：将连续实时 packet 组装成“滚动文件段”的 `file_chunk` packet。
+- 常用字段：`segment_size`、`chunk_size`、`path`、`file_prefix`、`time_layout`
+- 关键语义：
+  - 以 `segment_size` 为文件段滚动阈值；
+  - 每个段满后，按 `chunk_size` 产出多个 `file_chunk`；
+  - 每段文件名带“首包时间 + 自增序号”；
+  - 每段最后一个 chunk 标记 `EOF=true`，用于下游 SFTP sender 提交 rename。
+
 ## 3. `route_offset_bytes_sender` 的约束
 
 - `cases` 不能为空。
@@ -80,6 +100,29 @@ receiver -> selector -> task -> pipeline -> sender
       "02": "tx_tcp"
     },
     "default_sender": "tx_kafka"
+  }
+]
+```
+
+### 5.3 file_chunk 拆实时包（file -> realtime）
+
+```json
+[
+  {"type": "split_file_chunk_to_packets", "packet_size": 1024, "preserve_file_meta": false}
+]
+```
+
+### 5.4 实时流滚动成文件段（realtime -> file）
+
+```json
+[
+  {
+    "type": "stream_packets_to_file_segments",
+    "segment_size": 1048576,
+    "chunk_size": 65536,
+    "path": "/stream-out",
+    "file_prefix": "rt",
+    "time_layout": "20060102-150405"
   }
 ]
 ```
