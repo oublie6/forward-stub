@@ -48,35 +48,40 @@ func (r *SkyDDSReceiver) Key() string {
 func (r *SkyDDSReceiver) MatchKeyMode() string { return r.mode }
 
 func (r *SkyDDSReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
+	const waitTimeout = 500 * time.Millisecond
+	const drainMaxItems = 2048
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
 		}
-		if r.model == "batch_octet" {
-			payloads, err := r.reader.PollBatch(500 * time.Millisecond)
-			if err != nil {
-				return fmt.Errorf("skydds batch poll: %w", err)
-			}
-			for i := range payloads {
-				if len(payloads[i]) == 0 {
-					logx.L().Warnw("SkyDDS batch sub-message empty; skip", "receiver", r.name, "index", i)
-					continue
-				}
-				r.emitPacket(payloads[i], onPacket)
-			}
+
+		ready, err := r.reader.Wait(waitTimeout)
+		if err != nil {
+			return fmt.Errorf("skydds receiver wait: %w", err)
+		}
+		if !ready {
 			continue
 		}
 
-		payload, err := r.reader.Poll(500 * time.Millisecond)
-		if err != nil {
-			return fmt.Errorf("skydds poll: %w", err)
+		for {
+			payloads, err := r.reader.Drain(drainMaxItems)
+			if err != nil {
+				return fmt.Errorf("skydds receiver drain: %w", err)
+			}
+			if len(payloads) == 0 {
+				break
+			}
+			for i := range payloads {
+				if len(payloads[i]) == 0 {
+					logx.L().Warnw("SkyDDS sub-message empty; skip", "receiver", r.name, "index", i, "message_model", r.model)
+					continue
+				}
+				// 注意：即使是批量拉取到的一组消息，也必须逐条形成独立 packet 并下发。
+				r.emitPacket(payloads[i], onPacket)
+			}
 		}
-		if len(payload) == 0 {
-			continue
-		}
-		r.emitPacket(payload, onPacket)
 	}
 }
 
