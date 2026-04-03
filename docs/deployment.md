@@ -44,7 +44,6 @@ docker run --rm -it forward-stub:skydds-bookworm-runtime
 ### 相关文件
 
 - `deploy/docker/skydds-runtime-bookworm/Dockerfile`：Bookworm/glibc 主服务镜像，构建阶段自动完成 `packages -> sdk` 解压并 `-tags skydds` 编译。
-- `deploy/docker/skydds-debug-kali/Dockerfile`：Kali debug 镜像（仅调试，不是主服务镜像）。
 - `scripts/docker-local-test.sh`：受限环境的镜像构建验证脚本。
 
 ## 4. Kubernetes 部署

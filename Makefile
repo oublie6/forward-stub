@@ -5,13 +5,11 @@ APP_NAME ?= forward-stub
 GOFLAGS ?= -mod=vendor
 DOCKER_BIN ?= docker
 RUNTIME_IMAGE ?= forward-stub:skydds-bookworm-runtime
-DEBUG_IMAGE ?= forward-stub:skydds-kali-debug
 
 .PHONY: test vet perf clean \
 	build-skydds \
 	docker-build-skydds-base docker-load-skydds-base \
-	docker-build-skydds-runtime docker-load-skydds-runtime docker-run-skydds-runtime \
-	docker-build-skydds-debug docker-load-skydds-debug
+	docker-build-skydds-runtime docker-load-skydds-runtime docker-run-skydds-runtime
 
 # test: 执行全部 Go 单元测试。
 test:
@@ -53,11 +51,3 @@ docker-load-skydds-runtime:
 # docker-run-skydds-runtime: 本地运行 SkyDDS 运行时镜像（需要外部挂载配置）。
 docker-run-skydds-runtime:
 	$(DOCKER_BIN) run --rm -it $(RUNTIME_IMAGE)
-
-# docker-build-skydds-debug: 构建并导出 Kali 调试镜像（非主服务镜像）。
-docker-build-skydds-debug:
-	DOCKER_BIN="$(DOCKER_BIN)" ./deploy/docker/build-and-save-skydds-debug-kali.sh
-
-# docker-load-skydds-debug: 导入 Kali 调试镜像归档。
-docker-load-skydds-debug:
-	DOCKER_BIN="$(DOCKER_BIN)" ./deploy/docker/load-skydds-debug-kali.sh

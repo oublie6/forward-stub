@@ -6,8 +6,7 @@ PODMAN_BIN ?= podman
 
 .PHONY: test vet clean build-skydds \
 	podman-build-skydds-base podman-load-skydds-base \
-	podman-build-skydds-runtime podman-load-skydds-runtime \
-	podman-build-skydds-debug podman-load-skydds-debug
+	podman-build-skydds-runtime podman-load-skydds-runtime
 
 test:
 	GOFLAGS="$(GOFLAGS)" go test ./...
@@ -32,9 +31,3 @@ podman-build-skydds-runtime:
 
 podman-load-skydds-runtime:
 	DOCKER_BIN="$(PODMAN_BIN)" ./deploy/docker/load-skydds-runtime-bookworm.sh
-
-podman-build-skydds-debug:
-	DOCKER_BIN="$(PODMAN_BIN)" ./deploy/docker/build-and-save-skydds-debug-kali.sh
-
-podman-load-skydds-debug:
-	DOCKER_BIN="$(PODMAN_BIN)" ./deploy/docker/load-skydds-debug-kali.sh

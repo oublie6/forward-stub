@@ -38,16 +38,6 @@
 3. `source scripts/skydds/env.sh` 设置 `SKY_DDS` / `DDS_ROOT` / `ACE_ROOT` / `TAO_ROOT` / `LD_LIBRARY_PATH`。
 4. `CGO_ENABLED=1 go build -tags skydds` 编译服务。
 
-### 2.3 SkyDDS Debug（Kali，仅调试镜像）
-
-- Dockerfile: `deploy/docker/skydds-debug-kali/Dockerfile`
-- Build&Save: `deploy/docker/build-and-save-skydds-debug-kali.sh`
-- Load: `deploy/docker/load-skydds-debug-kali.sh`
-- 默认标签: `forward-stub:skydds-kali-debug`
-- 默认归档: `deploy/images/forward-stub-skydds-kali-debug.tar.gz`
-
-说明：Kali 只作为 debug 镜像，不作为主服务镜像。
-
 ## 3. 使用方式（仓库根目录执行）
 
 ### 3.1 构建并导出 Base
@@ -62,21 +52,14 @@
 ./deploy/docker/build-and-save-skydds-runtime-bookworm.sh
 ```
 
-### 3.3 构建并导出 SkyDDS Debug（Kali）
-
-```bash
-./deploy/docker/build-and-save-skydds-debug-kali.sh
-```
-
-### 3.4 导入离线归档
+### 3.3 导入离线归档
 
 ```bash
 ./deploy/docker/load-base-bookworm.sh
 ./deploy/docker/load-skydds-runtime-bookworm.sh
-./deploy/docker/load-skydds-debug-kali.sh
 ```
 
 ## 4. 前置条件与边界
 
-- 构建 SkyDDS runtime/debug 前，`third_party/skydds/packages/` 中必须放入 SkyDDS 安装包（支持 `*.tar.gz` / `*.tgz` / `*.tar.xz` / `*.zip`）。
+- 构建 SkyDDS runtime 前，`third_party/skydds/packages/` 中必须放入 SkyDDS 安装包（支持 `*.tar.gz` / `*.tgz` / `*.tar.xz` / `*.zip`）。
 - 本仓库脚本只提供构建与归档入口；是否能在当前环境真实 `docker build` 取决于 Docker daemon、网络和安装包可用性。
