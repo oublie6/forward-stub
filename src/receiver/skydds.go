@@ -27,10 +27,11 @@ type SkyDDSReceiver struct {
 
 func NewSkyDDSReceiver(name string, rc config.ReceiverConfig) (*SkyDDSReceiver, error) {
 	r, err := skyddsReaderFactory(skydds.CommonOptions{
-		DCPSConfigFile: rc.DCPSConfigFile,
-		DomainID:       rc.DomainID,
-		TopicName:      rc.TopicName,
-		MessageModel:   strings.ToLower(strings.TrimSpace(rc.MessageModel)),
+		DCPSConfigFile:   rc.DCPSConfigFile,
+		DomainID:         rc.DomainID,
+		TopicName:        rc.TopicName,
+		MessageModel:     strings.ToLower(strings.TrimSpace(rc.MessageModel)),
+		DrainBufferBytes: rc.DrainBufferBytes,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("new skydds reader: %w", err)
@@ -68,8 +69,6 @@ func (r *SkyDDSReceiver) Key() string {
 func (r *SkyDDSReceiver) MatchKeyMode() string { return r.mode }
 
 func (r *SkyDDSReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
-	const waitTimeout = 500 * time.Millisecond
-	const drainMaxItems = 2048
 	for {
 		select {
 		case <-ctx.Done():

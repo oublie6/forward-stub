@@ -8,13 +8,14 @@
 - Docker 镜像运行。
 - Kubernetes 清单部署。
 
-## 2. 本地部署
+## 2. 本地部署（SkyDDS）
 
 ### 步骤
 
-1. `make build`
-2. 准备 `system.example.json` 与 `business.example.json`
-3. 启动二进制
+1. 准备 SkyDDS SDK（`third_party/skydds/packages/` -> `third_party/skydds/sdk/`）
+2. `make build-skydds`
+3. 准备 `system.example.json` 与 `business.example.json`
+4. 启动二进制
 
 ```bash
 ./bin/forward-stub -system-config ./configs/system.example.json -business-config ./configs/business.example.json
@@ -26,23 +27,23 @@
 - 单机联调。
 - 配置验证。
 
-## 3. Docker 部署
+## 3. Docker 部署（主线入口：`deploy/docker/...`）
 
-### 构建
+### 构建（主服务镜像，Bookworm runtime）
 
 ```bash
-make docker-build VERSION=$(git rev-parse --short HEAD)
+make docker-build-skydds-runtime
 ```
 
-### 运行
+### 运行（示例）
 
 ```bash
-make docker-run SERVICE_ARGS='-system-config /app/config/system.json -business-config /app/config/business.json'
+docker run --rm -it forward-stub:skydds-bookworm-runtime
 ```
 
 ### 相关文件
 
-- `Dockerfile`：基于 `golang:1.25-alpine` 构建可执行文件。
+- `deploy/docker/skydds-runtime-bookworm/Dockerfile`：Bookworm/glibc 主服务镜像，构建阶段自动完成 `packages -> sdk` 解压并 `-tags skydds` 编译。
 - `scripts/docker-local-test.sh`：受限环境的镜像构建验证脚本。
 
 ## 4. Kubernetes 部署
@@ -63,11 +64,12 @@ make docker-run SERVICE_ARGS='-system-config /app/config/system.json -business-c
 ./scripts/k8s-deploy.sh delete
 ```
 
-## 5. Makefile 与 scripts 角色
+## 5. Makefile 与 scripts 角色（主线）
 
-- Makefile：统一 build/test/vet/perf/package/docker 入口。
+- Makefile：统一 `build-skydds`、`test`、`vet`、`perf`、`deploy/docker` 镜像入口。
 - `scripts/build-linux.sh`：linux 制品构建。
 - `scripts/package.sh`：多平台归档。
+- `scripts/windows/build-skydds.bat` / `scripts/windows/test-skydds.bat`：Windows 本地辅助脚本（主线仍建议 WSL/Linux）。
 - `scripts/k8s-deploy.sh`：k8s 生命周期操作。
 
 ## 6. 配置挂载与端口

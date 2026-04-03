@@ -36,6 +36,9 @@ func TestApplyDefaultsSkyDDSReceiverKnobs(t *testing.T) {
 	if rx.DrainMaxItems != DefaultSkyDDSDrainMaxItems {
 		t.Fatalf("drain_max_items default mismatch: got=%d want=%d", rx.DrainMaxItems, DefaultSkyDDSDrainMaxItems)
 	}
+	if rx.DrainBufferBytes != DefaultSkyDDSDrainBufferBytes {
+		t.Fatalf("drain_buffer_bytes default mismatch: got=%d want=%d", rx.DrainBufferBytes, DefaultSkyDDSDrainBufferBytes)
+	}
 }
 
 func TestValidateSkyDDSBatchOK(t *testing.T) {
@@ -94,11 +97,22 @@ func TestValidateSkyDDSReceiverDrainMaxItemsInvalid(t *testing.T) {
 	}
 }
 
+func TestValidateSkyDDSReceiverDrainBufferBytesInvalid(t *testing.T) {
+	cfg := baseSkyDDSConfig()
+	rx := cfg.Receivers["rx"]
+	rx.DrainBufferBytes = 0
+	cfg.Receivers["rx"] = rx
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestValidateSkyDDSReceiverCustomKnobsOK(t *testing.T) {
 	cfg := baseSkyDDSConfig()
 	rx := cfg.Receivers["rx"]
 	rx.WaitTimeout = "5ms"
 	rx.DrainMaxItems = 64
+	rx.DrainBufferBytes = 1 << 20
 	cfg.Receivers["rx"] = rx
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("validate failed: %v", err)

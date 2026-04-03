@@ -92,7 +92,7 @@ public:
 
 class BatchReaderListener : public virtual Satellite::BatchOctetMsgDataReaderListener {
 public:
-    std::deque<std::vector<std::vector<uint8_t>>> queue_;
+    std::deque<std::deque<std::vector<uint8_t>>> queue_;
     ACE_Thread_Mutex lock_;
     ACE_Condition_Thread_Mutex cond_{lock_};
     bool closed_{false};
@@ -104,8 +104,7 @@ public:
         DDS::SampleInfo info;
         while (dr->take_next_sample(msg, info) == DDS::RETCODE_OK) {
             if (!info.valid_data) continue;
-            std::vector<std::vector<uint8_t>> batch;
-            batch.reserve(static_cast<std::size_t>(msg.batchData.length()));
+            std::deque<std::vector<uint8_t>> batch;
             for (CORBA::ULong i = 0; i < msg.batchData.length(); ++i) {
                 const Satellite::OctetMsg& sub = msg.batchData[i];
                 std::vector<uint8_t> data;
@@ -330,7 +329,7 @@ int skydds_reader_poll_batch(skydds_reader_t* reader, uint8_t* out_buf, int out_
         return 1;
     }
 
-    std::vector<std::vector<uint8_t>> batch = std::move(reader->batch_listener->queue_.front());
+    std::deque<std::vector<uint8_t>> batch = std::move(reader->batch_listener->queue_.front());
     reader->batch_listener->queue_.pop_front();
     if (static_cast<int>(batch.size()) > lens_cap) {
         set_error(err, err_len, "receiver lens buffer too small");
@@ -402,7 +401,7 @@ int skydds_reader_drain(skydds_reader_t* reader, uint8_t* out_buf, int out_cap, 
         ACE_GUARD_RETURN(ACE_Thread_Mutex, guard, reader->batch_listener->lock_, -1);
         int offset = 0;
         while (!reader->batch_listener->queue_.empty() && *out_count < max_items && *out_count < lens_cap) {
-            std::vector<std::vector<uint8_t>>& batch = reader->batch_listener->queue_.front();
+            std::deque<std::vector<uint8_t>>& batch = reader->batch_listener->queue_.front();
             while (!batch.empty() && *out_count < max_items && *out_count < lens_cap) {
                 std::vector<uint8_t>& sub = batch.front();
                 const int len = static_cast<int>(sub.size());
@@ -418,7 +417,7 @@ int skydds_reader_drain(skydds_reader_t* reader, uint8_t* out_buf, int out_cap, 
                 out_lens[*out_count] = len;
                 offset += len;
                 ++(*out_count);
-                batch.erase(batch.begin());
+                batch.pop_front();
             }
             if (batch.empty()) reader->batch_listener->queue_.pop_front();
             if (*out_count >= max_items || *out_count >= lens_cap) break;

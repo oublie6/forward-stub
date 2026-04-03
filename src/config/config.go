@@ -45,6 +45,7 @@ const (
 	DefaultKafkaIsolationLevel       = "read_uncommitted"
 	DefaultSkyDDSWaitTimeout         = "500ms"
 	DefaultSkyDDSDrainMaxItems       = 2048
+	DefaultSkyDDSDrainBufferBytes    = 4 << 20
 )
 
 var DefaultKafkaReceiverBalancers = []string{"cooperative_sticky"}
@@ -328,6 +329,9 @@ type ReceiverConfig struct {
 	// DrainMaxItems 指定每次 SkyDDS receiver 批量拉取的最大消息条数。
 	// 用法：仅 Type=dds_skydds 时生效，需为 >0 的整数。
 	DrainMaxItems int `json:"drain_max_items,omitempty"`
+	// DrainBufferBytes 指定 SkyDDS receiver 每次 Drain 调用的接收缓冲区大小（字节）。
+	// 用法：仅 Type=dds_skydds 时生效，需为 >0 的整数；默认 4<<20（4194304）。
+	DrainBufferBytes int `json:"drain_buffer_bytes,omitempty"`
 
 	// LogPayloadRecv 控制该 receiver 是否打印接收 payload 日志。
 	// 用法：用于定位输入侧问题；建议仅在排障窗口开启。

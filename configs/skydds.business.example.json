@@ -10,6 +10,7 @@
       "message_model": "octet",
       "wait_timeout": "5ms",
       "drain_max_items": 512,
+      "drain_buffer_bytes": 4194304,
       "match_key": {
         "mode": "fixed",
         "fixed_value": "pdxp-ingress"

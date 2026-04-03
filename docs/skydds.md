@@ -13,6 +13,7 @@
 
 - 安装包放置目录：`third_party/skydds/packages/`
 - 解压后 SDK 目录：`third_party/skydds/sdk/`
+- 安装包格式：当前仅支持 `*.tar.gz`
 
 ## 3. 与 PDF 的对应关系
 
@@ -123,8 +124,11 @@ sequenceDiagram
 - `drain_max_items`（int，默认 `2048`）
   - 作用：控制 Go 侧每次 `Drain(maxItems)` 的单次拉取上限。
   - 要求：必须是 `>0` 的整数。
+- `drain_buffer_bytes`（int，默认 `4194304`）
+  - 作用：控制 Go 侧每次 `Drain()` 接收 C/C++ 批量数据时的总缓冲区大小（字节）。
+  - 要求：必须是 `>0` 的整数。
 
-这两个参数只影响 receiver 内部“通知唤醒 + 批量拉取”的实现细节，不改变 sender、selector、pipeline 语义，也不改变“逐条 packet 下发”语义。
+这三个参数只影响 receiver 内部“通知唤醒 + 批量拉取”的实现细节，不改变 sender、selector、pipeline 语义，也不改变“逐条 packet 下发”语义。
 
 ## 7. receiver 拆批语义（batch_octet）
 
@@ -150,7 +154,13 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 
 不加 `-tags skydds` 时，SkyDDS 走 stub，不影响其他协议。
 
-如需使用独立的 SkyDDS Bookworm/Kali 镜像入口，见：`deploy/docker/README.md`。
+如需离线导入基础镜像，请使用 `deploy/images/forward-stub-base-bookworm.tar.gz`，并参考：`deploy/docker/README.md`。
+
+如需在镜像构建阶段自动完成 `packages -> sdk` 解压并编译 SkyDDS 版本服务，可使用：
+
+```bash
+./deploy/docker/build-and-save-skydds-runtime-bookworm.sh
+```
 
 ## 10. 运行方式
 
@@ -170,7 +180,7 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 在本地没有 SkyDDS SDK（未配置 `third_party/skydds/sdk`，也不链接真实动态库）时，可直接运行 Go 单元测试验证当前 Go 层逻辑：
 
 - sender：`octet` 单条写出、`batch_octet` 按 `batch_num/batch_size/batch_delay/close` flush、顺序与超大单条行为。
-- receiver：通知唤醒 + 批量 drain、`octet` 多轮 drain、`batch_octet` 拆子消息后逐条 packet 下发、`wait_timeout` / `drain_max_items` 参数接入。
+- receiver：通知唤醒 + 批量 drain、`octet` 多轮 drain、`batch_octet` 拆子消息后逐条 packet 下发、`wait_timeout` / `drain_max_items` / `drain_buffer_bytes` 参数接入。
 
 注意：mock 测试只验证 Go 层行为与边界语义，不等同于真实 SkyDDS SDK 联调（cgo/C/C++/DDS 运行时）。
 
