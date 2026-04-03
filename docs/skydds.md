@@ -155,7 +155,7 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 如需在镜像构建阶段自动完成 `packages -> sdk` 解压并编译 SkyDDS 版本服务，可使用：
 
 ```bash
-./deploy/docker/build-and-save-skydds-bookworm.sh
+./deploy/docker/build-and-save-skydds-runtime-bookworm.sh
 ```
 
 ## 10. 运行方式

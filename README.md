@@ -198,7 +198,7 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 ```
 
 如需构建“在镜像构建阶段自动解压 SkyDDS 包并编译 `-tags skydds`”的服务镜像，见：
-`deploy/docker/skydds-bookworm/Dockerfile` 与 `deploy/docker/build-and-save-skydds-bookworm.sh`。
+`deploy/docker/skydds-runtime-bookworm/Dockerfile` 与 `deploy/docker/build-and-save-skydds-runtime-bookworm.sh`。
 
 示例配置：
 - Octet: `configs/skydds.business.example.json`
