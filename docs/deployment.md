@@ -69,6 +69,7 @@ docker run --rm -it forward-stub:skydds-bookworm-runtime
 - Makefile：统一 `build-skydds`、`test`、`vet`、`perf`、`deploy/docker` 镜像入口。
 - `scripts/build-linux.sh`：linux 制品构建。
 - `scripts/package.sh`：多平台归档。
+- `scripts/windows/build-skydds.bat` / `scripts/windows/test-skydds.bat`：Windows 本地辅助脚本（主线仍建议 WSL/Linux）。
 - `scripts/k8s-deploy.sh`：k8s 生命周期操作。
 
 ## 6. 配置挂载与端口

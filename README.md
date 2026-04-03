@@ -185,6 +185,7 @@ make perf
 
 - 安装包：`third_party/skydds/packages/`
 - SDK 解压目录：`third_party/skydds/sdk/`
+- 安装包格式：仅 `*.tar.gz`
 
 快速步骤：
 
@@ -199,6 +200,7 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 
 如需构建“在镜像构建阶段自动解压 SkyDDS 包并编译 `-tags skydds`”的服务镜像，见：
 `deploy/docker/skydds-runtime-bookworm/Dockerfile` 与 `deploy/docker/build-and-save-skydds-runtime-bookworm.sh`。
+该服务镜像基于 `forward-stub-base:bookworm` 继续构建。
 
 示例配置：
 - Octet: `configs/skydds.business.example.json`

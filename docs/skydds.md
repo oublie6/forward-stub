@@ -13,6 +13,7 @@
 
 - 安装包放置目录：`third_party/skydds/packages/`
 - 解压后 SDK 目录：`third_party/skydds/sdk/`
+- 安装包格式：当前仅支持 `*.tar.gz`
 
 ## 3. 与 PDF 的对应关系
 

@@ -33,6 +33,7 @@
 
 该 Dockerfile 在构建阶段会：
 
+0. 基于 `forward-stub-base:bookworm`（继承基础构建环境与 tcpdump）。
 1. `COPY . .`（包含 `third_party/skydds/packages/`）。
 2. 在容器内执行 `scripts/skydds/setup_linux.sh`，从 `third_party/skydds/packages/` 解压到 `third_party/skydds/sdk/`。
 3. `source scripts/skydds/env.sh` 设置 `SKY_DDS` / `DDS_ROOT` / `ACE_ROOT` / `TAO_ROOT` / `LD_LIBRARY_PATH`。
@@ -61,5 +62,5 @@
 
 ## 4. 前置条件与边界
 
-- 构建 SkyDDS runtime 前，`third_party/skydds/packages/` 中必须放入 SkyDDS 安装包（支持 `*.tar.gz` / `*.tgz` / `*.tar.xz` / `*.zip`）。
+- 构建 SkyDDS runtime 前，`third_party/skydds/packages/` 中必须放入 SkyDDS 安装包（仅支持 `*.tar.gz`）。
 - 本仓库脚本只提供构建与归档入口；是否能在当前环境真实 `docker build` 取决于 Docker daemon、网络和安装包可用性。

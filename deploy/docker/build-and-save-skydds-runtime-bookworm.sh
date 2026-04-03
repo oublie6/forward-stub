@@ -45,10 +45,10 @@ require_docker_daemon() {
 
 require_skydds_package() {
   shopt -s nullglob
-  local archives=("${PACKAGES_DIR}"/*.tar.gz "${PACKAGES_DIR}"/*.tgz "${PACKAGES_DIR}"/*.tar.xz "${PACKAGES_DIR}"/*.zip)
+  local archives=("${PACKAGES_DIR}"/*.tar.gz)
   shopt -u nullglob
   if [[ ${#archives[@]} -eq 0 ]]; then
-    fail "No SkyDDS package found in ${PACKAGES_DIR}"
+    fail "No SkyDDS .tar.gz package found in ${PACKAGES_DIR}"
   fi
 }
 
