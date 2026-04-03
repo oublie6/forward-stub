@@ -76,14 +76,15 @@ func TestNewSkyDDSReceiverPassesCommonOptionsAndKnobs(t *testing.T) {
 	}
 
 	cfg := config.ReceiverConfig{
-		Type:           "dds_skydds",
-		Selector:       "sel",
-		DCPSConfigFile: "/tmp/dds.ini",
-		DomainID:       1,
-		TopicName:      "topicA",
-		MessageModel:   "octet",
-		WaitTimeout:    "9ms",
-		DrainMaxItems:  11,
+		Type:             "dds_skydds",
+		Selector:         "sel",
+		DCPSConfigFile:   "/tmp/dds.ini",
+		DomainID:         1,
+		TopicName:        "topicA",
+		MessageModel:     "octet",
+		WaitTimeout:      "9ms",
+		DrainMaxItems:    11,
+		DrainBufferBytes: 123456,
 	}
 	r, err := NewSkyDDSReceiver("rx", cfg)
 	if err != nil {
@@ -97,6 +98,9 @@ func TestNewSkyDDSReceiverPassesCommonOptionsAndKnobs(t *testing.T) {
 	}
 	if r.drainMaxItems != 11 {
 		t.Fatalf("drain max mismatch: %d", r.drainMaxItems)
+	}
+	if got.DrainBufferBytes != cfg.DrainBufferBytes {
+		t.Fatalf("drain buffer bytes mismatch: got=%d want=%d", got.DrainBufferBytes, cfg.DrainBufferBytes)
 	}
 }
 

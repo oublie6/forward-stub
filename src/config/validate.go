@@ -166,6 +166,9 @@ func (c *Config) Validate() error {
 			if r.DrainMaxItems <= 0 {
 				return fmt.Errorf("receiver %s dds_skydds drain_max_items must be > 0", rn)
 			}
+			if r.DrainBufferBytes <= 0 {
+				return fmt.Errorf("receiver %s dds_skydds drain_buffer_bytes must be > 0", rn)
+			}
 		case "sftp":
 			if r.Listen == "" {
 				return fmt.Errorf("receiver %s sftp requires listen", rn)

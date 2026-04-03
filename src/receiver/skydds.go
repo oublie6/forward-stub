@@ -27,10 +27,11 @@ type SkyDDSReceiver struct {
 
 func NewSkyDDSReceiver(name string, rc config.ReceiverConfig) (*SkyDDSReceiver, error) {
 	r, err := skyddsReaderFactory(skydds.CommonOptions{
-		DCPSConfigFile: rc.DCPSConfigFile,
-		DomainID:       rc.DomainID,
-		TopicName:      rc.TopicName,
-		MessageModel:   strings.ToLower(strings.TrimSpace(rc.MessageModel)),
+		DCPSConfigFile:   rc.DCPSConfigFile,
+		DomainID:         rc.DomainID,
+		TopicName:        rc.TopicName,
+		MessageModel:     strings.ToLower(strings.TrimSpace(rc.MessageModel)),
+		DrainBufferBytes: rc.DrainBufferBytes,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("new skydds reader: %w", err)

@@ -2,11 +2,21 @@ package skydds
 
 import "time"
 
+const DefaultDrainBufferBytes = 4 << 20
+
 type CommonOptions struct {
-	DCPSConfigFile string
-	DomainID       int
-	TopicName      string
-	MessageModel   string
+	DCPSConfigFile   string
+	DomainID         int
+	TopicName        string
+	MessageModel     string
+	DrainBufferBytes int
+}
+
+func normalizeDrainBufferBytes(v int) int {
+	if v <= 0 {
+		return DefaultDrainBufferBytes
+	}
+	return v
 }
 
 type Writer interface {

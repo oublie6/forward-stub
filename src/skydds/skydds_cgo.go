@@ -19,8 +19,9 @@ import (
 type cgoWriter struct{ ptr *C.skydds_writer_t }
 
 type cgoReader struct {
-	ptr   *C.skydds_reader_t
-	model string
+	ptr              *C.skydds_reader_t
+	model            string
+	drainBufferBytes int
 }
 
 func newWriter(opts CommonOptions) (Writer, error) {
@@ -42,7 +43,11 @@ func newReader(opts CommonOptions) (Reader, error) {
 	if code := C.skydds_reader_open(&copts, &ptr, &errBuf[0], C.int(len(errBuf))); code != 0 {
 		return nil, fmt.Errorf("skydds reader open failed (code=%d): %s", int(code), C.GoString(&errBuf[0]))
 	}
-	return &cgoReader{ptr: ptr, model: opts.MessageModel}, nil
+	return &cgoReader{
+		ptr:              ptr,
+		model:            opts.MessageModel,
+		drainBufferBytes: normalizeDrainBufferBytes(opts.DrainBufferBytes),
+	}, nil
 }
 
 func (w *cgoWriter) Write(payload []byte) error {
@@ -158,7 +163,7 @@ func (r *cgoReader) Drain(maxItems int) ([][]byte, error) {
 	if maxItems <= 0 {
 		maxItems = 2048
 	}
-	buf := make([]byte, 4<<20)
+	buf := make([]byte, r.drainBufferBytes)
 	lens := make([]C.int, maxItems)
 	var outCount C.int
 	var outTotal C.int

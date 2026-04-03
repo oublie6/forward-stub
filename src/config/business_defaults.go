@@ -179,6 +179,9 @@ func (c *Config) ApplyDefaults() {
 			if rc.DrainMaxItems <= 0 {
 				rc.DrainMaxItems = DefaultSkyDDSDrainMaxItems
 			}
+			if rc.DrainBufferBytes <= 0 {
+				rc.DrainBufferBytes = DefaultSkyDDSDrainBufferBytes
+			}
 		}
 		c.Receivers[name] = rc
 	}
