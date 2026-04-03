@@ -2,19 +2,19 @@
 set -euo pipefail
 
 # 在受限环境中启动独立 dockerd（不依赖 systemd），并完成：
-# 1) 拉取 Dockerfile 基础镜像
+# 1) 拉取构建所需基础镜像
 # 2) 导出到项目目录 docker/base-images
-# 3) 执行镜像构建验证
+# 3) 基于 deploy/docker 主线 Dockerfile 执行镜像构建验证
 
 ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 DOCKER_HOST_URI=${DOCKER_HOST_URI:-unix:///tmp/forward-stub-docker.sock}
 CONTAINERD_SOCK=${CONTAINERD_SOCK:-/tmp/forward-stub-containerd.sock}
 PRELOADED_IMAGE_DIR=${PRELOADED_IMAGE_DIR:-${ROOT_DIR}/deploy/images}
 
-BUILDER_IMAGE=${BUILDER_IMAGE:-golang:1.25-alpine}
+BUILDER_IMAGE=${BUILDER_IMAGE:-golang:1.25-bookworm}
 VERSION=${VERSION:-dev}
-TARGETOS=${TARGETOS:-linux}
-TARGETARCH=${TARGETARCH:-arm64}
+DOCKERFILE=${DOCKERFILE:-${ROOT_DIR}/deploy/docker/skydds-runtime-bookworm/Dockerfile}
+IMAGE_TAG=${IMAGE_TAG:-forward-stub:skydds-runtime-test}
 PULL_RETRIES=${PULL_RETRIES:-3}
 PULL_RETRY_INTERVAL_SEC=${PULL_RETRY_INTERVAL_SEC:-3}
 # 支持配置多个镜像源（逗号分隔），例如：
@@ -210,7 +210,7 @@ fi
 
 DOCKER_HOST="${DOCKER_HOST_URI}" docker save -o "${ROOT_DIR}/docker/base-images/${BUILDER_IMAGE//[\/:]/_}.tar" "${BUILDER_IMAGE}"
 
-DOCKER_HOST="${DOCKER_HOST_URI}" docker build -t forward-stub:test --build-arg VERSION="${VERSION}" --build-arg TARGETOS="${TARGETOS}" --build-arg TARGETARCH="${TARGETARCH}" "${ROOT_DIR}"
-DOCKER_HOST="${DOCKER_HOST_URI}" docker image inspect forward-stub:test --format '{{.Id}} {{.Architecture}} {{.Os}}'
+DOCKER_HOST="${DOCKER_HOST_URI}" docker build -f "${DOCKERFILE}" -t "${IMAGE_TAG}" "${ROOT_DIR}"
+DOCKER_HOST="${DOCKER_HOST_URI}" docker image inspect "${IMAGE_TAG}" --format '{{.Id}} {{.Architecture}} {{.Os}}'
 
 ls -lh "${ROOT_DIR}/docker/base-images"
