@@ -13,6 +13,7 @@
 
 - 安装包放置目录：`third_party/skydds/packages/`
 - 解压后 SDK 目录：`third_party/skydds/sdk/`
+- 安装包格式：当前仅支持 `*.tar.gz`
 
 ## 3. 与 PDF 的对应关系
 
@@ -150,7 +151,13 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 
 不加 `-tags skydds` 时，SkyDDS 走 stub，不影响其他协议。
 
-如需使用独立的 SkyDDS Bookworm/Kali 镜像入口，见：`deploy/docker/README.md`。
+如需离线导入基础镜像，请使用 `deploy/images/forward-stub-base-bookworm.tar.gz`，并参考：`deploy/docker/README.md`。
+
+如需在镜像构建阶段自动完成 `packages -> sdk` 解压并编译 SkyDDS 版本服务，可使用：
+
+```bash
+./deploy/docker/build-and-save-skydds-runtime-bookworm.sh
+```
 
 ## 10. 运行方式
 
