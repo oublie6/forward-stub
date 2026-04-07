@@ -4,7 +4,8 @@
 APP_NAME ?= forward-stub
 GOFLAGS ?= -mod=vendor
 DOCKER_BIN ?= docker
-RUNTIME_IMAGE ?= forward-stub:skydds-bookworm-runtime
+DOCKER_PLATFORM ?= linux/arm64
+RUNTIME_IMAGE ?= forward-stub:skydds-bookworm-runtime-arm64
 
 .PHONY: test vet perf clean \
 	build-skydds \
@@ -32,21 +33,21 @@ clean:
 build-skydds:
 	bash -c 'set -euo pipefail; source scripts/skydds/env.sh; CGO_ENABLED=1 GOFLAGS="$(GOFLAGS)" go build -trimpath -tags skydds -o bin/$(APP_NAME) .'
 
-# docker-build-skydds-base: 构建并导出离线基础镜像（Bookworm）。
+# docker-build-skydds-base: 构建并导出离线基础镜像（Bookworm，默认 aarch64 / linux/arm64）。
 docker-build-skydds-base:
-	DOCKER_BIN="$(DOCKER_BIN)" ./deploy/docker/build-and-save-base-bookworm.sh
+	DOCKER_BIN="$(DOCKER_BIN)" PLATFORM="$(DOCKER_PLATFORM)" ./deploy/docker/build-and-save-base-bookworm.sh
 
 # docker-load-skydds-base: 导入离线基础镜像归档。
 docker-load-skydds-base:
-	DOCKER_BIN="$(DOCKER_BIN)" ./deploy/docker/load-base-bookworm.sh
+	DOCKER_BIN="$(DOCKER_BIN)" PLATFORM="$(DOCKER_PLATFORM)" ./deploy/docker/load-base-bookworm.sh
 
-# docker-build-skydds-runtime: 构建并导出 SkyDDS 运行时镜像（Bookworm 主线）。
+# docker-build-skydds-runtime: 构建并导出 SkyDDS 运行时镜像（Bookworm 主线，默认 aarch64 / linux/arm64）。
 docker-build-skydds-runtime:
-	DOCKER_BIN="$(DOCKER_BIN)" ./deploy/docker/build-and-save-skydds-runtime-bookworm.sh
+	DOCKER_BIN="$(DOCKER_BIN)" PLATFORM="$(DOCKER_PLATFORM)" ./deploy/docker/build-and-save-skydds-runtime-bookworm.sh
 
 # docker-load-skydds-runtime: 导入 SkyDDS 运行时镜像归档。
 docker-load-skydds-runtime:
-	DOCKER_BIN="$(DOCKER_BIN)" ./deploy/docker/load-skydds-runtime-bookworm.sh
+	DOCKER_BIN="$(DOCKER_BIN)" PLATFORM="$(DOCKER_PLATFORM)" ./deploy/docker/load-skydds-runtime-bookworm.sh
 
 # docker-run-skydds-runtime: 本地运行 SkyDDS 运行时镜像（需要外部挂载配置）。
 docker-run-skydds-runtime:

@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd)
 DOCKER_BIN="${DOCKER_BIN:-docker}"
+PLATFORM="${PLATFORM:-linux/arm64}"
 OUTPUT_FILE="${OUTPUT_FILE:-${ROOT_DIR}/deploy/images/forward-stub-skydds-kali-debug.tar.gz}"
 
 fail() {
@@ -37,4 +38,5 @@ require_file "${OUTPUT_FILE}"
 require_docker_daemon
 
 echo "[INFO] Loading image archive: ${OUTPUT_FILE}"
+echo "[INFO] Expected image platform: ${PLATFORM} (default aarch64 == linux/arm64)"
 gunzip -c "${OUTPUT_FILE}" | "${DOCKER_BIN}" load

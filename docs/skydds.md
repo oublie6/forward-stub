@@ -155,6 +155,7 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 不加 `-tags skydds` 时，SkyDDS 走 stub，不影响其他协议。
 
 如需离线导入基础镜像，请使用 `deploy/images/forward-stub-base-bookworm.tar.gz`，并参考：`deploy/docker/README.md`。
+当前 `deploy/docker` 主线默认目标架构为 `aarch64`，在 Docker / Buildx 中对应 `linux/arm64`。
 
 如需在镜像构建阶段自动完成 `packages -> sdk` 解压并编译 SkyDDS 版本服务，可使用：
 

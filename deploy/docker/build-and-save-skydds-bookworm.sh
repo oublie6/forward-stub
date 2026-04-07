@@ -8,6 +8,7 @@ BUILD_CONTEXT="${ROOT_DIR}"
 IMAGES_DIR="${ROOT_DIR}/deploy/images"
 PACKAGES_DIR="${ROOT_DIR}/third_party/skydds/packages"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
+PLATFORM="${PLATFORM:-linux/arm64}"
 IMAGE_TAG="${IMAGE_TAG:-forward-stub:skydds-bookworm}"
 OUTPUT_FILE="${OUTPUT_FILE:-${IMAGES_DIR}/forward-stub-skydds-bookworm.tar.gz}"
 
@@ -43,6 +44,12 @@ require_docker_daemon() {
   fi
 }
 
+require_buildx() {
+  if ! "${DOCKER_BIN}" buildx version >/dev/null 2>&1; then
+    fail "Docker Buildx is required to build ${PLATFORM} images via: ${DOCKER_BIN} buildx"
+  fi
+}
+
 require_skydds_package() {
   shopt -s nullglob
   local archives=("${PACKAGES_DIR}"/*.tar.gz "${PACKAGES_DIR}"/*.tgz "${PACKAGES_DIR}"/*.tar.xz "${PACKAGES_DIR}"/*.zip)
@@ -59,6 +66,7 @@ require_dir "${BUILD_CONTEXT}"
 require_dir "${PACKAGES_DIR}"
 require_skydds_package
 require_docker_daemon
+require_buildx
 
 mkdir -p "${IMAGES_DIR}"
 mkdir -p "$(dirname "${OUTPUT_FILE}")"
@@ -72,10 +80,13 @@ trap cleanup EXIT
 echo "[INFO] Building SkyDDS service image (Bookworm)"
 echo "[INFO] Dockerfile: ${DOCKERFILE}"
 echo "[INFO] Build context: ${BUILD_CONTEXT}"
+echo "[INFO] Target platform: ${PLATFORM} (aarch64 == linux/arm64)"
 echo "[INFO] Image tag: ${IMAGE_TAG}"
 echo "[INFO] Output archive: ${OUTPUT_FILE}"
 
-"${DOCKER_BIN}" build \
+"${DOCKER_BIN}" buildx build \
+  --platform "${PLATFORM}" \
+  --load \
   -f "${DOCKERFILE}" \
   -t "${IMAGE_TAG}" \
   "${BUILD_CONTEXT}"

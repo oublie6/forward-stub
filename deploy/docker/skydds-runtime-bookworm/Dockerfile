@@ -1,7 +1,17 @@
-FROM forward-stub-base:bookworm
+# Intentionally build the runtime image on top of the local arm64-only base tag.
+FROM --platform=linux/arm64 forward-stub-base:bookworm-arm64
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 WORKDIR /workspace
+
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG ALL_PROXY
+ARG NO_PROXY
+ARG http_proxy
+ARG https_proxy
+ARG all_proxy
+ARG no_proxy
 
 # 必须先拷贝整个仓库（包含 third_party/skydds/packages/）。
 COPY . .
