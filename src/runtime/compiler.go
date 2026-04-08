@@ -106,14 +106,6 @@ func compileStage(sc config.StageConfig) (pipeline.StageFunc, error) {
 			return nil, err
 		}
 		return pipeline.ReplaceOffsetBytes(sc.Offset, b), nil
-	case "mark_as_file_chunk":
-		eof := true
-		if sc.Bool != nil {
-			eof = *sc.Bool
-		}
-		return pipeline.MarkAsFileChunk(sc.Path, eof), nil
-	case "clear_file_meta":
-		return pipeline.ClearFileMeta(), nil
 	case "split_file_chunk_to_packets":
 		if sc.PacketSize <= 0 {
 			return nil, fmt.Errorf("split_file_chunk_to_packets requires packet_size > 0")

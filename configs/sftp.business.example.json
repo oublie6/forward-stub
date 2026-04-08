@@ -48,28 +48,12 @@
       "record_key_source": "transfer_id"
     }
   },
-  "pipelines": {
-    "pipe_mark_file": [
-      {
-        "type": "mark_as_file_chunk",
-        "path": "/archive/orders.bin",
-        "bool": true
-      }
-    ],
-    "pipe_clear_file": [
-      {
-        "type": "clear_file_meta"
-      }
-    ]
-  },
+  "pipelines": {},
   "tasks": {
     "task_file": {
       "execution_model": "channel",
       "channel_queue_size": 1024,
-      "pipelines": [
-        "pipe_mark_file",
-        "pipe_clear_file"
-      ],
+      "pipelines": [],
       "senders": [
         "tx_sftp",
         "tx_kafka"

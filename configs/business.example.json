@@ -112,11 +112,9 @@
       "task_order_forward"
     ],
     "ts_file_ingest": [
-      "task_mark_file",
       "task_send_sftp"
     ],
     "ts_file_notify": [
-      "task_clear_file",
       "task_fixed_kafka"
     ]
   },
@@ -239,16 +237,13 @@
         "default_sender": "tx_kafka_hash"
       }
     ],
-    "pipe_mark_file": [
+    "pipe_stream_archive": [
       {
-        "type": "mark_as_file_chunk",
-        "path": "/archive/orders.bin",
-        "bool": true
-      }
-    ],
-    "pipe_clear_file": [
-      {
-        "type": "clear_file_meta"
+        "type": "stream_packets_to_file_segments",
+        "segment_size": 1048576,
+        "chunk_size": 65536,
+        "path": "/archive",
+        "file_prefix": "orders"
       }
     ]
   },
@@ -312,15 +307,6 @@
         "tx_kafka_hash"
       ]
     },
-    "task_mark_file": {
-      "execution_model": "channel",
-      "pipelines": [
-        "pipe_mark_file"
-      ],
-      "senders": [
-        "tx_sftp"
-      ]
-    },
     "task_send_sftp": {
       "execution_model": "channel",
       "pipelines": [],
@@ -328,10 +314,10 @@
         "tx_sftp"
       ]
     },
-    "task_clear_file": {
-      "execution_model": "fastpath",
+    "task_archive_stream_to_sftp": {
+      "execution_model": "channel",
       "pipelines": [
-        "pipe_clear_file"
+        "pipe_stream_archive"
       ],
       "senders": [
         "tx_sftp"

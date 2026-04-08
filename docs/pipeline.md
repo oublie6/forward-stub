@@ -27,22 +27,12 @@ receiver -> selector -> task -> pipeline -> sender
 - 作用：把 payload 指定偏移处替换成新字节串。
 - 常用字段：`offset`、`hex`
 
-### 2.3 `mark_as_file_chunk`
-
-- 作用：把当前 packet 标记为文件分块，写入文件语义元数据。
-- 常用字段：`path`、`bool`
-- `bool` 未配置时默认 `true`，通常可理解为“是否把当前块视为 EOF”。
-
-### 2.4 `clear_file_meta`
-
-- 作用：清空 packet 上已有的文件元数据。
-
-### 2.5 `route_offset_bytes_sender`
+### 2.3 `route_offset_bytes_sender`
 
 - 作用：从 payload 某个偏移读固定长度字节，映射到 sender 名称，并写入 `packet.Meta.RouteSender`。
 - 常用字段：`offset`、`cases`、`default_sender`
 
-### 2.6 `split_file_chunk_to_packets`
+### 2.4 `split_file_chunk_to_packets`
 
 - 作用：把一个 `file_chunk` packet 拆成多个实时 packet（`PayloadKindStream`）。
 - 常用字段：`packet_size`、`preserve_file_meta`
@@ -52,7 +42,7 @@ receiver -> selector -> task -> pipeline -> sender
   - 仅最后一个子包继承 `EOF=true`（前提是输入包本身 EOF）；
   - `preserve_file_meta=false` 时清理 `transfer_id/file_name/file_path/total_size/checksum`。
 
-### 2.7 `stream_packets_to_file_segments`
+### 2.5 `stream_packets_to_file_segments`
 
 - 作用：将连续实时 packet 组装成“滚动文件段”的 `file_chunk` packet。
 - 常用字段：`segment_size`、`chunk_size`、`path`、`file_prefix`、`time_layout`
