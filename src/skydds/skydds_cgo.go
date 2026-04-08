@@ -3,8 +3,10 @@
 package skydds
 
 /*
-#cgo CXXFLAGS: -std=c++17 -I${SRCDIR} -I${SRCDIR}/../../third_party/skydds/sdk/include -I${SRCDIR}/../../third_party/skydds/sdk/examples/SatelliteBatchMsg
-#cgo LDFLAGS: -L${SRCDIR}/../../third_party/skydds/sdk/lib -lSkyDDS_Dcps -lSkyDDS_Tcp -lSkyDDS_Rtps_Udp -lSkyDDS_InfoRepoDiscovery -lTAO_PortableServer -lTAO_AnyTypeCode -lTAO -lACE -lSatelliteCommon -ldl -lpthread
+// Prefer the vendored SkyDDS/ACE/TAO SDK tree to avoid mixing system headers
+// or linker search paths with the SDK-provided userspace baseline.
+#cgo CXXFLAGS: -std=c++17 -I${SRCDIR} -I${SRCDIR}/../../third_party/skydds/sdk/include -I${SRCDIR}/../../third_party/skydds/sdk/ACE_wrappers -I${SRCDIR}/../../third_party/skydds/sdk/ACE_wrappers/TAO -I${SRCDIR}/../../third_party/skydds/sdk/examples/SatelliteBatchMsg
+#cgo LDFLAGS: -L${SRCDIR}/../../third_party/skydds/sdk/lib -L${SRCDIR}/../../third_party/skydds/sdk/DDS/lib -L${SRCDIR}/../../third_party/skydds/sdk/ACE_wrappers/lib -lSkyDDS_Dcps -lSkyDDS_Tcp -lSkyDDS_Rtps_Udp -lSkyDDS_InfoRepoDiscovery -lTAO_PortableServer -lTAO_AnyTypeCode -lTAO -lACE -lSatelliteCommon -ldl -lpthread
 #include <stdlib.h>
 #include "skydds_bridge.h"
 */

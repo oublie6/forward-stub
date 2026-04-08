@@ -5,6 +5,8 @@
 
 ## 1. 目录与约束
 
+说明：`deploy/docker/base-bookworm`、`skydds-runtime-bookworm` 以及对应镜像 tag / 归档文件名中的 `bookworm` 仅为历史兼容保留；当前 base userspace 已调整为更接近供应商要求的 legacy arm64 基线。
+
 - SkyDDS 安装包目录（压缩包）：`third_party/skydds/packages/`
 - SkyDDS SDK 解压目录：`third_party/skydds/sdk/`
 - 离线基础镜像归档（必须保留）：`deploy/images/forward-stub-base-bookworm-arm64.tar.gz`
@@ -77,4 +79,5 @@ PLATFORM=linux/arm64 ./deploy/docker/build-and-save-base-bookworm.sh
 - 当前 build 脚本默认通过 `docker buildx build --platform linux/arm64 --load` 构建本地镜像。
 - 若在 x86_64 / amd64 主机上构建 `aarch64` 镜像，通常需要 Docker Buildx，以及可用的 QEMU / `binfmt_misc` 跨架构模拟支持。
 - load 脚本只负责导入归档，不会改写归档内镜像的目标架构；默认归档应视为 `linux/arm64`（`aarch64`）镜像。
+- 当前镜像只能尽量把 userspace 基线对齐到供应商更老的 glibc / gcc 环境；`Linux 4.4.194` 这类最终内核版本仍取决于宿主机或部署节点，不是 Dockerfile 可在镜像内固定的内容。
 - 本仓库脚本只提供构建与归档入口；是否能在当前环境真实完成 `linux/arm64` 构建，取决于 Docker daemon、Buildx、QEMU / binfmt 和 SkyDDS 安装包可用性。
