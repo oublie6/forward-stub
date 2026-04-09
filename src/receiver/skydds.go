@@ -107,7 +107,7 @@ func (r *SkyDDSReceiver) Start(ctx context.Context, onPacket func(*packet.Packet
 func (r *SkyDDSReceiver) emitPacket(payload []byte, onPacket func(*packet.Packet)) {
 	buf, rel := packet.CopyFrom(payload)
 	onPacket(&packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: buf, Meta: packet.Meta{
-		Proto: packet.ProtoSkyDDS, Remote: r.cfg.TopicName, Local: fmt.Sprintf("domain:%d", r.cfg.DomainID), MatchKey: r.builder(),
+		Proto: packet.ProtoSkyDDS, ReceiverName: r.name, Remote: r.cfg.TopicName, Local: fmt.Sprintf("domain:%d", r.cfg.DomainID), MatchKey: r.builder(),
 	}}, ReleaseFn: rel})
 }
 

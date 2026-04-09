@@ -14,6 +14,12 @@ receiver -> selector -> task -> pipeline -> sender
 - 选择 selector
 - 解析 receiver 主路由
 
+补充说明：
+
+- 这次改造**不是**为了引入新的协议互转能力。
+- 当前架构本身已经支持 `file -> realtime`、`realtime -> file` 等多协议/多语义互转。
+- 本次新增/调整的缓冲型 stage，只负责解决不同协议或不同输入来源带来的**数据粒度不一致**问题，不改变主路由模型。
+
 ## 2. 当前支持的 stage 类型
 
 ### 2.1 `match_offset_bytes`
@@ -51,6 +57,11 @@ receiver -> selector -> task -> pipeline -> sender
   - 每个段满后，按 `chunk_size` 产出多个 `file_chunk`；
   - 每段文件名带“首包时间 + 自增序号”；
   - 每段最后一个 chunk 标记 `EOF=true`，用于下游 SFTP sender 提交 rename。
+  - 缓冲分桶统一按 `stage instance + receiver_name + match_key` 生效；
+  - 其中 `buffer_key = receiver_name + "|" + match_key`；
+  - `selector` 不参与缓冲分桶；
+  - `task` 不显式进入 buffer key，因为 stage 实例天然是 task 专属的；
+  - 当 `receiver_name` 或 `match_key` 为空时，stage 会记录明确错误日志并拒绝进入缓冲，避免歧义 key。
 
 ## 3. `route_offset_bytes_sender` 的约束
 
@@ -116,3 +127,22 @@ receiver -> selector -> task -> pipeline -> sender
   }
 ]
 ```
+
+## 6. 缓冲型 stage 的作用域规则
+
+当前仓库里的缓冲型 stage，统一遵守以下作用域：
+
+```text
+stage instance + receiver_name + match_key
+```
+
+也就是：
+
+```text
+buffer_key = receiver_name + "|" + match_key
+```
+
+这样做的目的不是改变 selector/task_set/task 的职责，而是避免：
+
+- 不同 receiver 进入同一个 task 时共用同一缓冲区；
+- 同一 receiver 内不同子流（由 match key 区分）共用同一缓冲区。

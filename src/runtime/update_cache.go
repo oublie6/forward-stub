@@ -722,6 +722,7 @@ func (st *Store) waitReceiversStartInvoked(started []<-chan struct{}) {
 func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingConfig, counter *logx.TrafficCounter) error {
 	st.mu.RLock()
 	compiled := st.pipelines
+	pipelineCfg := st.pipelineCfg
 	st.mu.RUnlock()
 
 	pipes := make([]*pipeline.Pipeline, 0, len(tc.Pipelines))
@@ -730,7 +731,11 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 		if !ok {
 			return fmt.Errorf("task %s pipeline %s not found", name, pn)
 		}
-		pipes = append(pipes, cp.P)
+		localPipe, err := buildTaskPipelineInstance(cp, pipelineCfg[pn])
+		if err != nil {
+			return fmt.Errorf("task %s pipeline %s build task-scoped instance failed: %w", name, pn, err)
+		}
+		pipes = append(pipes, localPipe)
 	}
 
 	sends := make([]sender.Sender, 0, len(tc.Senders))
@@ -773,6 +778,45 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 	st.retainTaskStageRefsLocked(name, tc.Pipelines)
 	st.mu.Unlock()
 	return nil
+}
+
+func buildTaskPipelineInstance(cp *CompiledPipeline, cfgs []config.StageConfig) (*pipeline.Pipeline, error) {
+	if cp == nil || cp.P == nil {
+		return nil, fmt.Errorf("compiled pipeline is nil")
+	}
+	if len(cfgs) == 0 {
+		return cp.P, nil
+	}
+	stages := make([]pipeline.StageFunc, len(cp.P.Stages))
+	copy(stages, cp.P.Stages)
+	needClone := false
+	for i, sc := range cfgs {
+		if !stageNeedsTaskScopedInstance(sc.Type) {
+			continue
+		}
+		if i >= len(stages) {
+			return nil, fmt.Errorf("stage index %d out of range", i)
+		}
+		fn, err := compileStage(sc)
+		if err != nil {
+			return nil, err
+		}
+		stages[i] = fn
+		needClone = true
+	}
+	if !needClone {
+		return cp.P, nil
+	}
+	return &pipeline.Pipeline{Name: cp.P.Name, Stages: stages}, nil
+}
+
+func stageNeedsTaskScopedInstance(stageType string) bool {
+	switch stageType {
+	case "stream_packets_to_file_segments":
+		return true
+	default:
+		return false
+	}
 }
 
 // removeTask 从运行态移除任务并释放关联引用。

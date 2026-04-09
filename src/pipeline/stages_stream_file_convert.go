@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"forward-stub/src/logx"
 	"forward-stub/src/packet"
 )
 
@@ -56,9 +57,12 @@ type streamSegmentState struct {
 	seq         uint64
 	currentID   string
 	currentPath string
-	startAt     time.Time
 	segmentMeta packet.Meta
 	segmentBuf  []byte
+}
+
+func buildBufferKey(receiverName, matchKey string) string {
+	return receiverName + "|" + matchKey
 }
 
 // StreamPacketsToFileSegments 将实时数据包按滚动分段语义组装为 file_chunk 包。
@@ -78,19 +82,18 @@ func StreamPacketsToFileSegments(segmentSize int, chunkSize int, dir string, fil
 	if baseDir == "" {
 		baseDir = "stream"
 	}
-	st := &streamSegmentState{}
+	states := make(map[string]*streamSegmentState)
 	var mu sync.Mutex
 
-	newSegment := func(now time.Time) {
+	newSegment := func(st *streamSegmentState, now time.Time) {
 		st.seq++
-		st.startAt = now
 		name := fmt.Sprintf("%s_%s_%06d.bin", prefix, now.Format(layout), st.seq)
 		st.currentPath = path.Join(baseDir, name)
 		st.currentID = fmt.Sprintf("%s|%d", st.currentPath, now.UnixNano())
 		st.segmentBuf = nil
 	}
 
-	buildChunk := func(meta packet.Meta, b []byte, eof bool, total int64, offset int64) *packet.Packet {
+	buildChunk := func(st *streamSegmentState, meta packet.Meta, b []byte, eof bool, total int64, offset int64) *packet.Packet {
 		payload, rel := packet.CopyFrom(b)
 		meta.TransferID = st.currentID
 		meta.FileName = path.Base(st.currentPath)
@@ -116,15 +119,37 @@ func StreamPacketsToFileSegments(segmentSize int, chunkSize int, dir string, fil
 			if len(p.Payload) == 0 {
 				continue
 			}
+			receiverName := strings.TrimSpace(p.Meta.ReceiverName)
+			if receiverName == "" {
+				logx.L().Errorw("stream_packets_to_file_segments 拒绝进入缓冲：receiver_name 为空",
+					"match_key", p.Meta.MatchKey,
+					"kind", p.Kind,
+				)
+				continue
+			}
+			matchKey := strings.TrimSpace(p.Meta.MatchKey)
+			if matchKey == "" {
+				logx.L().Errorw("stream_packets_to_file_segments 拒绝进入缓冲：match_key 为空",
+					"receiver_name", receiverName,
+					"kind", p.Kind,
+				)
+				continue
+			}
+			bufferKey := buildBufferKey(receiverName, matchKey)
+			st := states[bufferKey]
+			if st == nil {
+				st = &streamSegmentState{}
+				states[bufferKey] = st
+			}
 			if st.currentID == "" {
-				newSegment(time.Now())
+				newSegment(st, time.Now())
 				st.segmentMeta = p.Meta
 			}
 			buf := p.Payload
 			for len(buf) > 0 {
 				room := segmentSize - len(st.segmentBuf)
 				if room <= 0 {
-					newSegment(time.Now())
+					newSegment(st, time.Now())
 					st.segmentMeta = p.Meta
 					room = segmentSize
 				}
@@ -146,7 +171,7 @@ func StreamPacketsToFileSegments(segmentSize int, chunkSize int, dir string, fil
 						n = len(st.segmentBuf) - off
 					}
 					eof := off+n == len(st.segmentBuf)
-					out = append(out, buildChunk(st.segmentMeta, st.segmentBuf[off:off+n], eof, int64(len(st.segmentBuf)), offset))
+					out = append(out, buildChunk(st, st.segmentMeta, st.segmentBuf[off:off+n], eof, int64(len(st.segmentBuf)), offset))
 					offset += int64(n)
 				}
 
@@ -156,7 +181,7 @@ func StreamPacketsToFileSegments(segmentSize int, chunkSize int, dir string, fil
 					st.segmentBuf = nil
 					st.segmentMeta = packet.Meta{}
 					if len(buf) > 0 {
-						newSegment(time.Now())
+						newSegment(st, time.Now())
 						st.segmentMeta = p.Meta
 					}
 				}
