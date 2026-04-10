@@ -784,39 +784,7 @@ func buildTaskPipelineInstance(cp *CompiledPipeline, cfgs []config.StageConfig) 
 	if cp == nil || cp.P == nil {
 		return nil, fmt.Errorf("compiled pipeline is nil")
 	}
-	if len(cfgs) == 0 {
-		return cp.P, nil
-	}
-	stages := make([]pipeline.StageFunc, len(cp.P.Stages))
-	copy(stages, cp.P.Stages)
-	needClone := false
-	for i, sc := range cfgs {
-		if !stageNeedsTaskScopedInstance(sc.Type) {
-			continue
-		}
-		if i >= len(stages) {
-			return nil, fmt.Errorf("stage index %d out of range", i)
-		}
-		fn, err := compileStage(sc)
-		if err != nil {
-			return nil, err
-		}
-		stages[i] = fn
-		needClone = true
-	}
-	if !needClone {
-		return cp.P, nil
-	}
-	return &pipeline.Pipeline{Name: cp.P.Name, Stages: stages}, nil
-}
-
-func stageNeedsTaskScopedInstance(stageType string) bool {
-	switch stageType {
-	case "stream_packets_to_file_segments":
-		return true
-	default:
-		return false
-	}
+	return cp.P, nil
 }
 
 // removeTask 从运行态移除任务并释放关联引用。

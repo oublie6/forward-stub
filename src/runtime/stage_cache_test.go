@@ -12,8 +12,8 @@ import (
 func TestCompilePipelinesWithStageCacheReuseBySignature(t *testing.T) {
 	st := NewStore()
 	cfg := map[string][]config.StageConfig{
-		"p1": {{Type: "split_file_chunk_to_packets", PacketSize: 1024}},
-		"p2": {{Type: "split_file_chunk_to_packets", PacketSize: 1024}},
+		"p1": {{Type: "match_offset_bytes", Offset: 0, Hex: "aabb"}},
+		"p2": {{Type: "match_offset_bytes", Offset: 0, Hex: "aabb"}},
 	}
 
 	compiled, sigsByPipeline, err := st.compilePipelinesWithStageCache(cfg)
@@ -35,7 +35,7 @@ func TestStageCacheTaskRefsTrackAddAndRemove(t *testing.T) {
 	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
 	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
 
-	sig := `{"type":"split_file_chunk_to_packets","packet_size":1024}`
+	sig := `{"type":"match_offset_bytes","offset":0,"hex":"aabb"}`
 	st.stageCache[sig] = &StageCacheEntry{Sig: sig, Tasks: make(map[string]struct{})}
 	st.pipelineStageSigs["p1"] = []string{sig}
 

@@ -9,7 +9,7 @@
 补充说明：
 
 - receiver 在构造 packet metadata 时，会同时写入 `receiver_name` 与 `match_key`。
-- `receiver_name` 仅用于 pipeline 内部缓冲型 stage 的分桶，不参与 selector 主路由。
+- `receiver_name` 不参与 selector 主路由。
 
 ### 1.1 UDP gnet receiver
 
@@ -253,17 +253,11 @@
 - sender **不会**参与 selector 匹配。
 - route stage 只会影响 task 内部的 sender 选择，不会影响 receiver 到 task 的主路由。
 
-补充（文件与实时数据互转边界）：
+补充（职责边界）：
 
-- `file -> realtime`：SFTP receiver 产出 `file_chunk`，由 pipeline `split_file_chunk_to_packets` 做边界转换，再交给实时 sender。
-- `realtime -> file`：实时 receiver 产出 stream packet，由 pipeline `stream_packets_to_file_segments` 组装为滚动 `file_chunk`，再交给 SFTP sender。
-- sender 仍只负责协议输出；边界适配（切分/组段/命名规则）放在 stage 层。
-- 这次改造不是为了新增协议互转能力；当前架构本身已支持上述互转。
-- 新增/调整的缓冲型 stage 只负责解决不同协议或不同输入来源带来的数据粒度不一致问题。
-- 缓冲作用域统一为 `stage instance + receiver_name + match_key`。
-- 其中 `buffer_key = receiver_name + "|" + match_key`。
-- `selector` 不参与缓冲分桶。
-- `task` 不显式参与 buffer key，因为 stage 实例天然是 task 专属的。
+- SFTP receiver 负责读取远端文件并产出 `file_chunk`。
+- SFTP sender 负责接收 `file_chunk` 并落盘。
+- pipeline 只负责已支持的通用处理 stage，不承担 file 与 realtime 之间的互转。
 
 ## 4. payload 日志配置在哪一层生效
 

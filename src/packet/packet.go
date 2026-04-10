@@ -33,7 +33,7 @@ type Meta struct {
 	// 用法：用于跨协议转发时保留溯源信息，便于审计与条件处理。
 	Proto Proto
 	// ReceiverName 是产出该 packet 的 receiver 配置名。
-	// 用法：缓冲型 stage 以它和 MatchKey 共同决定缓冲分桶，避免不同接入源混流。
+	// 用法：用于记录接入来源，便于 selector 路由后的排障与审计。
 	ReceiverName string
 	// Remote 是上游对端地址或远端资源标识。
 	// 用法：网络协议通常写 socket 对端；文件协议可写远端路径。

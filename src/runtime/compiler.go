@@ -106,24 +106,6 @@ func compileStage(sc config.StageConfig) (pipeline.StageFunc, error) {
 			return nil, err
 		}
 		return pipeline.ReplaceOffsetBytes(sc.Offset, b), nil
-	case "split_file_chunk_to_packets":
-		if sc.PacketSize <= 0 {
-			return nil, fmt.Errorf("split_file_chunk_to_packets requires packet_size > 0")
-		}
-		preserve := false
-		if sc.PreserveFileMeta != nil {
-			preserve = *sc.PreserveFileMeta
-		}
-		return pipeline.SplitFileChunkToPackets(sc.PacketSize, preserve), nil
-	case "stream_packets_to_file_segments":
-		if sc.SegmentSize <= 0 {
-			return nil, fmt.Errorf("stream_packets_to_file_segments requires segment_size > 0")
-		}
-		if sc.ChunkSize <= 0 {
-			return nil, fmt.Errorf("stream_packets_to_file_segments requires chunk_size > 0")
-		}
-		return pipeline.StreamPacketsToFileSegments(sc.SegmentSize, sc.ChunkSize, sc.Path, sc.FilePrefix, sc.TimeLayout), nil
-
 	case "route_offset_bytes_sender":
 		if len(sc.Cases) == 0 {
 			return nil, fmt.Errorf("route_offset_bytes_sender requires non-empty cases")
