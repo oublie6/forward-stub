@@ -117,9 +117,25 @@ func Run(args []string) int {
 	}
 	bootLog.Info("runtime_init", "运行时组件初始化完成", "配置版本", cfg.Version)
 
+	bootLog.Info("schedule_init", "开始初始化定时任务管理器")
+	scheduleMgr, err := initScheduleManager(rt)
+	if err != nil {
+		bootLog.Error("schedule_init", "定时任务管理器初始化失败", err)
+		shutdownRuntime(rt, bootLog)
+		return 1
+	}
+	if err := scheduleMgr.Start(runCtx); err != nil {
+		bootLog.Error("schedule_init", "定时任务管理器启动失败", err)
+		shutdownScheduleManager(scheduleMgr, bootLog)
+		shutdownRuntime(rt, bootLog)
+		return 1
+	}
+	bootLog.Info("schedule_init", "定时任务管理器初始化完成")
+
 	initialFingerprint, err := readConfigFingerprint(bizPath)
 	if err != nil {
 		bootLog.Error("config_watch", "业务配置指纹初始化失败", err, "业务配置文件", bizPath)
+		shutdownScheduleManager(scheduleMgr, bootLog)
 		shutdownRuntime(rt, bootLog)
 		return 1
 	}
@@ -152,6 +168,7 @@ func Run(args []string) int {
 				cancelWatch()
 				cancelRun()
 				stopGC()
+				shutdownScheduleManager(scheduleMgr, bootLog)
 				shutdownRuntime(rt, bootLog)
 				stopPprof()
 				bootLog.Info("shutdown_done", "优雅停机完成", "信号", s.String())
