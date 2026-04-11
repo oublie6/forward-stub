@@ -257,7 +257,7 @@
 
 - SFTP receiver 负责读取远端文件并产出 `file_chunk`。
 - SFTP sender 负责接收 `file_chunk` 并落盘。
-- pipeline 只负责已支持的通用处理 stage，不承担 file 与 realtime 之间的互转。
+- pipeline 只负责 task 内部按当前支持的 stage 处理 packet。
 
 ## 4. payload 日志配置在哪一层生效
 

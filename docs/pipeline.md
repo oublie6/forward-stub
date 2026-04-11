@@ -16,7 +16,7 @@ receiver -> selector -> task -> pipeline -> sender
 
 补充说明：
 
-- pipeline 只负责 task 内部的数据处理，不承担 file 与 realtime 之间的互转职责。
+- pipeline 只负责 task 内部按当前支持的 stage 处理 packet。
 
 ## 2. 当前支持的 stage 类型
 

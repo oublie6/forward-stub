@@ -12,7 +12,7 @@ func TestCompilePipelineRejectsRemovedFileStages(t *testing.T) {
 	tests := []config.StageConfig{
 		{Type: "split_file_chunk_to_packets"},
 		{Type: "stream_packets_to_file_segments"},
-		{Type: "mark_as_file_chunk", Path: "/tmp/a.bin"},
+		{Type: "mark_as_file_chunk"},
 		{Type: "clear_file_meta"},
 	}
 	for _, sc := range tests {
