@@ -551,12 +551,6 @@ type StageConfig struct {
 	// Hex 是十六进制匹配/写入参数。
 	// 用法：填写无空格 hex 串，供匹配/替换类 stage 使用。
 	Hex string `json:"hex,omitempty"`
-	// Path 是文件语义 stage 使用的目标路径。
-	// 用法：用于写文件、改路径等场景，支持绝对或相对路径。
-	Path string `json:"path,omitempty"`
-	// Bool 是布尔开关参数（指针用于区分未配置与 false）。
-	// 用法：需要三态语义（未设/true/false）时通过该字段表达。
-	Bool *bool `json:"bool,omitempty"`
 	// Cases 是“匹配值(hex) -> sender 名称”的分流表。
 	// 用法：用于 switch 类路由 stage，将某个固定字段映射到目标 sender。
 	Cases map[string]string `json:"cases,omitempty"`
