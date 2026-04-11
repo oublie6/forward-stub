@@ -15,6 +15,7 @@ const (
 	ProtoKafka  Proto = 3
 	ProtoSFTP   Proto = 4
 	ProtoSkyDDS Proto = 5
+	ProtoLocal  Proto = 6
 )
 
 const (

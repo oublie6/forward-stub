@@ -1,0 +1,91 @@
+{
+  "version": 1001,
+  "receivers": {
+    "rx_chain_monitor": {
+      "type": "local_timer",
+      "selector": "sel_local_timer",
+      "match_key": {
+        "mode": "fixed",
+        "fixed_value": "chain-monitor"
+      },
+      "generator": {
+        "interval": "500ms",
+        "payload_format": "hex",
+        "payload_data": "01020304aabbccdd",
+        "remote": "local_timer:chain-monitor",
+        "local": "forward-stub"
+      }
+    },
+    "rx_load_test": {
+      "type": "local_timer",
+      "selector": "sel_local_timer",
+      "match_key": {
+        "mode": "fixed",
+        "fixed_value": "load-test"
+      },
+      "generator": {
+        "rate_per_sec": 1000,
+        "tick_interval": "100ms",
+        "payload_format": "text",
+        "payload_data": "load-test-fixed-payload",
+        "remote": "local_timer:load-test",
+        "local": "forward-stub"
+      }
+    }
+  },
+  "selectors": {
+    "sel_local_timer": {
+      "matches": {
+        "local|fixed=chain-monitor": "ts_chain_monitor",
+        "local|fixed=load-test": "ts_load_test"
+      }
+    }
+  },
+  "task_sets": {
+    "ts_chain_monitor": [
+      "task_chain_monitor"
+    ],
+    "ts_load_test": [
+      "task_load_test"
+    ]
+  },
+  "senders": {
+    "tx_chain_monitor_udp": {
+      "type": "udp_unicast",
+      "remote": "127.0.0.1:21000",
+      "local_ip": "0.0.0.0",
+      "local_port": 20000,
+      "concurrency": 1
+    },
+    "tx_load_test_udp": {
+      "type": "udp_unicast",
+      "remote": "127.0.0.1:22000",
+      "local_ip": "0.0.0.0",
+      "local_port": 20001,
+      "concurrency": 1
+    }
+  },
+  "pipelines": {
+    "pipe_passthrough": []
+  },
+  "tasks": {
+    "task_chain_monitor": {
+      "pipelines": [
+        "pipe_passthrough"
+      ],
+      "senders": [
+        "tx_chain_monitor_udp"
+      ],
+      "execution_model": "fastpath"
+    },
+    "task_load_test": {
+      "pipelines": [
+        "pipe_passthrough"
+      ],
+      "senders": [
+        "tx_load_test_udp"
+      ],
+      "execution_model": "fastpath"
+    }
+  }
+}

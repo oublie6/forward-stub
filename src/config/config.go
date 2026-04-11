@@ -46,6 +46,7 @@ const (
 	DefaultSkyDDSWaitTimeout         = "500ms"
 	DefaultSkyDDSDrainMaxItems       = 2048
 	DefaultSkyDDSDrainBufferBytes    = 4 << 20
+	DefaultLocalTimerTickInterval    = "100ms"
 )
 
 var DefaultKafkaReceiverBalancers = []string{"cooperative_sticky"}
@@ -195,11 +196,42 @@ type ReceiverMatchKeyConfig struct {
 	FixedValue string `json:"fixed_value,omitempty"`
 }
 
+// LocalGeneratorConfig 描述本地定时造数 receiver 的固定报文参数。
+type LocalGeneratorConfig struct {
+	// Interval 是固定间隔模式的发送周期，如 500ms。
+	// 用法：与 rate_per_sec 二选一；配置后每个周期生成一帧固定 payload。
+	Interval string `json:"interval,omitempty"`
+	// RatePerSec 是目标速率模式的每秒帧数。
+	// 用法：与 interval 二选一；运行时按 tick_interval 平滑摊分发送。
+	RatePerSec int `json:"rate_per_sec,omitempty"`
+	// TickInterval 是速率模式内部调度粒度。
+	// 用法：为空时默认 100ms；只影响调度平滑度，不改变长期速率。
+	TickInterval string `json:"tick_interval,omitempty"`
+	// PayloadFormat 指定 PayloadData 的编码格式：hex/text/base64。
+	// 用法：第一版只支持固定 payload，不做动态拼装。
+	PayloadFormat string `json:"payload_format,omitempty"`
+	// PayloadData 是固定报文内容。
+	// 用法：启动时解析一次，之后每帧从该字节模板复制。
+	PayloadData string `json:"payload_data,omitempty"`
+	// StartDelay 是启动后首帧前的可选延迟。
+	// 用法：用于错峰启动或等待下游就绪。
+	StartDelay string `json:"start_delay,omitempty"`
+	// TotalPackets 限制本次启动最多生成的包数；0 表示无限发送。
+	// 用法：常用于测试、链监探测或有限压测批次。
+	TotalPackets int64 `json:"total_packets,omitempty"`
+	// Remote 写入 packet.Meta.Remote。
+	// 用法：给下游审计和日志保留本地来源标识。
+	Remote string `json:"remote,omitempty"`
+	// Local 写入 packet.Meta.Local。
+	// 用法：给下游审计和日志保留本地生成端标识。
+	Local string `json:"local,omitempty"`
+}
+
 // ReceiverConfig 描述单个接收端实例。
 type ReceiverConfig struct {
-	// Type 指定接收端实现类型（udp_gnet/tcp_gnet/kafka/sftp）。
+	// Type 指定接收端实现类型（udp_gnet/tcp_gnet/kafka/sftp/dds_skydds/local_timer）。
 	// 用法：不同 type 决定下列字段的生效范围，应按协议填写配套参数。
-	Type string `json:"type"` // udp_gnet | tcp_gnet | kafka | sftp | dds_skydds
+	Type string `json:"type"` // udp_gnet | tcp_gnet | kafka | sftp | dds_skydds | local_timer
 	// Listen 为监听地址；Kafka 场景下为 brokers 列表。
 	// 用法：udp/tcp 填 host:port；kafka 填逗号分隔 broker；sftp 填服务器 host:port。
 	Listen string `json:"listen"`
@@ -224,6 +256,9 @@ type ReceiverConfig struct {
 	// MatchKey 描述该 receiver 的 match key 生成策略。
 	// 用法：配置会在 receiver 初始化或热重载时编译成专用 builder；留空时保持当前协议的兼容默认行为。
 	MatchKey ReceiverMatchKeyConfig `json:"match_key,omitempty"`
+	// Generator 是 local_timer receiver 的本地固定报文生成参数。
+	// 用法：仅 Type=local_timer 时生效，生成的 packet 继续进入 selector->task->sender 主链路。
+	Generator LocalGeneratorConfig `json:"generator,omitempty"`
 	// Topic 是 Kafka 消费主题名。
 	// 用法：Type=kafka 时必填，指向要订阅的数据流。
 	Topic string `json:"topic,omitempty"`

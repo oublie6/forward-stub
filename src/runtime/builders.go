@@ -31,6 +31,8 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 			return nil, fmt.Errorf("receiver %s unknown frame %s", name, rc.Frame)
 		}
 		return receiver.NewGnetTCP(name, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, rc.SocketRecvBuffer, fr, gnetLogLevel, rc.MatchKey)
+	case "local_timer":
+		return receiver.NewLocalTimerReceiver(name, rc)
 	case "kafka":
 		return receiver.NewKafkaReceiver(name, rc)
 	case "sftp":

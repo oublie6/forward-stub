@@ -130,6 +130,10 @@ func (c *Config) Validate() error {
 		}
 		switch r.Type {
 		case "udp_gnet", "tcp_gnet":
+		case "local_timer":
+			if err := validateLocalTimerReceiver(rn, r); err != nil {
+				return err
+			}
 		case "kafka":
 			if r.Listen == "" {
 				return fmt.Errorf("receiver %s kafka requires listen as brokers csv", rn)
@@ -341,6 +345,12 @@ func validateReceiverMatchKey(name string, rc ReceiverConfig) error {
 		default:
 			return fmt.Errorf("receiver %s: %w", name, ErrUnsupportedReceiverMatchKeyMode(rc.Type, mode))
 		}
+	case "local_timer":
+		switch mode {
+		case "", "fixed":
+		default:
+			return fmt.Errorf("receiver %s: %w", name, ErrUnsupportedReceiverMatchKeyMode(rc.Type, mode))
+		}
 	default:
 		return fmt.Errorf("receiver %s unknown type %s", name, rc.Type)
 	}
@@ -349,6 +359,45 @@ func validateReceiverMatchKey(name string, rc ReceiverConfig) error {
 	}
 	if mode != "fixed" && strings.TrimSpace(fixedValue) != "" {
 		return fmt.Errorf("receiver %s %s match_key.fixed_value 仅可在 mode=fixed 时配置", name, rc.Type)
+	}
+	return nil
+}
+
+func validateLocalTimerReceiver(name string, rc ReceiverConfig) error {
+	g := rc.Generator
+	if strings.TrimSpace(g.PayloadData) == "" {
+		return fmt.Errorf("receiver %s local_timer generator payload_data required", name)
+	}
+	switch strings.TrimSpace(g.PayloadFormat) {
+	case "hex", "text", "base64":
+	default:
+		return fmt.Errorf("receiver %s local_timer generator payload_format must be one of hex/text/base64", name)
+	}
+	if g.RatePerSec < 0 {
+		return fmt.Errorf("receiver %s local_timer generator rate_per_sec must be > 0", name)
+	}
+	hasInterval := strings.TrimSpace(g.Interval) != ""
+	hasRate := g.RatePerSec > 0
+	if hasInterval == hasRate {
+		return fmt.Errorf("receiver %s local_timer generator interval and rate_per_sec must be configured exactly one", name)
+	}
+	if hasInterval {
+		if err := validatePositiveDurationByType("receiver", name, "local_timer", "generator.interval", g.Interval); err != nil {
+			return err
+		}
+	}
+	if strings.TrimSpace(g.TickInterval) != "" {
+		if err := validatePositiveDurationByType("receiver", name, "local_timer", "generator.tick_interval", g.TickInterval); err != nil {
+			return err
+		}
+	}
+	if strings.TrimSpace(g.StartDelay) != "" {
+		if err := validatePositiveDurationByType("receiver", name, "local_timer", "generator.start_delay", g.StartDelay); err != nil {
+			return err
+		}
+	}
+	if g.TotalPackets < 0 {
+		return fmt.Errorf("receiver %s local_timer generator total_packets must be >= 0", name)
 	}
 	return nil
 }
