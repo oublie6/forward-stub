@@ -29,7 +29,7 @@ func TestExampleSystemBusinessPairsParseAndValidate(t *testing.T) {
 			if err != nil {
 				t.Fatalf("load config pair: %v", err)
 			}
-			cfg.ApplyDefaults()
+			cfg.ApplyDefaults(BusinessDefaultsConfig{})
 			if err := cfg.Validate(); err != nil {
 				t.Fatalf("validate config pair: %v", err)
 			}

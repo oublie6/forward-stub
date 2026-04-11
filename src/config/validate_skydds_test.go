@@ -16,7 +16,7 @@ func baseSkyDDSConfig() Config {
 		Pipelines: map[string][]StageConfig{"p1": {}},
 		Tasks:     map[string]TaskConfig{"t1": {Pipelines: []string{"p1"}, Senders: []string{"tx"}, ExecutionModel: "fastpath"}},
 	}
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 	return cfg
 }
 

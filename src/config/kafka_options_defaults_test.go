@@ -11,7 +11,7 @@ func TestApplyDefaultsSetsKafkaSenderOptionDefaults(t *testing.T) {
 		Pipelines: map[string][]StageConfig{"p1": {}},
 		Tasks:     map[string]TaskConfig{"t1": {Pipelines: []string{"p1"}, Senders: []string{"k1"}}},
 	}
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 
 	got := cfg.Senders["k1"]
 	if got.DialTimeout != DefaultKafkaDialTimeout ||
@@ -36,7 +36,7 @@ func TestApplyDefaultsSetsKafkaReceiverOptionDefaults(t *testing.T) {
 		Pipelines: map[string][]StageConfig{"p1": {}},
 		Tasks:     map[string]TaskConfig{"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}}},
 	}
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 
 	got := cfg.Receivers["r1"]
 	if got.DialTimeout != DefaultKafkaDialTimeout ||

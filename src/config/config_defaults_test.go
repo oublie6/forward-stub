@@ -4,7 +4,7 @@ import "testing"
 
 func TestApplyDefaultsSetsControlDefaults(t *testing.T) {
 	cfg := Config{}
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 	if cfg.Control.ConfigWatchInterval != DefaultConfigWatchInterval {
 		t.Fatalf("unexpected config_watch_interval default: %q", cfg.Control.ConfigWatchInterval)
 	}
@@ -15,7 +15,7 @@ func TestApplyDefaultsSetsControlDefaults(t *testing.T) {
 
 func TestApplyDefaultsKeepsDisabledPprofPort(t *testing.T) {
 	cfg := Config{Control: ControlConfig{PprofPort: -1}}
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 	if cfg.Control.PprofPort != -1 {
 		t.Fatalf("unexpected pprof_port after defaults: %d", cfg.Control.PprofPort)
 	}
@@ -23,7 +23,7 @@ func TestApplyDefaultsKeepsDisabledPprofPort(t *testing.T) {
 
 func TestApplyDefaultsSetsReceiverMulticoreWhenUnset(t *testing.T) {
 	cfg := Config{Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000"}}}
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 	rc := cfg.Receivers["r1"]
 	if rc.Multicore == nil || !*rc.Multicore {
 		t.Fatalf("unexpected receiver multicore default: %+v", rc.Multicore)
@@ -36,7 +36,7 @@ func TestApplyDefaultsSetsTaskChannelQueueSizeIndependently(t *testing.T) {
 			"t1": {ExecutionModel: "channel"},
 		},
 	}
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 	if got := cfg.Tasks["t1"].ChannelQueueSize; got != DefaultTaskChannelQueueSize {
 		t.Fatalf("unexpected channel_queue_size default: got=%d want=%d", got, DefaultTaskChannelQueueSize)
 	}
@@ -47,7 +47,7 @@ func TestApplyDefaultsSetsSocketBufferDefaults(t *testing.T) {
 		Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000"}},
 		Senders:   map[string]SenderConfig{"s1": {Type: "udp_unicast", Remote: "127.0.0.1:9001", LocalPort: 9002}},
 	}
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 
 	if got := cfg.Receivers["r1"].SocketRecvBuffer; got != DefaultReceiverSocketRecvBuffer {
 		t.Fatalf("unexpected receiver socket_recv_buffer default: %d", got)
@@ -62,7 +62,7 @@ func TestApplyDefaultsPreservesExplicitSocketBufferValues(t *testing.T) {
 		Receivers: map[string]ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":9000", SocketRecvBuffer: 2 << 20}},
 		Senders:   map[string]SenderConfig{"s1": {Type: "udp_unicast", Remote: "127.0.0.1:9001", LocalPort: 9002, SocketSendBuffer: 3 << 20}},
 	}
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 
 	if got := cfg.Receivers["r1"].SocketRecvBuffer; got != 2<<20 {
 		t.Fatalf("receiver socket_recv_buffer should be preserved: %d", got)

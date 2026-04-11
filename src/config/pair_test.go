@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestLoadLocalPairAppliesSystemBusinessDefaults(t *testing.T) {
+func TestLoadLocalPairDoesNotApplySystemBusinessDefaults(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.json")
 	businessPath := filepath.Join(dir, "business.json")
@@ -22,11 +22,11 @@ func TestLoadLocalPairAppliesSystemBusinessDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load local pair: %v", err)
 	}
-	if cfg.Tasks["t1"].PoolSize != 64 || cfg.Tasks["t1"].ExecutionModel != "pool" {
-		t.Fatalf("unexpected task defaults in merged cfg: %+v", cfg.Tasks["t1"])
+	if cfg.Tasks["t1"].PoolSize != 0 || cfg.Tasks["t1"].ExecutionModel != "" {
+		t.Fatalf("LoadLocalPair should only merge raw config, got task: %+v", cfg.Tasks["t1"])
 	}
-	if cfg.Senders["s1"].Concurrency != 3 {
-		t.Fatalf("unexpected sender defaults in merged cfg: %+v", cfg.Senders["s1"])
+	if cfg.Senders["s1"].Concurrency != 0 {
+		t.Fatalf("LoadLocalPair should not apply sender defaults: %+v", cfg.Senders["s1"])
 	}
 }
 

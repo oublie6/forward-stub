@@ -46,7 +46,7 @@ func TestDocumentedTaskExecutionModelExamplesValidate(t *testing.T) {
 	for _, tc := range tests {
 		cfg := baseConfigForTaskModel()
 		cfg.Tasks["t"] = tc
-		cfg.ApplyDefaults()
+		cfg.ApplyDefaults(BusinessDefaultsConfig{})
 		if err := cfg.Validate(); err != nil {
 			t.Fatalf("expected documented task config valid for %+v: %v", tc, err)
 		}

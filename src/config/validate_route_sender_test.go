@@ -19,7 +19,7 @@ func TestValidateRouteStageTargetsInTaskSenders(t *testing.T) {
 			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}},
 		},
 	}
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 	if err := cfg.Validate(); err == nil {
 		t.Fatalf("expected validate error for route target outside task senders")
 	}

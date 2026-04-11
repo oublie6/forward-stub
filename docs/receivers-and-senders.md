@@ -82,7 +82,7 @@
 
 #### 1.3.2 Kafka receiver 默认值、启动与热重载
 
-- `dial_timeout`、`conn_idle_timeout`、`metadata_max_age`、`retry_backoff`、`session_timeout`、`heartbeat_interval`、`rebalance_timeout`、`balancers`、`auto_commit`、`auto_commit_interval`、`fetch_max_partition_bytes`、`isolation_level` 会先在 `ApplyDefaults()` 层回写。
+- `dial_timeout`、`conn_idle_timeout`、`metadata_max_age`、`retry_backoff`、`session_timeout`、`heartbeat_interval`、`rebalance_timeout`、`balancers`、`auto_commit`、`auto_commit_interval`、`fetch_max_partition_bytes`、`isolation_level` 会先在统一默认值入口回写。
 - `group_id`、`fetch_min_bytes`、`fetch_max_bytes`、`fetch_max_wait_ms` 则在 `NewKafkaReceiver()` 中回退并映射到 `kgo`。
 - `Start()` 时会创建 receiver 统计对象；真正处理到 record 后，才按 `record.Value` 长度累计字节。
 - 热重载时，只要 Kafka receiver 配置发生变化，就会重建 `kgo.Client`、重新编译 match key builder，并按“新实例先启动、旧实例后停止”的顺序切换。

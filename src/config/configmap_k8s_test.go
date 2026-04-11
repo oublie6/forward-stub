@@ -28,7 +28,7 @@ func TestK8sConfigMapSplitConfigIsValid(t *testing.T) {
 	}
 
 	cfg := sys.Merge(biz)
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("config merged from k8s configmap is semantically invalid: %v", err)
 	}

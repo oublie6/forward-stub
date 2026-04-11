@@ -124,3 +124,45 @@ func TestLoadConfigPairAPIOnlyBusinessAndMergeSystem(t *testing.T) {
 		t.Fatalf("expected api business-only schema violation")
 	}
 }
+
+func TestLoadConfigPairNormalizesFinalBusinessOnlyOnceAfterAPIFetch(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(pairBusinessConfigJSON(5, false)))
+	}))
+	defer ts.Close()
+
+	dir := t.TempDir()
+	systemPath := filepath.Join(dir, "system.json")
+	businessPath := filepath.Join(dir, "business.json")
+
+	systemJSON := `{
+		"control":{"api":"` + ts.URL + `"},
+		"logging":{"level":"info"},
+		"business_defaults":{"task":{"pool_size":64},"sender":{"concurrency":4}}
+	}`
+	if err := os.WriteFile(systemPath, []byte(systemJSON), 0o644); err != nil {
+		t.Fatalf("write system config: %v", err)
+	}
+	localBusiness := `{"version":1,"receivers":{"r_local":{"type":"udp_gnet","listen":":9001","selector":"sel1"}},"selectors":{"sel1":{"default_task_set":"ts1"}},"task_sets":{"ts1":["t1"]},"senders":{"s1":{"type":"tcp_gnet","remote":"127.0.0.1:9002","concurrency":8}},"pipelines":{"p1":[]},"tasks":{"t1":{"pool_size":32,"pipelines":["p1"],"senders":["s1"]}}}`
+	if err := os.WriteFile(businessPath, []byte(localBusiness), 0o644); err != nil {
+		t.Fatalf("write business config: %v", err)
+	}
+
+	_, biz, cfg, err := loadConfigPair(context.Background(), systemPath, businessPath)
+	if err != nil {
+		t.Fatalf("load config pair: %v", err)
+	}
+
+	if biz.Version != 5 || cfg.Version != 5 {
+		t.Fatalf("expected remote business to be final, biz=%d cfg=%d", biz.Version, cfg.Version)
+	}
+	if _, ok := cfg.Receivers["r_local"]; ok {
+		t.Fatalf("local business should not leak into final config after api fetch")
+	}
+	if got := cfg.Tasks["t1"].PoolSize; got != 64 {
+		t.Fatalf("final remote business should receive system business_defaults once, got pool_size=%d", got)
+	}
+	if got := cfg.Senders["s1"].Concurrency; got != 4 {
+		t.Fatalf("final remote business should receive sender business_defaults once, got concurrency=%d", got)
+	}
+}
