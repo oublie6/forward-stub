@@ -412,15 +412,8 @@
 | `type` | string | 全部 stage | stage 类型名。 |
 | `offset` | int | 偏移类 stage | 读取或写入的起始字节偏移。 |
 | `hex` | string | `match_offset_bytes` / `replace_offset_bytes` / `route_offset_bytes_sender.cases` 的 key | 无空格十六进制字符串。 |
-| `path` | string | `stream_packets_to_file_segments` | 生成滚动文件段时使用的目录路径。 |
 | `cases` | map[string]string | `route_offset_bytes_sender` | 十六进制字节序列到 sender 名称的映射。 |
 | `default_sender` | string | `route_offset_bytes_sender` | 未命中 `cases` 时使用的默认 sender。 |
-| `packet_size` | int | `split_file_chunk_to_packets` | file_chunk 拆成 stream packet 时的单包大小。 |
-| `preserve_file_meta` | bool | `split_file_chunk_to_packets` | 是否在拆分后保留文件元数据。 |
-| `segment_size` | int | `stream_packets_to_file_segments` | stream 聚合成文件段时的滚动阈值。 |
-| `chunk_size` | int | `stream_packets_to_file_segments` | 每个文件段输出为 file_chunk 时的分块大小。 |
-| `file_prefix` | string | `stream_packets_to_file_segments` | 生成文件名时的前缀。 |
-| `time_layout` | string | `stream_packets_to_file_segments` | 生成文件名时的时间格式。 |
 
 ### 10.2 当前支持的 stage 类型
 
@@ -428,8 +421,6 @@
 |---|---|---|
 | `match_offset_bytes` | 匹配指定偏移处的字节串；不匹配则终止该 pipeline。 | `hex` 必须是合法十六进制。 |
 | `replace_offset_bytes` | 把指定偏移处的内容替换为给定字节串。 | `hex` 必须是合法十六进制。 |
-| `split_file_chunk_to_packets` | 把一个 `file_chunk` packet 拆成多个 `stream` packet。 | `packet_size` 必须大于 0。 |
-| `stream_packets_to_file_segments` | 将连续 `stream` packet 组装成滚动文件段并输出 `file_chunk`。 | `segment_size` 和 `chunk_size` 必须都大于 0。 |
 | `route_offset_bytes_sender` | 从 payload 指定偏移读取固定长度字节，映射到 sender 名称，并写入 `packet.Meta.RouteSender`。 | `cases` 不能为空；每个 case key 的字节长度必须一致；case value 不能为空。 |
 
 ### 10.3 route stage 与 task.senders 的关系

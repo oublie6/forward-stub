@@ -122,16 +122,13 @@ task 决定的是“命中之后怎么处理”：
 - route stage 命中的 sender 必须已经在当前 `task.senders` 中列出。
 - route stage 不会改变 selector 的匹配结果。
 
-## 6.1 selector 与缓冲型 stage 的边界
+## 6.1 selector 与 pipeline stage 的边界
 
 这次改造里需要特别强调：
 
 - selector 仍然只负责 `match key -> task_set -> tasks` 的主路由。
-- 缓冲型 stage 的分桶不引入新的主路由模型。
-- 缓冲型 stage 统一按 `stage instance + receiver_name + match_key` 建立缓冲作用域。
-- 其中 `buffer_key = receiver_name + "|" + match_key`。
-- selector 不参与这个 key 的生成。
-- task 也不显式进入 key，因为 stage 实例天然是 task 专属的。
+- pipeline stage 只在 task 内部按顺序处理 packet。
+- selector 不参与 pipeline 内部处理细节。
 
 ## 7. match key 示例
 

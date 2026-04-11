@@ -236,15 +236,6 @@
         },
         "default_sender": "tx_kafka_hash"
       }
-    ],
-    "pipe_stream_archive": [
-      {
-        "type": "stream_packets_to_file_segments",
-        "segment_size": 1048576,
-        "chunk_size": 65536,
-        "path": "/archive",
-        "file_prefix": "orders"
-      }
     ]
   },
   "tasks": {
@@ -310,15 +301,6 @@
     "task_send_sftp": {
       "execution_model": "channel",
       "pipelines": [],
-      "senders": [
-        "tx_sftp"
-      ]
-    },
-    "task_archive_stream_to_sftp": {
-      "execution_model": "channel",
-      "pipelines": [
-        "pipe_stream_archive"
-      ],
       "senders": [
         "tx_sftp"
       ]
