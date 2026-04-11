@@ -42,12 +42,12 @@ sequenceDiagram
     bootstrap->>bootstrap: 解析 CLI 参数
     bootstrap->>config: loadConfigPair
     config->>config: LoadLocalPair
-    config->>config: Merge(system,business)
-    config->>config: ApplyDefaults
+    config->>config: system 默认化
     alt 配置了 control.api
         config->>config: FetchBusinessConfig
-        config->>config: Merge + ApplyDefaults
     end
+    config->>config: Merge(system,business)
+    config->>config: ApplyDefaults(system.business_defaults)
     config->>config: Validate
     config-->>bootstrap: 返回 sysCfg / bizCfg / cfg
 
@@ -89,10 +89,10 @@ sequenceDiagram
 `loadConfigPair` 是启动与热重载共用的配置主链路：
 
 1. `config.LoadLocalPair` 严格读取本地 system/business 配置；
-2. `sys.Merge(biz)` 合并两类配置；
-3. `ApplyDefaults()` 回填默认值；
-4. 若 `cfg.Control.API` 非空，则通过控制面拉取远端 business 配置；
-5. 再次执行 `Merge + ApplyDefaults()`；
+2. 先对 system 自身字段做默认值规范化；
+3. 若 `sys.Control.API` 非空，则通过控制面拉取远端 business 配置；
+4. `sys.Merge(biz)` 合并最终 system/business 配置，`Merge` 不回填默认值；
+5. `ApplyDefaults(system.business_defaults)` 对最终完整配置做一次默认值规范化；
 6. `Validate()` 做最终校验。
 
 关键边界：
@@ -299,7 +299,7 @@ sequenceDiagram
 
     watcher->>bootstrap: 触发 reload
     bootstrap->>config: loadConfigPair
-    config->>config: 重新加载 + ApplyDefaults + Validate
+    config->>config: 重新加载 + 最终默认化 + Validate
     bootstrap->>app: CheckSystemConfigStable
     app->>store: UpdateCache(nextCfg)
     store->>store: planBusinessDelta

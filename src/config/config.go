@@ -55,7 +55,7 @@ var DefaultKafkaReceiverBalancers = []string{"cooperative_sticky"}
 //
 // 使用方式：
 //  1. 通过 local_load 反序列化 JSON 到 Config；
-//  2. 调用 ApplyDefaults 填充通用默认值；
+//  2. 调用 ApplyDefaults 填充最终默认值；
 //  3. 调用 Validate 校验语义；
 //  4. 交给 runtime 编译并热切换组件。
 type Config struct {
@@ -95,31 +95,11 @@ type SystemConfig struct {
 	BusinessDefaults BusinessDefaultsConfig `json:"business_defaults,omitempty"`
 }
 
-// BusinessDefaultsConfig 定义 business.config 中可选字段的系统级默认值。
+// BusinessDefaultsConfig 复用正式 business 配置结构，表达可覆盖到 business 对象上的系统级默认模板。
 type BusinessDefaultsConfig struct {
-	Task     TaskDefaultConfig     `json:"task,omitempty"`
-	Receiver ReceiverDefaultConfig `json:"receiver,omitempty"`
-	Sender   SenderDefaultConfig   `json:"sender,omitempty"`
-}
-
-// TaskDefaultConfig 定义 task 的系统级默认值。
-type TaskDefaultConfig struct {
-	PoolSize           int    `json:"pool_size,omitempty"`
-	ChannelQueueSize   int    `json:"channel_queue_size,omitempty"`
-	ExecutionModel     string `json:"execution_model,omitempty"`
-	PayloadLogMaxBytes int    `json:"payload_log_max_bytes,omitempty"`
-}
-
-// ReceiverDefaultConfig 定义 receiver 的系统级默认值。
-type ReceiverDefaultConfig struct {
-	Multicore          *bool `json:"multicore,omitempty"`
-	NumEventLoop       int   `json:"num_event_loop,omitempty"`
-	PayloadLogMaxBytes int   `json:"payload_log_max_bytes,omitempty"`
-}
-
-// SenderDefaultConfig 定义 sender 的系统级默认值。
-type SenderDefaultConfig struct {
-	Concurrency int `json:"concurrency,omitempty"`
+	Task     TaskConfig     `json:"task,omitempty"`
+	Receiver ReceiverConfig `json:"receiver,omitempty"`
+	Sender   SenderConfig   `json:"sender,omitempty"`
 }
 
 // BusinessConfig 仅包含支持热重载的业务拓扑配置。

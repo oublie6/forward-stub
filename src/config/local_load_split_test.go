@@ -28,7 +28,7 @@ func TestLoadSystemAndBusinessLocal(t *testing.T) {
 	}
 
 	cfg := sys.Merge(biz)
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 	if cfg.Control.TimeoutSec != 9 {
 		t.Fatalf("unexpected timeout: %d", cfg.Control.TimeoutSec)
 	}

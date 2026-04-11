@@ -5,21 +5,36 @@
 当前启动链路以 `bootstrap.loadConfigPair -> app.Runtime -> runtime.UpdateCache` 为准，顺序如下：
 
 1. 解析 CLI 参数。
-2. 解析 `-config` / `-system-config` / `-business-config`，统一成 system + business 路径。
+2. 解析 `-system-config` / `-business-config`，得到 system + business 路径。
 3. 本地严格反序列化 system / business 配置；未知字段直接报错。
-4. 用 `SystemConfig.Merge(BusinessConfig)` 合并出完整 `config.Config`。
-5. 先应用 `business_defaults`。
-6. 再执行 `ApplyDefaults()`，回写代码层默认值。
-7. 若 `control.api` 非空，则拉取远端 business 配置并重新执行“合并 + 默认值回写”。
+4. 先对 system 自身字段做默认值规范化，保证控制面 API、请求超时、文件监听周期、pprof、logging 等 system 参数可用。
+5. 若 `control.api` 非空，则拉取远端 business 配置；否则使用本地 business。
+6. 用 `SystemConfig.Merge(BusinessConfig)` 合并出完整 `config.Config`。`Merge` 只做结构拼装，不回填默认值。
+7. 对最终完整配置调用一次 `ApplyDefaults(system.business_defaults)`，完成最终默认值规范化。
 8. 执行 `Validate()`。
 9. 初始化 logger、流量统计参数、GC 周期日志、pprof。
 10. 调用 `runtime.UpdateCache()`，编译 pipeline / selector，构建 sender / task / receiver，并启动 receiver。
 
 ## 2. 默认值分别在哪一层生效
 
-### 2.1 `business_defaults`
+### 2.1 system 默认值
 
-这是 system 配置的一部分，只给 business 中**未显式填写**的字段提供系统级默认值。
+system 配置只有两层来源：
+
+1. system 配置显式值。
+2. 代码硬编码默认值。
+
+它只覆盖 `control`、`logging` 等 system 自身字段，不读取 `business_defaults`。
+
+### 2.2 business 默认值
+
+business 配置只有三层来源：
+
+1. business 配置显式值。
+2. system 配置中的 `business_defaults`。
+3. 代码硬编码默认值。
+
+`business_defaults` 是 system 配置的一部分，只给 business 中**未显式填写**的字段提供系统级默认值。
 
 当前只覆盖三类对象：
 
@@ -29,9 +44,11 @@
 
 它不会生成新对象，也不会覆盖 business 已显式填写的值。
 
-### 2.2 `ApplyDefaults()` 代码层默认值
+`BusinessDefaultsConfig` 直接复用正式 `TaskConfig` / `ReceiverConfig` / `SenderConfig`，避免再维护一套影子默认值 schema。JSON 严格反序列化规则仍然使用正式配置结构。
 
-这是配置层的第二道默认值回写，主要处理以下内容：
+### 2.3 统一默认值入口
+
+`Config.ApplyDefaults(system.business_defaults)` 是最终默认值规范化总入口，主要处理以下内容：
 
 - `control.timeout_sec=5`
 - `control.config_watch_interval=2s`
@@ -46,7 +63,7 @@
 - `sender.socket_send_buffer=1073741824`
 - Kafka receiver / sender 的一组配置默认值
 
-### Kafka receiver 在 `ApplyDefaults()` 层回写的字段
+### Kafka receiver 在统一默认值入口回写的字段
 
 - `dial_timeout=10s`
 - `conn_idle_timeout=30s`
@@ -61,7 +78,7 @@
 - `fetch_max_partition_bytes=1048576`
 - `isolation_level=read_uncommitted`
 
-### Kafka sender 在 `ApplyDefaults()` 层回写的字段
+### Kafka sender 在统一默认值入口回写的字段
 
 - `dial_timeout=10s`
 - `request_timeout=30s`
@@ -71,9 +88,11 @@
 - `metadata_max_age=5m`
 - `partitioner=sticky`
 
-### 2.3 组件构建阶段的运行时回退
+### 2.4 组件构建阶段的运行时回退
 
-仍有一部分默认值不是在 `ApplyDefaults()` 里统一回写，而是在具体组件构建时按协议生效：
+`runtime/builders.go` 不再为 receiver/sender 的通用配置补默认值，例如 `receiver.multicore`、`receiver.num_event_loop`、`sender.concurrency` 都必须由统一默认值入口提前写入。
+
+仍有一部分行为不是项目级配置默认值，而是在具体协议组件或第三方库适配时生效：
 
 - SFTP receiver：`poll_interval_sec` 默认 `5` 秒。
 - SFTP receiver：`chunk_size` 默认 `65536`，最小强制为 `1024`。
@@ -81,8 +100,8 @@
 - Kafka receiver：`fetch_min_bytes` 未配或 `<=0` 时按 `1`。
 - Kafka receiver：`fetch_max_bytes` 未配或 `<=0` 时按 `16777216`。
 - Kafka receiver：`fetch_max_wait_ms` 未配或 `<=0` 时按 `100` 毫秒。
-- Kafka sender：`acks` 为空时按 `all/-1` 解释。
-- Kafka sender：`idempotent` 为空时按 `true`。
+- Kafka sender：`acks` 为空时按 `all/-1` 解释，这是 Kafka 语义解析，不在通用 builder 中兜底。
+- Kafka sender：`idempotent` 为空时按 `true`，这是 Kafka 语义解析，不在通用 builder 中兜底。
 - Kafka sender：`max_buffered_records<=0` 时沿用 franz-go 默认值（当前为 `10000`）。
 - Kafka sender：`max_buffered_bytes<=0` 时不显式设置，沿用 franz-go 默认行为。
 - UDP / 组播 sender：`local_ip` 为空时回退 `0.0.0.0`。
@@ -135,7 +154,7 @@
 
 Kafka 新增配置项并不都在同一层生效：
 
-- 一部分在 `ApplyDefaults()` 就回写到配置对象里，例如 `dial_timeout`、`metadata_max_age`、`partitioner`、`balancers`。
+- 一部分在统一默认值入口就回写到配置对象里，例如 `dial_timeout`、`metadata_max_age`、`partitioner`、`balancers`。
 - 一部分保留到组件构建阶段回退，例如 receiver 的 `group_id`、`fetch_min_bytes`、`fetch_max_bytes`、`fetch_max_wait_ms`，以及 sender 的部分 franz-go 缓冲默认值。
 - 还有一部分没有“项目级默认值”，直接沿用 franz-go / `kgo` 的默认行为，例如 sender 的 `max_buffered_records`、`max_buffered_bytes` 在未显式设置时不会被项目层改写。
 
@@ -229,14 +248,16 @@ receiver -> compiled selector -> []*TaskState
 `receiver.payload_log_max_bytes` 的回退顺序：
 
 1. receiver 局部值（`>0`）
-2. `logging.payload_log_max_bytes`
+2. `business_defaults.receiver.payload_log_max_bytes`（`>0`）
+3. `logging.payload_log_max_bytes`
 
 ### task
 
 `task.payload_log_max_bytes` 的回退顺序：
 
 1. task 局部值（`>0`）
-2. `logging.payload_log_max_bytes`
+2. `business_defaults.task.payload_log_max_bytes`（`>0`）
+3. `logging.payload_log_max_bytes`
 
 ## 8. 停机阶段发生了什么
 

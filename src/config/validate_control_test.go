@@ -21,7 +21,7 @@ func TestValidateRejectsInvalidPprofPort(t *testing.T) {
 		},
 	}
 	cfg = attachMinimalRouting(cfg)
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 
 	err := cfg.Validate()
 	if err == nil || !strings.Contains(err.Error(), "pprof_port") {
@@ -45,7 +45,7 @@ func TestValidateAllowsDisabledPprofPort(t *testing.T) {
 		},
 	}
 	cfg = attachMinimalRouting(cfg)
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected disabled pprof_port to be valid, got: %v", err)

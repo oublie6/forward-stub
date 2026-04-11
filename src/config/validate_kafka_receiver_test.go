@@ -18,7 +18,7 @@ func kafkaReceiverBaseConfig() Config {
 		Pipelines: map[string][]StageConfig{"p1": {}},
 		Tasks:     map[string]TaskConfig{"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}}},
 	}
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 	return cfg
 }
 

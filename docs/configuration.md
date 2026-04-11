@@ -31,11 +31,17 @@
 当前实现的顺序为：
 
 1. 本地 JSON 严格反序列化，**禁止未知字段**。
-2. 若使用双配置模式，先把 `system + business` 合并成完整配置。
-3. 先应用 `business_defaults`，再应用代码级默认值。
-4. 若 `control.api` 非空，则再通过控制面拉取 business 配置并重新合并。
-5. 对完整配置再次执行 `ApplyDefaults()`（控制面返回 business 时也会重新回写默认值）。
+2. 先对 system 自身字段做默认值规范化，用于确定 `control.api`、请求超时、监听周期等 system 参数。
+3. 若 `control.api` 非空，则通过控制面拉取最终 business 配置；否则使用本地 business。
+4. `SystemConfig.Merge(BusinessConfig)` 只做结构拼装，不应用任何默认值。
+5. 对最终完整配置调用一次 `ApplyDefaults(system.business_defaults)`，这是最终默认值规范化总入口。
 6. 对完整配置执行 `Validate()`。
+
+默认值来源边界：
+
+- system 配置只有两层来源：system 显式值、代码硬编码默认值。
+- business 配置只有三层来源：business 显式值、`system.business_defaults`、代码硬编码默认值。
+- runtime 构建阶段原则上不再承担配置默认值回填；构建器假定传入配置已经完成规范化。
 
 ## 2. 顶层配置域总览
 
@@ -93,6 +99,8 @@
 
 `business_defaults` 只存在于 system 配置中，用于给 business 配置里**未显式设置**的字段补默认值；如果 business 已写明值，则以 business 为准。
 
+实现上，`BusinessDefaultsConfig` 直接复用正式 `TaskConfig` / `ReceiverConfig` / `SenderConfig`，不再维护单独的影子 schema。因此 JSON 字段名、严格反序列化规则、类型定义都与正式 business 配置保持一致。它只作为默认模板覆盖到已有 business 对象上，不会生成新的 task / receiver / sender，也不会替代协议必填字段校验。
+
 ### 5.1 `business_defaults.task`
 
 | 字段 | 类型 | 默认值 | 说明 |
@@ -109,12 +117,17 @@
 | `multicore` | bool | 无 | 当 `receiver.multicore` 未配置时作为系统级默认值。 |
 | `num_event_loop` | int | 无 | 当 `receiver.num_event_loop <= 0` 时作为系统级默认值。 |
 | `payload_log_max_bytes` | int | 无 | 当 `receiver.payload_log_max_bytes <= 0` 时作为系统级默认值。 |
+| `socket_recv_buffer` | int | 无 | 当 `receiver.socket_recv_buffer <= 0` 时作为系统级默认值。 |
+| Kafka receiver 选项 | 对应字段类型 | 无 | 例如 `dial_timeout`、`metadata_max_age`、`balancers`、`auto_commit`、`fetch_max_partition_bytes`、`isolation_level`，仅对 `type=kafka` 的 receiver 生效。 |
+| dds_skydds receiver 选项 | 对应字段类型 | 无 | 例如 `wait_timeout`、`drain_max_items`、`drain_buffer_bytes`，仅对 `type=dds_skydds` 的 receiver 生效。 |
 
 ### 5.3 `business_defaults.sender`
 
 | 字段 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `concurrency` | int | 无 | 当 `sender.concurrency <= 0` 时作为系统级默认值。 |
+| `socket_send_buffer` | int | 无 | 当 `sender.socket_send_buffer <= 0` 时作为系统级默认值。 |
+| Kafka sender 选项 | 对应字段类型 | 无 | 例如 `dial_timeout`、`request_timeout`、`retry_timeout`、`metadata_max_age`、`partitioner`，仅对 `type=kafka` 的 sender 生效。 |
 
 ### 5.4 business_defaults 与代码默认值的优先级
 
@@ -138,7 +151,7 @@
 | `multicore` | bool | 否 | `true` | 仅 `udp_gnet` / `tcp_gnet` | gnet 多核事件循环开关。 |
 | `num_event_loop` | int | 否 | `max(8, runtime.NumCPU())` | 仅 `udp_gnet` / `tcp_gnet` | gnet event loop 数量。 |
 | `read_buffer_cap` | int | 否 | gnet 默认值 | 仅 `udp_gnet` / `tcp_gnet` | gnet 每连接/会话的读缓冲上限。 |
-| `socket_recv_buffer` | int | 否 | `1073741824` | 仅 `udp_gnet` / `tcp_gnet` | socket 内核接收缓冲。 |
+| `socket_recv_buffer` | int | 否 | `1073741824` | 仅 `udp_gnet` / `tcp_gnet` | socket 内核接收缓冲，可由 `business_defaults.receiver.socket_recv_buffer` 提供系统级默认。 |
 | `frame` | string | 否 | 空字符串 | 仅 `tcp_gnet` | 当前 receiver 仅支持空字符串或 `u16be`。 |
 | `log_payload_recv` | bool | 否 | `false` | 全部 receiver | 是否打印接收 payload 摘要。 |
 | `payload_log_max_bytes` | int | 否 | 回退到 `logging.payload_log_max_bytes` | 全部 receiver | receiver 局部 payload 摘要截断长度。 |
@@ -202,11 +215,11 @@
 | `balancers` | []string | `['cooperative_sticky']` | `kgo.Balancers` | 当前支持 `range`、`round_robin`、`cooperative_sticky`。 |
 | `auto_commit` | bool | `true` | `kgo.DisableAutoCommit` / `kgo.AutoCommitInterval` | 是否自动提交位点。 |
 | `auto_commit_interval` | string(duration) | `5s` | `kgo.AutoCommitInterval` | 仅 `auto_commit=true` 时可配置。 |
-| `fetch_min_bytes` | int | 运行时回退 `1` | `kgo.FetchMinBytes` | 该值不在 `ApplyDefaults()` 中回写；构建 Kafka receiver 时若未配置或 `<=0`，按 `1` 回退。 |
-| `fetch_max_bytes` | int | 运行时回退 `16777216` | `kgo.FetchMaxBytes` | 该值不在 `ApplyDefaults()` 中回写；构建 Kafka receiver 时若未配置或 `<=0`，按 `16 MiB` 回退。 |
-| `fetch_max_partition_bytes` | int | `1048576` | `kgo.FetchMaxPartitionBytes` | 该值会在 `ApplyDefaults()` 中回写。 |
+| `fetch_min_bytes` | int | 运行时回退 `1` | `kgo.FetchMinBytes` | 该值不在统一默认值入口中回写；构建 Kafka receiver 时若未配置或 `<=0`，按 `1` 回退。 |
+| `fetch_max_bytes` | int | 运行时回退 `16777216` | `kgo.FetchMaxBytes` | 该值不在统一默认值入口中回写；构建 Kafka receiver 时若未配置或 `<=0`，按 `16 MiB` 回退。 |
+| `fetch_max_partition_bytes` | int | `1048576` | `kgo.FetchMaxPartitionBytes` | 该值会在统一默认值入口中回写。 |
 | `isolation_level` | string | `read_uncommitted` | `kgo.FetchIsolationLevel` | 支持 `read_uncommitted`、`read_committed`。 |
-| `fetch_max_wait_ms` | int | 运行时回退 `100` | `kgo.FetchMaxWait` | 该值不在 `ApplyDefaults()` 中回写；构建 Kafka receiver 时若未配置或 `<=0`，按 `100ms` 回退。 |
+| `fetch_max_wait_ms` | int | 运行时回退 `100` | `kgo.FetchMaxWait` | 该值不在统一默认值入口中回写；构建 Kafka receiver 时若未配置或 `<=0`，按 `100ms` 回退。 |
 
 #### 6.3.3 Kafka receiver match key
 
@@ -219,7 +232,7 @@
 
 #### 6.3.4 Kafka receiver 默认值与生效层次
 
-- `dial_timeout`、`conn_idle_timeout`、`metadata_max_age`、`retry_backoff`、`session_timeout`、`heartbeat_interval`、`rebalance_timeout`、`balancers`、`auto_commit`、`auto_commit_interval`、`fetch_max_partition_bytes`、`isolation_level` 会在 `ApplyDefaults()` 层先回写。
+- `dial_timeout`、`conn_idle_timeout`、`metadata_max_age`、`retry_backoff`、`session_timeout`、`heartbeat_interval`、`rebalance_timeout`、`balancers`、`auto_commit`、`auto_commit_interval`、`fetch_max_partition_bytes`、`isolation_level` 会在统一默认值入口回写。
 - `group_id`、`fetch_min_bytes`、`fetch_max_bytes`、`fetch_max_wait_ms` 则保留到 `NewKafkaReceiver()` 构建阶段按实现回退。
 - 热重载时，只要 Kafka receiver 配置有变化，就会重建 receiver、新建 `kgo.Client`、重新编译 match key builder，再切换到新实例。
 

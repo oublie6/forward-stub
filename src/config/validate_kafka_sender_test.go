@@ -20,7 +20,7 @@ func kafkaSenderBaseConfig() Config {
 			"t1": {Pipelines: []string{"p1"}, Senders: []string{"k1"}},
 		},
 	})
-	cfg.ApplyDefaults()
+	cfg.ApplyDefaults(BusinessDefaultsConfig{})
 	return cfg
 }
 

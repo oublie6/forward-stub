@@ -4,7 +4,7 @@ import "runtime"
 
 // Merge 将系统配置与业务配置拼装为运行时使用的完整 Config。
 func (s SystemConfig) Merge(b BusinessConfig) Config {
-	cfg := Config{
+	return Config{
 		Version:   b.Version,
 		Control:   s.Control,
 		Logging:   s.Logging,
@@ -15,15 +15,73 @@ func (s SystemConfig) Merge(b BusinessConfig) Config {
 		Pipelines: b.Pipelines,
 		Tasks:     b.Tasks,
 	}
-	cfg.ApplyBusinessDefaults(s.BusinessDefaults)
-	return cfg
 }
 
-// ApplyBusinessDefaults 将 system.config 的 business 默认值应用到完整配置。
-func (c *Config) ApplyBusinessDefaults(d BusinessDefaultsConfig) {
+// ApplyDefaults 是配置默认值规范化的总入口。
+//
+// system 字段只按“system 显式值 > 代码默认值”回写；
+// business 字段按“business 显式值 > system.business_defaults > 代码默认值”回写。
+func (c *Config) ApplyDefaults(d BusinessDefaultsConfig) {
 	if c == nil {
 		return
 	}
+	applySystemDefaults(&c.Control, &c.Logging)
+	applyBusinessDefaults(c, d)
+}
+
+// ApplyDefaults 只规范化 system 自身字段，用于控制面拉取 business 前确定请求参数。
+func (s *SystemConfig) ApplyDefaults() {
+	if s == nil {
+		return
+	}
+	applySystemDefaults(&s.Control, &s.Logging)
+}
+
+func applySystemDefaults(control *ControlConfig, logging *LoggingConfig) {
+	if control.TimeoutSec <= 0 {
+		control.TimeoutSec = DefaultControlTimeoutSec
+	}
+	if control.ConfigWatchInterval == "" {
+		control.ConfigWatchInterval = DefaultConfigWatchInterval
+	}
+	if control.PprofPort == 0 {
+		control.PprofPort = DefaultPprofPort
+	}
+	if logging.Level == "" {
+		logging.Level = DefaultLogLevel
+	}
+	if logging.MaxSizeMB <= 0 {
+		logging.MaxSizeMB = DefaultLogRotateMaxSizeMB
+	}
+	if logging.MaxBackups <= 0 {
+		logging.MaxBackups = DefaultLogRotateMaxBackups
+	}
+	if logging.MaxAgeDays <= 0 {
+		logging.MaxAgeDays = DefaultLogRotateMaxAgeDays
+	}
+	if logging.Compress == nil {
+		v := DefaultLogRotateCompress
+		logging.Compress = &v
+	}
+	if logging.GCStatsLogEnabled == nil {
+		v := DefaultGCStatsLogEnabled
+		logging.GCStatsLogEnabled = &v
+	}
+	if logging.GCStatsLogInterval == "" {
+		logging.GCStatsLogInterval = DefaultGCStatsLogInterval
+	}
+	if logging.TrafficStatsInterval == "" {
+		logging.TrafficStatsInterval = DefaultTrafficStatsInterval
+	}
+	if logging.TrafficStatsSampleEvery <= 0 {
+		logging.TrafficStatsSampleEvery = DefaultTrafficStatsSampleEvery
+	}
+	if logging.PayloadLogMaxBytes <= 0 {
+		logging.PayloadLogMaxBytes = DefaultPayloadLogMaxBytes
+	}
+}
+
+func applyBusinessDefaults(c *Config, d BusinessDefaultsConfig) {
 	for name, tc := range c.Tasks {
 		if tc.PoolSize <= 0 && d.Task.PoolSize > 0 {
 			tc.PoolSize = d.Task.PoolSize
@@ -36,6 +94,15 @@ func (c *Config) ApplyBusinessDefaults(d BusinessDefaultsConfig) {
 		}
 		if tc.PayloadLogMaxBytes <= 0 && d.Task.PayloadLogMaxBytes > 0 {
 			tc.PayloadLogMaxBytes = d.Task.PayloadLogMaxBytes
+		}
+		if tc.PoolSize <= 0 {
+			tc.PoolSize = DefaultTaskPoolSize
+		}
+		if tc.ChannelQueueSize <= 0 {
+			tc.ChannelQueueSize = DefaultTaskChannelQueueSize
+		}
+		if tc.PayloadLogMaxBytes <= 0 {
+			tc.PayloadLogMaxBytes = c.Logging.PayloadLogMaxBytes
 		}
 		c.Tasks[name] = tc
 	}
@@ -50,76 +117,59 @@ func (c *Config) ApplyBusinessDefaults(d BusinessDefaultsConfig) {
 		if rc.PayloadLogMaxBytes <= 0 && d.Receiver.PayloadLogMaxBytes > 0 {
 			rc.PayloadLogMaxBytes = d.Receiver.PayloadLogMaxBytes
 		}
-		c.Receivers[name] = rc
-	}
-	for name, sc := range c.Senders {
-		if sc.Concurrency <= 0 && d.Sender.Concurrency > 0 {
-			sc.Concurrency = d.Sender.Concurrency
+		if rc.SocketRecvBuffer <= 0 && d.Receiver.SocketRecvBuffer > 0 {
+			rc.SocketRecvBuffer = d.Receiver.SocketRecvBuffer
 		}
-		c.Senders[name] = sc
-	}
-}
-
-// ApplyDefaults 为 receiver/task/sender 之外的配置字段填充默认值。
-// 用法：在 Validate 之前调用，避免因省略常见参数导致行为不一致。
-func (c *Config) ApplyDefaults() {
-	if c == nil {
-		return
-	}
-	if c.Control.TimeoutSec <= 0 {
-		c.Control.TimeoutSec = DefaultControlTimeoutSec
-	}
-	if c.Control.ConfigWatchInterval == "" {
-		c.Control.ConfigWatchInterval = DefaultConfigWatchInterval
-	}
-	if c.Control.PprofPort == 0 {
-		c.Control.PprofPort = DefaultPprofPort
-	}
-	if c.Logging.Level == "" {
-		c.Logging.Level = DefaultLogLevel
-	}
-	if c.Logging.MaxSizeMB <= 0 {
-		c.Logging.MaxSizeMB = DefaultLogRotateMaxSizeMB
-	}
-	if c.Logging.MaxBackups <= 0 {
-		c.Logging.MaxBackups = DefaultLogRotateMaxBackups
-	}
-	if c.Logging.MaxAgeDays <= 0 {
-		c.Logging.MaxAgeDays = DefaultLogRotateMaxAgeDays
-	}
-	if c.Logging.Compress == nil {
-		v := DefaultLogRotateCompress
-		c.Logging.Compress = &v
-	}
-	if c.Logging.GCStatsLogEnabled == nil {
-		v := DefaultGCStatsLogEnabled
-		c.Logging.GCStatsLogEnabled = &v
-	}
-	if c.Logging.GCStatsLogInterval == "" {
-		c.Logging.GCStatsLogInterval = DefaultGCStatsLogInterval
-	}
-	if c.Logging.TrafficStatsInterval == "" {
-		c.Logging.TrafficStatsInterval = DefaultTrafficStatsInterval
-	}
-	if c.Logging.TrafficStatsSampleEvery <= 0 {
-		c.Logging.TrafficStatsSampleEvery = DefaultTrafficStatsSampleEvery
-	}
-	if c.Logging.PayloadLogMaxBytes <= 0 {
-		c.Logging.PayloadLogMaxBytes = DefaultPayloadLogMaxBytes
-	}
-	for name, tc := range c.Tasks {
-		if tc.PoolSize <= 0 {
-			tc.PoolSize = DefaultTaskPoolSize
+		if rc.Type == "kafka" {
+			if rc.DialTimeout == "" && d.Receiver.DialTimeout != "" {
+				rc.DialTimeout = d.Receiver.DialTimeout
+			}
+			if rc.ConnIdleTimeout == "" && d.Receiver.ConnIdleTimeout != "" {
+				rc.ConnIdleTimeout = d.Receiver.ConnIdleTimeout
+			}
+			if rc.MetadataMaxAge == "" && d.Receiver.MetadataMaxAge != "" {
+				rc.MetadataMaxAge = d.Receiver.MetadataMaxAge
+			}
+			if rc.RetryBackoff == "" && d.Receiver.RetryBackoff != "" {
+				rc.RetryBackoff = d.Receiver.RetryBackoff
+			}
+			if rc.SessionTimeout == "" && d.Receiver.SessionTimeout != "" {
+				rc.SessionTimeout = d.Receiver.SessionTimeout
+			}
+			if rc.HeartbeatInterval == "" && d.Receiver.HeartbeatInterval != "" {
+				rc.HeartbeatInterval = d.Receiver.HeartbeatInterval
+			}
+			if rc.RebalanceTimeout == "" && d.Receiver.RebalanceTimeout != "" {
+				rc.RebalanceTimeout = d.Receiver.RebalanceTimeout
+			}
+			if rc.Balancers == nil && d.Receiver.Balancers != nil {
+				rc.Balancers = append([]string(nil), d.Receiver.Balancers...)
+			}
+			if rc.AutoCommit == nil && d.Receiver.AutoCommit != nil {
+				v := *d.Receiver.AutoCommit
+				rc.AutoCommit = &v
+			}
+			if rc.AutoCommitInterval == "" && d.Receiver.AutoCommitInterval != "" && (rc.AutoCommit == nil || BoolValue(rc.AutoCommit)) {
+				rc.AutoCommitInterval = d.Receiver.AutoCommitInterval
+			}
+			if rc.FetchMaxPartitionBytes <= 0 && d.Receiver.FetchMaxPartitionBytes > 0 {
+				rc.FetchMaxPartitionBytes = d.Receiver.FetchMaxPartitionBytes
+			}
+			if rc.IsolationLevel == "" && d.Receiver.IsolationLevel != "" {
+				rc.IsolationLevel = d.Receiver.IsolationLevel
+			}
 		}
-		if tc.ChannelQueueSize <= 0 {
-			tc.ChannelQueueSize = DefaultTaskChannelQueueSize
+		if rc.Type == "dds_skydds" {
+			if rc.WaitTimeout == "" && d.Receiver.WaitTimeout != "" {
+				rc.WaitTimeout = d.Receiver.WaitTimeout
+			}
+			if rc.DrainMaxItems <= 0 && d.Receiver.DrainMaxItems > 0 {
+				rc.DrainMaxItems = d.Receiver.DrainMaxItems
+			}
+			if rc.DrainBufferBytes <= 0 && d.Receiver.DrainBufferBytes > 0 {
+				rc.DrainBufferBytes = d.Receiver.DrainBufferBytes
+			}
 		}
-		if tc.PayloadLogMaxBytes <= 0 {
-			tc.PayloadLogMaxBytes = c.Logging.PayloadLogMaxBytes
-		}
-		c.Tasks[name] = tc
-	}
-	for name, rc := range c.Receivers {
 		if rc.Multicore == nil {
 			v := DefaultReceiverMulticore
 			rc.Multicore = &v
@@ -186,6 +236,35 @@ func (c *Config) ApplyDefaults() {
 		c.Receivers[name] = rc
 	}
 	for name, sc := range c.Senders {
+		if sc.Concurrency <= 0 && d.Sender.Concurrency > 0 {
+			sc.Concurrency = d.Sender.Concurrency
+		}
+		if sc.SocketSendBuffer <= 0 && d.Sender.SocketSendBuffer > 0 {
+			sc.SocketSendBuffer = d.Sender.SocketSendBuffer
+		}
+		if sc.Type == "kafka" {
+			if sc.DialTimeout == "" && d.Sender.DialTimeout != "" {
+				sc.DialTimeout = d.Sender.DialTimeout
+			}
+			if sc.RequestTimeout == "" && d.Sender.RequestTimeout != "" {
+				sc.RequestTimeout = d.Sender.RequestTimeout
+			}
+			if sc.RetryTimeout == "" && d.Sender.RetryTimeout != "" {
+				sc.RetryTimeout = d.Sender.RetryTimeout
+			}
+			if sc.RetryBackoff == "" && d.Sender.RetryBackoff != "" {
+				sc.RetryBackoff = d.Sender.RetryBackoff
+			}
+			if sc.ConnIdleTimeout == "" && d.Sender.ConnIdleTimeout != "" {
+				sc.ConnIdleTimeout = d.Sender.ConnIdleTimeout
+			}
+			if sc.MetadataMaxAge == "" && d.Sender.MetadataMaxAge != "" {
+				sc.MetadataMaxAge = d.Sender.MetadataMaxAge
+			}
+			if sc.Partitioner == "" && d.Sender.Partitioner != "" {
+				sc.Partitioner = d.Sender.Partitioner
+			}
+		}
 		if sc.Concurrency <= 0 {
 			sc.Concurrency = DefaultSenderConcurrency
 		}

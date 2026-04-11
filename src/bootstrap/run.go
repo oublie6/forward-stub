@@ -330,24 +330,24 @@ func reloadAndApplyBusinessConfig(ctx context.Context, rt *app.Runtime, systemPa
 }
 
 // loadConfigPair 统一封装配置加载链路：
-// 本地读取 -> 合并 -> ApplyDefaults -> 可选控制面拉取 -> 再次默认化 -> Validate。
+// 本地读取 -> system 默认化 -> 可选控制面拉取 -> 最终合并 -> ApplyDefaults -> Validate。
 //
 // 这也是启动与热重载共享的配置入口，因此文档中的启动/重载时序都以此为准。
 func loadConfigPair(ctx context.Context, systemPath, businessPath string) (config.SystemConfig, config.BusinessConfig, config.Config, error) {
-	sys, biz, cfg, err := config.LoadLocalPair(systemPath, businessPath)
+	sys, biz, _, err := config.LoadLocalPair(systemPath, businessPath)
 	if err != nil {
 		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, err
 	}
-	cfg.ApplyDefaults()
-	if cfg.Control.API != "" {
-		cli := control.NewConfigAPIClient(cfg.Control.API, cfg.Control.TimeoutSec)
+	sys.ApplyDefaults()
+	if sys.Control.API != "" {
+		cli := control.NewConfigAPIClient(sys.Control.API, sys.Control.TimeoutSec)
 		biz, err = cli.FetchBusinessConfig(ctx)
 		if err != nil {
 			return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("通过配置中心拉取业务配置失败: %w", err)
 		}
-		cfg = sys.Merge(biz)
 	}
-	cfg.ApplyDefaults()
+	cfg := sys.Merge(biz)
+	cfg.ApplyDefaults(sys.BusinessDefaults)
 	if err := cfg.Validate(); err != nil {
 		return config.SystemConfig{}, config.BusinessConfig{}, config.Config{}, fmt.Errorf("配置校验失败: %w", err)
 	}

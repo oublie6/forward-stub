@@ -15,6 +15,13 @@ receiver -> selector -> task(pipeline + sender)
 - `system config`：只放**系统级配置**，包含 `control`、`logging`、`business_defaults`。
 - `business config`：只放**业务拓扑配置**，包含 `version`、`receivers`、`selectors`、`task_sets`、`senders`、`pipelines`、`tasks`。
 
+默认值规则：
+
+- system 配置只有两层来源：system 显式值、代码硬编码默认值。
+- business 配置只有三层来源：business 显式值、`system.business_defaults`、代码硬编码默认值。
+- `SystemConfig.Merge(BusinessConfig)` 只负责拼装完整配置，不负责默认值回填。
+- 最终默认值统一由 `Config.ApplyDefaults(system.business_defaults)` 规范化；运行时构建阶段原则上不再承担通用默认值回填职责。
+
 启动命令：
 
 ```bash
@@ -134,7 +141,7 @@ receiver -> selector -> task(pipeline + sender)
 - `task_sets` 只做复用；运行时会在编译期直接展开为 task 切片。
 - Kafka、SFTP、gnet、组播等字段都只在对应 `type` 下生效，不能跨协议混用。
 - `receiver.match_key` 为 receiver 局部配置：留空时保持历史兼容 key；显式配置后会在 receiver 初始化/热重载时编译成协议专属 builder，热路径不再走统一公共拼接函数。
-- Kafka receiver / sender 的多项字段会直接映射到 franz-go / `kgo` 选项；其中一部分默认值在 `ApplyDefaults()` 层回写，另一部分保留到具体组件构建时按实现回退。
+- Kafka receiver / sender 的多项字段会直接映射到 franz-go / `kgo` 选项；项目级默认值在统一默认值入口回写，少量协议语义或第三方库默认行为保留在具体组件中解释。
 - 字符串 duration 字段必须是合法且大于 0 的 `time.ParseDuration` 文本，例如 `250ms`、`10s`、`5m`。
 - `control.pprof_port`：`-1` 表示禁用，`0` 表示回退默认值 `6060`，`1~65535` 表示监听对应端口。
 

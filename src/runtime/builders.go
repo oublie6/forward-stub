@@ -9,17 +9,10 @@ import (
 )
 
 func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (receiver.Receiver, error) {
-	multicore := config.DefaultReceiverMulticore
-	if rc.Multicore != nil {
-		multicore = *rc.Multicore
-	}
-	numEventLoop := rc.NumEventLoop
-	if numEventLoop <= 0 {
-		numEventLoop = config.DefaultReceiverNumEventLoop
-	}
+	multicore := config.BoolValue(rc.Multicore)
 	switch rc.Type {
 	case "udp_gnet":
-		return receiver.NewGnetUDP(name, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, rc.SocketRecvBuffer, gnetLogLevel, rc.MatchKey)
+		return receiver.NewGnetUDP(name, rc.Listen, multicore, rc.NumEventLoop, rc.ReadBufferCap, rc.SocketRecvBuffer, gnetLogLevel, rc.MatchKey)
 	case "tcp_gnet":
 		var fr receiver.Framer
 		switch rc.Frame {
@@ -30,7 +23,7 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 		default:
 			return nil, fmt.Errorf("receiver %s unknown frame %s", name, rc.Frame)
 		}
-		return receiver.NewGnetTCP(name, rc.Listen, multicore, numEventLoop, rc.ReadBufferCap, rc.SocketRecvBuffer, fr, gnetLogLevel, rc.MatchKey)
+		return receiver.NewGnetTCP(name, rc.Listen, multicore, rc.NumEventLoop, rc.ReadBufferCap, rc.SocketRecvBuffer, fr, gnetLogLevel, rc.MatchKey)
 	case "local_timer":
 		return receiver.NewLocalTimerReceiver(name, rc)
 	case "kafka":
@@ -45,21 +38,17 @@ func buildReceiver(name string, rc config.ReceiverConfig, gnetLogLevel string) (
 }
 
 func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (sender.Sender, error) {
-	conc := sc.Concurrency
-	if conc <= 0 {
-		conc = config.DefaultSenderConcurrency
-	}
 	switch sc.Type {
 	case "udp_unicast":
 		if sc.LocalPort <= 0 {
 			return nil, fmt.Errorf("sender %s udp_unicast requires local_port", name)
 		}
-		return sender.NewUDPUnicastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.SocketSendBuffer, conc)
+		return sender.NewUDPUnicastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.SocketSendBuffer, sc.Concurrency)
 	case "udp_multicast":
 		if sc.LocalPort <= 0 {
 			return nil, fmt.Errorf("sender %s udp_multicast requires local_port", name)
 		}
-		return sender.NewUDPMulticastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.Iface, sc.TTL, sc.Loop, sc.SocketSendBuffer, conc)
+		return sender.NewUDPMulticastSender(name, sc.LocalIP, sc.LocalPort, sc.Remote, sc.Iface, sc.TTL, sc.Loop, sc.SocketSendBuffer, sc.Concurrency)
 	case "tcp_gnet":
 		with := false
 		switch sc.Frame {
@@ -70,7 +59,7 @@ func buildSender(name string, sc config.SenderConfig, gnetLogLevel string) (send
 		default:
 			return nil, fmt.Errorf("sender %s unknown frame %s", name, sc.Frame)
 		}
-		return sender.NewGnetTCPSender(name, sc.Remote, with, conc, sc.SocketSendBuffer, gnetLogLevel)
+		return sender.NewGnetTCPSender(name, sc.Remote, with, sc.Concurrency, sc.SocketSendBuffer, gnetLogLevel)
 	case "kafka":
 		return sender.NewKafkaSender(name, sc)
 	case "sftp":
