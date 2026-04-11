@@ -130,7 +130,7 @@
 
 | 字段 | 类型 | 必填 | 默认值 | 适用范围 | 说明 |
 |---|---|---:|---|---|---|
-| `type` | string | 是 | 无 | 全部 receiver | 当前支持 `udp_gnet`、`tcp_gnet`、`kafka`、`sftp`。 |
+| `type` | string | 是 | 无 | 全部 receiver | 当前支持 `udp_gnet`、`tcp_gnet`、`kafka`、`sftp`、`dds_skydds`、`local_timer`。 |
 | `listen` | string | 大多数场景是 | 无 | 全部 receiver | UDP/TCP 填监听地址；Kafka 填 broker CSV；SFTP 填 `host:port`。 |
 | `selector` | string | 是 | 无 | 全部 receiver | 必须引用已存在 selector。 |
 | `match_key.mode` | string | 否 | 留空表示兼容默认行为 | 全部 receiver | receiver 自身的 match key 生成模式；初始化/热重载时会预编译成专用 builder。 |
@@ -256,6 +256,40 @@
 - 每次扫描目录时会按文件名排序，保证处理顺序稳定。
 - receiver 通过 `seen` 指纹避免重复消费未变化文件；该行为是运行时逻辑，不需要额外配置。
 - 性能注意：SFTP 会在单文件开始流式读取前先生成一次 match key，后续所有 chunk 直接复用。
+
+### 6.5 local_timer receiver
+
+`type=local_timer` 用于本地定时生成固定 payload，并通过现有 receiver 回调进入 `selector -> task -> pipeline -> sender` 主链路。它不监听网络端口，也不新增 task type。
+
+#### 6.5.1 generator 字段
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|---|---|---:|---|---|
+| `generator.interval` | string(duration) | 与 `rate_per_sec` 二选一 | 无 | 固定间隔模式，例如 `500ms` 表示 1 秒 2 帧。 |
+| `generator.rate_per_sec` | int | 与 `interval` 二选一 | 无 | 目标每秒帧数，例如 `1000`。 |
+| `generator.tick_interval` | string(duration) | 否 | `100ms` | 速率模式内部调度粒度；运行时用 credit/accumulator 平滑摊分，不按秒突发。 |
+| `generator.payload_format` | string | 是 | 无 | 固定 payload 编码：`hex`、`text`、`base64`。 |
+| `generator.payload_data` | string | 是 | 无 | 固定 payload 内容；启动时解析一次，之后每帧复制。 |
+| `generator.start_delay` | string(duration) | 否 | 无 | 首帧前等待时间，必须合法且 `>0`。 |
+| `generator.total_packets` | int64 | 否 | `0` | 最多生成包数；`0` 表示无限发送。 |
+| `generator.remote` | string | 否 | 空字符串 | 写入 `packet.Meta.Remote`。 |
+| `generator.local` | string | 否 | 空字符串 | 写入 `packet.Meta.Local`。 |
+
+#### 6.5.2 校验规则
+
+- `receiver.selector` 仍然必填，并引用已有 selector。
+- `payload_data` 必填。
+- `payload_format` 仅允许 `hex`、`text`、`base64`。
+- `interval` 与 `rate_per_sec` 必须二选一，不能同时为空，也不能同时配置。
+- duration 字段必须是合法且大于 0 的 `time.ParseDuration` 文本。
+- `rate_per_sec` 必须大于 0；`total_packets` 必须大于等于 0。
+
+#### 6.5.3 match key
+
+- `match_key.mode` 支持：
+  - 留空：兼容默认模式，输出 `local|receiver=local_timer`。
+  - `fixed`：输出 `local|fixed=<fixed_value>`。
+- 建议链监、压测等业务显式配置 `match_key.mode=fixed`，再在 selector 中用完整 key 精确匹配。
 
 ## 7. selectors 配置
 
@@ -544,5 +578,6 @@
 | 只看 UDP/TCP | `configs/udp-tcp.business.example.json` |
 | 只看 Kafka | `configs/kafka.business.example.json` |
 | 只看 SFTP | `configs/sftp.business.example.json` |
+| 只看本地定时造数 | `configs/local-timer.business.example.json` |
 | 只看 task 执行模型 | `configs/task-models.business.example.json` |
 | 只看 benchmark 配置 | `configs/bench.example.json` |

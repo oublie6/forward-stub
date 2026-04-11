@@ -37,6 +37,9 @@ const (
 	sftpMatchKeyModeRemotePath    = "remote_path"
 	sftpMatchKeyModeFilename      = "filename"
 	sftpMatchKeyModeFixed         = "fixed"
+
+	localTimerMatchKeyModeLegacyDefault = ""
+	localTimerMatchKeyModeFixed         = "fixed"
 )
 
 type udpMatchKeyBuilder func(remote, local string, remoteAddr, localAddr net.Addr) string
@@ -46,6 +49,8 @@ type tcpMatchKeyBuilder func(cs *connState) string
 type kafkaMatchKeyBuilder func(rec *kgo.Record) string
 
 type sftpMatchKeyBuilder func(filePath string) string
+
+type localTimerMatchKeyBuilder func() string
 
 var matchKeyEscaper = strings.NewReplacer(
 	`\\`, `\\\\`,
@@ -260,5 +265,19 @@ func compileSFTPMatchKeyBuilder(cfg config.ReceiverMatchKeyConfig, remoteDir str
 		return func(_ string) string { return key }, mode, nil
 	default:
 		return nil, "", config.ErrUnsupportedReceiverMatchKeyMode("sftp", mode)
+	}
+}
+
+func compileLocalTimerMatchKeyBuilder(cfg config.ReceiverMatchKeyConfig) (localTimerMatchKeyBuilder, string, error) {
+	mode := strings.TrimSpace(cfg.Mode)
+	switch mode {
+	case localTimerMatchKeyModeLegacyDefault:
+		key := precomputeSingleFieldMatchKey("local", "receiver", "local_timer")
+		return func() string { return key }, receiverMatchKeyModeCompatDefault, nil
+	case localTimerMatchKeyModeFixed:
+		key := precomputeSingleFieldMatchKey("local", "fixed", cfg.FixedValue)
+		return func() string { return key }, mode, nil
+	default:
+		return nil, "", config.ErrUnsupportedReceiverMatchKeyMode("local_timer", mode)
 	}
 }

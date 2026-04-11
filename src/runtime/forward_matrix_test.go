@@ -114,6 +114,77 @@ func TestForwardMatrixUDPToUDP_Actual(t *testing.T) {
 	)
 }
 
+// TestForwardMatrixLocalTimerToUDP_Actual 验证 local_timer 造数后仍进入 selector/task/sender 主链路。
+func TestForwardMatrixLocalTimerToUDP_Actual(t *testing.T) {
+	sendPort := freeUDPPort(t)
+	localPort := freeUDPPort(t)
+
+	done := make(chan []byte, 1)
+	pc, err := net.ListenPacket("udp", fmt.Sprintf("127.0.0.1:%d", sendPort))
+	if err != nil {
+		t.Fatalf("listen output udp: %v", err)
+	}
+	defer pc.Close()
+	go func() {
+		buf := make([]byte, 2048)
+		_ = pc.SetReadDeadline(time.Now().Add(3 * time.Second))
+		n, _, err := pc.ReadFrom(buf)
+		if err == nil {
+			done <- append([]byte(nil), buf[:n]...)
+		}
+	}()
+
+	st := NewStore()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := config.Config{
+		Version: 1,
+		Logging: config.LoggingConfig{
+			Level:              "error",
+			PayloadLogMaxBytes: config.DefaultPayloadLogMaxBytes,
+		},
+		Receivers: map[string]config.ReceiverConfig{
+			"rx_local": {
+				Type:     "local_timer",
+				Selector: "sel1",
+				MatchKey: config.ReceiverMatchKeyConfig{
+					Mode:       "fixed",
+					FixedValue: "load-test",
+				},
+				Generator: config.LocalGeneratorConfig{
+					Interval:      "5ms",
+					PayloadFormat: "text",
+					PayloadData:   "matrix-local-payload",
+					TotalPackets:  1,
+				},
+			},
+		},
+		Selectors: map[string]config.SelectorConfig{
+			"sel1": {Matches: map[string]string{"local|fixed=load-test": "ts1"}},
+		},
+		TaskSets:  map[string][]string{"ts1": []string{"t1"}},
+		Senders:   map[string]config.SenderConfig{"s1": {Type: "udp_unicast", Remote: fmt.Sprintf("127.0.0.1:%d", sendPort), LocalIP: "127.0.0.1", LocalPort: localPort}},
+		Tasks:     map[string]config.TaskConfig{"t1": {ExecutionModel: "fastpath", Senders: []string{"s1"}}},
+		Pipelines: map[string][]config.StageConfig{},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("validate config: %v", err)
+	}
+	if err := UpdateCache(ctx, st, cfg); err != nil {
+		t.Fatalf("update cache: %v", err)
+	}
+	defer st.StopAll(context.Background())
+
+	select {
+	case got := <-done:
+		if string(got) != "matrix-local-payload" {
+			t.Fatalf("payload mismatch: got=%q", string(got))
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatalf("timeout waiting local_timer output")
+	}
+}
+
 // TestForwardMatrixTCPToTCP_Actual 验证真实 TCP 入站与 TCP 出站链路可以端到端联通。
 func TestForwardMatrixTCPToTCP_Actual(t *testing.T) {
 	recvPort := freeTCPPort(t)

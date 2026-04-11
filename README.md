@@ -110,6 +110,7 @@ receiver -> selector -> task(pipeline + sender)
 - `configs/udp-tcp.business.example.json`：UDP/TCP 接入与转发示例。
 - `configs/kafka.business.example.json`：Kafka receiver / sender 专项示例。
 - `configs/sftp.business.example.json`：SFTP receiver / sender 专项示例。
+- `configs/local-timer.business.example.json`：本地定时固定报文造数示例，包含 1 秒 2 帧链监和 1 秒 N 帧压测。
 - `configs/task-models.business.example.json`：`fastpath` / `pool` / `channel` 三种 task 执行模型示例。
 - `configs/bench.example.json`：benchmark 驱动配置，不属于运行时主配置。
 - `deploy/k8s/`：默认使用 `system.json + business.json` 双配置挂载方式，不再示例单文件 `config.json`。
@@ -150,7 +151,7 @@ receiver -> selector -> task(pipeline + sender)
 
 - 顶层配置：`version`、`control`、`logging`、`receivers`、`selectors`、`task_sets`、`senders`、`pipelines`、`tasks`、`business_defaults`。
 - logging：日志级别、文件滚动、流量统计、payload 日志、payload 池、GC 周期日志。
-- receivers：UDP/TCP gnet、Kafka、SFTP 及其类型专属字段、match key builder 生命周期。
+- receivers：UDP/TCP gnet、Kafka、SFTP、local_timer 及其类型专属字段、match key builder 生命周期。
 - senders：UDP 单播、UDP 组播、TCP、Kafka、SFTP 及其类型专属字段。
 - selector / task_set / task / pipeline：引用关系、默认值、执行模型、stage 参数、route sender 行为。
 - 运行时：冷启动、热更新、receiver/task 统计对象生命周期、pprof、GC 日志。

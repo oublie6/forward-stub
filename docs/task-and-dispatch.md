@@ -138,6 +138,7 @@ task 决定的是“命中之后怎么处理”：
 | TCP | `tcp|src_addr=10.0.0.1:9000`（兼容默认） / `tcp|local_port=19001` |
 | Kafka | `kafka|topic=orders|partition=0`（兼容默认） / `kafka|topic=orders` |
 | SFTP | `sftp|remote_dir=/input|file_name=orders.csv`（兼容默认） / `sftp|filename=orders.csv` |
+| local_timer | `local|receiver=local_timer`（兼容默认） / `local|fixed=chain-monitor` |
 
 ## 8. 配置设计建议
 
