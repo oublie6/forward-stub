@@ -162,13 +162,16 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if p.Kind != packet.PayloadKindFileChunk {
+		return fmt.Errorf("sftp sender only accepts file_chunk payload")
+	}
+	if p.Meta.Offset < 0 {
+		return fmt.Errorf("sftp sender offset must be >= 0: transfer=%s offset=%d", p.Meta.TransferID, p.Meta.Offset)
+	}
 
 	transferID := strings.TrimSpace(p.Meta.TransferID)
 	if transferID == "" {
-		if p.Kind == packet.PayloadKindFileChunk {
-			return fmt.Errorf("sftp sender requires transfer_id for file_chunk payload")
-		}
-		return fmt.Errorf("sftp sender requires transfer_id")
+		return fmt.Errorf("sftp sender requires transfer_id for file_chunk payload")
 	}
 	idx := s.pickShard(transferID)
 	if !s.connReady[idx].Load() {

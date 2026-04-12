@@ -168,6 +168,9 @@ func (s *OSSSender) Send(ctx context.Context, p *packet.Packet) error {
 	if p.Kind != packet.PayloadKindFileChunk {
 		return fmt.Errorf("oss sender only accepts file_chunk payload")
 	}
+	if p.Meta.Offset < 0 {
+		return fmt.Errorf("oss sender offset must be >= 0: transfer=%s offset=%d", p.Meta.TransferID, p.Meta.Offset)
+	}
 	if want := strings.TrimSpace(p.Meta.Checksum); want != "" {
 		h := sha256.Sum256(p.Payload)
 		if got := hex.EncodeToString(h[:]); !strings.EqualFold(got, want) {

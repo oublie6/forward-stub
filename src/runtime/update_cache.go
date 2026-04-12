@@ -275,11 +275,6 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 		st.gcUnusedStageCache()
 	}
 
-	if receiverChanged {
-		if err := st.applyReceiverDelta(ctx, cfg.Receivers, cfg.Logging.Level); err != nil {
-			return err
-		}
-	}
 	if selectorChanged || taskSetChanged {
 		st.mu.Lock()
 		st.selectors = cloneSelectorConfigMap(cfg.Selectors)
@@ -325,6 +320,11 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	st.rebuildStageTaskRefs()
 	st.gcUnusedSenders()
 	st.gcUnusedStageCache()
+	if receiverChanged {
+		if err := st.applyReceiverDelta(ctx, cfg.Receivers, cfg.Logging.Level); err != nil {
+			return err
+		}
+	}
 	if selectorChanged || taskSetChanged || receiverChanged || len(taskAdded) > 0 || len(taskRemoved) > 0 {
 		if err := st.rebuildReceiverSelectors(); err != nil {
 			return err
@@ -643,6 +643,16 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 	}
 	st.mu.RUnlock()
 
+	st.mu.Lock()
+	for name, rs := range st.receivers {
+		if _, ok := next[name]; ok {
+			continue
+		}
+		delete(st.receivers, name)
+		go rs.Recv.Stop(ctx)
+	}
+	st.mu.Unlock()
+
 	for name, rc := range next {
 		old, ok := oldStates[name]
 		if ok && reflect.DeepEqual(old.Cfg, rc) {
@@ -672,16 +682,6 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 			_ = old.Recv.Stop(ctx)
 		}
 	}
-
-	st.mu.Lock()
-	for name, rs := range st.receivers {
-		if _, ok := next[name]; ok {
-			continue
-		}
-		delete(st.receivers, name)
-		go rs.Recv.Stop(ctx)
-	}
-	st.mu.Unlock()
 	return nil
 }
 
@@ -720,6 +720,13 @@ func (st *Store) waitReceiversStartInvoked(started []<-chan struct{}) {
 // counter 参数用于热重载：当旧 task 只是“同名重建”而非彻底删除时，
 // runtime 会把旧 task 的聚合统计句柄传进来，让新 task 继续沿用累计值。
 func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingConfig, counter *logx.TrafficCounter) error {
+	var err error
+	defer func() {
+		if err != nil && counter != nil {
+			counter.Close()
+		}
+	}()
+
 	st.mu.RLock()
 	compiled := st.pipelines
 	pipelineCfg := st.pipelineCfg
@@ -729,24 +736,34 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 	for _, pn := range tc.Pipelines {
 		cp, ok := compiled[pn]
 		if !ok {
-			return fmt.Errorf("task %s pipeline %s not found", name, pn)
+			err = fmt.Errorf("task %s pipeline %s not found", name, pn)
+			return err
 		}
 		localPipe, err := buildTaskPipelineInstance(cp, pipelineCfg[pn])
 		if err != nil {
-			return fmt.Errorf("task %s pipeline %s build task-scoped instance failed: %w", name, pn, err)
+			err = fmt.Errorf("task %s pipeline %s build task-scoped instance failed: %w", name, pn, err)
+			return err
 		}
 		pipes = append(pipes, localPipe)
 	}
 
 	sends := make([]sender.Sender, 0, len(tc.Senders))
+	retainedSenders := make([]string, 0, len(tc.Senders))
 	st.mu.Lock()
 	for _, sn := range tc.Senders {
 		ss, ok := st.senders[sn]
 		if !ok {
+			for _, retained := range retainedSenders {
+				if old := st.senders[retained]; old != nil {
+					old.Refs--
+				}
+			}
 			st.mu.Unlock()
-			return fmt.Errorf("task %s sender %s not found", name, sn)
+			err = fmt.Errorf("task %s sender %s not found", name, sn)
+			return err
 		}
 		ss.Refs++
+		retainedSenders = append(retainedSenders, sn)
 		sends = append(sends, ss.S)
 	}
 	st.mu.Unlock()
@@ -766,10 +783,9 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 		// 先把旧句柄挂到新 task，再 Start，这样 task.Start 就不会重复创建新的聚合统计对象。
 		tk.ReuseTrafficCounter(counter)
 	}
-	if err := tk.Start(); err != nil {
-		if counter != nil {
-			counter.Close()
-		}
+	if startErr := tk.Start(); startErr != nil {
+		st.releaseSenderRefs(retainedSenders)
+		err = startErr
 		return err
 	}
 
@@ -778,6 +794,19 @@ func (st *Store) addTask(name string, tc config.TaskConfig, lc config.LoggingCon
 	st.retainTaskStageRefsLocked(name, tc.Pipelines)
 	st.mu.Unlock()
 	return nil
+}
+
+func (st *Store) releaseSenderRefs(names []string) {
+	if len(names) == 0 {
+		return
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	for _, name := range names {
+		if ss := st.senders[name]; ss != nil {
+			ss.Refs--
+		}
+	}
 }
 
 func buildTaskPipelineInstance(cp *CompiledPipeline, cfgs []config.StageConfig) (*pipeline.Pipeline, error) {
