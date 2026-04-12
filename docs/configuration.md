@@ -143,8 +143,8 @@
 
 | 字段 | 类型 | 必填 | 默认值 | 适用范围 | 说明 |
 |---|---|---:|---|---|---|
-| `type` | string | 是 | 无 | 全部 receiver | 当前支持 `udp_gnet`、`tcp_gnet`、`kafka`、`sftp`、`dds_skydds`、`local_timer`。 |
-| `listen` | string | 大多数场景是 | 无 | 全部 receiver | UDP/TCP 填监听地址；Kafka 填 broker CSV；SFTP 填 `host:port`。 |
+| `type` | string | 是 | 无 | 全部 receiver | 当前支持 `udp_gnet`、`tcp_gnet`、`kafka`、`sftp`、`oss`、`dds_skydds`、`local_timer`。 |
+| `listen` | string | 大多数场景是 | 无 | 全部 receiver | UDP/TCP 填监听地址；Kafka 填 broker CSV；SFTP 填 `host:port`；OSS 使用 `endpoint`。 |
 | `selector` | string | 是 | 无 | 全部 receiver | 必须引用已存在 selector。 |
 | `match_key.mode` | string | 否 | 留空表示兼容默认行为 | 全部 receiver | receiver 自身的 match key 生成模式；初始化/热重载时会预编译成专用 builder。 |
 | `match_key.fixed_value` | string | 否 | 空 | `match_key.mode=fixed` | fixed 模式下写入的固定值；仅在 `mode=fixed` 时允许配置。 |
@@ -270,11 +270,36 @@
 - receiver 通过 `seen` 指纹避免重复消费未变化文件；该行为是运行时逻辑，不需要额外配置。
 - 性能注意：SFTP 会在单文件开始流式读取前先生成一次 match key，后续所有 chunk 直接复用。
 
-### 6.5 local_timer receiver
+### 6.5 OSS receiver
+
+`type=oss` 用于轮询 S3-compatible OSS bucket 中的对象，并按 chunk 输出 `PayloadKindFileChunk`。
+
+| 字段 | 类型 | 必填 | 默认值 / 运行时回退 | 说明 |
+|---|---|---:|---|---|
+| `endpoint` | string | 是 | 无 | S3-compatible endpoint，不带 scheme 时按 minio-go 语义处理。 |
+| `bucket` | string | 是 | 无 | bucket 名。 |
+| `region` | string | 否 | 空 | 按服务商要求填写。 |
+| `access_key` | string | 是 | 无 | 访问密钥。 |
+| `secret_key` | string | 是 | 无 | 访问密钥。 |
+| `use_ssl` | bool | 否 | `false` | 是否使用 HTTPS。 |
+| `force_path_style` | bool | 否 | `false` | 强制使用 path-style bucket 地址。 |
+| `prefix` | string | 否 | 空 | 轮询对象前缀。 |
+| `poll_interval_sec` | int | 否 | 运行时默认 `5` 秒 | 轮询周期。 |
+| `chunk_size` | int | 是 | 运行时最小 `1024` | 单 chunk 字节数。 |
+
+行为说明：
+
+- 对象按 key 排序后处理，跳过目录占位对象。
+- 每个对象通过 `GetObject` 流式读取，chunk payload 使用 `packet.CopyFrom` 并设置 `ReleaseFn`。
+- 输出 meta 中 `Proto=ProtoOSS`，`FileName=path.Base(key)`，`FilePath=key`，`Remote=key`，`Local=bucket@endpoint`。
+- 去重指纹至少包含 `key + size + last_modified + etag`，不是只按对象名去重。
+- `match_key.mode` 支持留空、`remote_path`、`filename`、`fixed`；留空时输出 `oss|bucket=<bucket>|key=<key>`。
+
+### 6.6 local_timer receiver
 
 `type=local_timer` 用于本地定时生成固定 payload，并通过现有 receiver 回调进入 `selector -> task -> pipeline -> sender` 主链路。它不监听网络端口，也不新增 task type。
 
-#### 6.5.1 generator 字段
+#### 6.6.1 generator 字段
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---:|---|---|
@@ -288,7 +313,7 @@
 | `generator.remote` | string | 否 | 空字符串 | 写入 `packet.Meta.Remote`。 |
 | `generator.local` | string | 否 | 空字符串 | 写入 `packet.Meta.Local`。 |
 
-#### 6.5.2 校验规则
+#### 6.6.2 校验规则
 
 - `receiver.selector` 仍然必填，并引用已有 selector。
 - `payload_data` 必填。
@@ -297,7 +322,7 @@
 - duration 字段必须是合法且大于 0 的 `time.ParseDuration` 文本。
 - `rate_per_sec` 必须大于 0；`total_packets` 必须大于等于 0。
 
-#### 6.5.3 match key
+#### 6.6.3 match key
 
 - `match_key.mode` 支持：
   - 留空：兼容默认模式，输出 `local|receiver=local_timer`。
@@ -335,8 +360,8 @@
 
 | 字段 | 类型 | 必填 | 默认值 | 适用范围 | 说明 |
 |---|---|---:|---|---|---|
-| `type` | string | 是 | 无 | 全部 sender | 当前支持 `udp_unicast`、`udp_multicast`、`tcp_gnet`、`kafka`、`sftp`。 |
-| `remote` | string | 多数场景是 | 无 | 全部 sender | UDP/TCP/SFTP 为目标地址；Kafka 为 broker CSV。 |
+| `type` | string | 是 | 无 | 全部 sender | 当前支持 `udp_unicast`、`udp_multicast`、`tcp_gnet`、`kafka`、`sftp`、`oss`、`dds_skydds`。 |
+| `remote` | string | 多数场景是 | 无 | 全部 sender | UDP/TCP/SFTP 为目标地址；Kafka 为 broker CSV；OSS 使用 `endpoint`。 |
 | `frame` | string | 否 | 空字符串 | 仅 `tcp_gnet` | sender 侧支持空字符串、`none`、`u16be`。 |
 | `concurrency` | int | 否 | `8` | 全部 sender | 对不同 sender 含义略有不同，但统一要求：若显式配置为正数，则必须是 **2 的幂**。 |
 | `socket_send_buffer` | int | 否 | `1073741824` | 仅 `udp_unicast` / `udp_multicast` / `tcp_gnet` | socket 内核发送缓冲。 |
@@ -448,6 +473,72 @@
 | `host_key_fingerprint` | string | 是 | 无 | SSH 主机指纹，格式与 SFTP receiver 相同。 |
 | `concurrency` | int | 否 | `8` | 分片并发度。 |
 
+行为补充：
+
+- sender 优先使用 `packet.Meta.TargetFilePath` 作为最终相对路径；为空时回退 `FilePath`，再回退 `FileName`。
+- `TargetFileName` 可在未显式设置 `TargetFilePath` 时覆盖 basename。
+- 最终路径会清洗为安全相对路径后拼到 `remote_dir` 下，并自动创建父目录。
+- rename 成功后才触发 `notify_on_success`。
+
+### 9.7 OSS sender
+
+`type=oss` 用 multipart upload 直接写入 OSS，不会先把完整文件组装到本地。
+
+| 字段 | 类型 | 必填 | 默认值 / 运行时回退 | 说明 |
+|---|---|---:|---|---|
+| `endpoint` | string | 是 | 无 | S3-compatible endpoint。 |
+| `bucket` | string | 是 | 无 | 目标 bucket。 |
+| `region` | string | 否 | 空 | 按服务商要求填写。 |
+| `access_key` | string | 是 | 无 | 访问密钥。 |
+| `secret_key` | string | 是 | 无 | 访问密钥。 |
+| `use_ssl` | bool | 否 | `false` | 是否使用 HTTPS。 |
+| `force_path_style` | bool | 否 | `false` | 强制使用 path-style bucket 地址。 |
+| `key_prefix` | string | 否 | 空 | 当 packet 未携带 `TargetFilePath` 时，拼到 `FilePath` / `FileName` 前。 |
+| `part_size` | int | 是 | 无 | multipart part 聚合阈值，必须 `>0`。 |
+| `storage_class` | string | 否 | 空 | 透传到 `PutObjectOptions.StorageClass`。 |
+| `content_type` | string | 否 | 空 | 透传到 `PutObjectOptions.ContentType`。 |
+
+object key 生成优先级：
+
+1. `TargetFilePath`
+2. `key_prefix + FilePath`
+3. `key_prefix + FileName`
+
+所有 key 都会做路径清洗，拒绝空 key 与 `..` 路径。sender 只接受 `PayloadKindFileChunk`，会校验 chunk `checksum`；`CompleteMultipartUpload` 成功后才触发 `notify_on_success`。
+
+### 9.8 notify_on_success
+
+`notify_on_success` 是文件型 sender 的 commit success 后置动作，不是 task 普通 sender fan-out。当前适用于 `sftp` 与 `oss`：
+
+- SFTP：远端 `Rename(temp, final)` 成功后触发。
+- OSS：`CompleteMultipartUpload` 成功后触发。
+
+配置可写单对象或数组。Kafka 示例：
+
+```json
+"notify_on_success": {
+  "type": "kafka",
+  "remote": "127.0.0.1:9092",
+  "topic": "file-ready",
+  "record_key_source": "transfer_id",
+  "client_id": "forward-stub-ready"
+}
+```
+
+SkyDDS 示例：
+
+```json
+"notify_on_success": {
+  "type": "dds_skydds",
+  "dcps_config_file": "dds_tcp_conf.ini",
+  "domain_id": 0,
+  "topic_name": "FileReady",
+  "message_model": "octet"
+}
+```
+
+Kafka 通知支持 `remote`、`topic`、`record_key_source`、`client_id`、`username`、`password`、`sasl_mechanism`、`tls`、`tls_skip_verify`、`dial_timeout`、`request_timeout`、`retry_timeout`、`retry_backoff`、`metadata_max_age`、`conn_idle_timeout`。SkyDDS 通知第一版只支持 `message_model=octet`，一次文件成功发送一条 JSON 通知。
+
 ## 10. pipelines 配置
 
 `pipelines` 的结构是 `map[string][]StageConfig`，每个 stage 的字段如下。
@@ -461,6 +552,10 @@
 | `hex` | string | `match_offset_bytes` / `replace_offset_bytes` / `route_offset_bytes_sender.cases` 的 key | 无空格十六进制字符串。 |
 | `cases` | map[string]string | `route_offset_bytes_sender` | 十六进制字节序列到 sender 名称的映射。 |
 | `default_sender` | string | `route_offset_bytes_sender` | 未命中 `cases` 时使用的默认 sender。 |
+| `value` | string | `set_target_file_path` | 直接写入 `TargetFilePath`。 |
+| `prefix` | string | `rewrite_target_path_strip_prefix` / `rewrite_target_path_add_prefix` | 路径前缀。 |
+| `old` / `new` | string | `rewrite_target_filename_replace` | 文件名简单替换参数。 |
+| `pattern` / `replacement` | string | regex stage | 正则与替换文本。 |
 
 ### 10.2 当前支持的 stage 类型
 
@@ -469,6 +564,18 @@
 | `match_offset_bytes` | 匹配指定偏移处的字节串；不匹配则终止该 pipeline。 | `hex` 必须是合法十六进制。 |
 | `replace_offset_bytes` | 把指定偏移处的内容替换为给定字节串。 | `hex` 必须是合法十六进制。 |
 | `route_offset_bytes_sender` | 从 payload 指定偏移读取固定长度字节，映射到 sender 名称，并写入 `packet.Meta.RouteSender`。 | `cases` 不能为空；每个 case key 的字节长度必须一致；case value 不能为空。 |
+| `set_target_file_path` | 直接设置 `packet.Meta.TargetFilePath`。 | `value` 必填。 |
+| `rewrite_target_path_strip_prefix` | 从 `TargetFilePath` 或 `FilePath` 去掉给定前缀。 | `prefix` 必填。 |
+| `rewrite_target_path_add_prefix` | 给目标路径增加前缀。 | `prefix` 必填。 |
+| `rewrite_target_filename_replace` | 文件名字符串替换，例如 `.csv -> _done.csv`。 | `old` 必填。 |
+| `rewrite_target_path_regex` | 按正则改写目标路径。 | `pattern` 必须是合法正则。 |
+| `rewrite_target_filename_regex` | 按正则改写目标文件名，并同步更新目标路径 basename。 | `pattern` 必须是合法正则。 |
+
+文件路径改写约定：
+
+- `FileName` / `FilePath` 保持来源语义。
+- stage 只改 `TargetFileName` / `TargetFilePath`。
+- 文件型 sender 优先使用 `Target*`，为空时回退 `File*`。
 
 ### 10.3 route stage 与 task.senders 的关系
 

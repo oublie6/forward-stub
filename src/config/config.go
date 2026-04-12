@@ -207,11 +207,62 @@ type LocalGeneratorConfig struct {
 	Local string `json:"local,omitempty"`
 }
 
+// NotifyOnSuccessConfigs 描述 sender 文件提交成功后的后置通知配置列表。
+// 兼容单对象与数组两种 JSON 写法，便于第一版从单通知平滑扩展为多通知。
+type NotifyOnSuccessConfigs []NotifyOnSuccessConfig
+
+// UnmarshalJSON 支持 notify_on_success 写成对象或对象数组。
+func (n *NotifyOnSuccessConfigs) UnmarshalJSON(data []byte) error {
+	if n == nil {
+		return fmt.Errorf("nil NotifyOnSuccessConfigs")
+	}
+	if string(data) == "null" {
+		*n = nil
+		return nil
+	}
+	var arr []NotifyOnSuccessConfig
+	if err := json.Unmarshal(data, &arr); err == nil {
+		*n = arr
+		return nil
+	}
+	var one NotifyOnSuccessConfig
+	if err := json.Unmarshal(data, &one); err != nil {
+		return err
+	}
+	*n = []NotifyOnSuccessConfig{one}
+	return nil
+}
+
+// NotifyOnSuccessConfig 描述文件型 sender commit success 后的通知动作。
+type NotifyOnSuccessConfig struct {
+	Type            string `json:"type"`
+	Remote          string `json:"remote,omitempty"`
+	Topic           string `json:"topic,omitempty"`
+	RecordKeySource string `json:"record_key_source,omitempty"`
+	ClientID        string `json:"client_id,omitempty"`
+	Username        string `json:"username,omitempty"`
+	Password        string `json:"password,omitempty"`
+	SASLMechanism   string `json:"sasl_mechanism,omitempty"`
+	TLS             bool   `json:"tls,omitempty"`
+	TLSSkipVerify   bool   `json:"tls_skip_verify,omitempty"`
+	DialTimeout     string `json:"dial_timeout,omitempty"`
+	RequestTimeout  string `json:"request_timeout,omitempty"`
+	RetryTimeout    string `json:"retry_timeout,omitempty"`
+	RetryBackoff    string `json:"retry_backoff,omitempty"`
+	MetadataMaxAge  string `json:"metadata_max_age,omitempty"`
+	ConnIdleTimeout string `json:"conn_idle_timeout,omitempty"`
+
+	DCPSConfigFile string `json:"dcps_config_file,omitempty"`
+	DomainID       int    `json:"domain_id,omitempty"`
+	TopicName      string `json:"topic_name,omitempty"`
+	MessageModel   string `json:"message_model,omitempty"`
+}
+
 // ReceiverConfig 描述单个接收端实例。
 type ReceiverConfig struct {
-	// Type 指定接收端实现类型（udp_gnet/tcp_gnet/kafka/sftp/dds_skydds/local_timer）。
+	// Type 指定接收端实现类型（udp_gnet/tcp_gnet/kafka/sftp/oss/dds_skydds/local_timer）。
 	// 用法：不同 type 决定下列字段的生效范围，应按协议填写配套参数。
-	Type string `json:"type"` // udp_gnet | tcp_gnet | kafka | sftp | dds_skydds | local_timer
+	Type string `json:"type"` // udp_gnet | tcp_gnet | kafka | sftp | oss | dds_skydds | local_timer
 	// Listen 为监听地址；Kafka 场景下为 brokers 列表。
 	// 用法：udp/tcp 填 host:port；kafka 填逗号分隔 broker；sftp 填服务器 host:port。
 	Listen string `json:"listen"`
@@ -323,6 +374,19 @@ type ReceiverConfig struct {
 	// ChunkSize 是 SFTP 文件分块读取大小（字节）。
 	// 用法：大块提升吞吐，小块降低单包延迟与内存峰值。
 	ChunkSize int `json:"chunk_size,omitempty"`
+	// Endpoint/Bucket/Region/AccessKey/SecretKey 是 S3-compatible OSS 参数。
+	// 用法：Type=oss 时 endpoint/bucket/access_key/secret_key 必填，region 按服务商要求填写。
+	Endpoint  string `json:"endpoint,omitempty"`
+	Bucket    string `json:"bucket,omitempty"`
+	Region    string `json:"region,omitempty"`
+	AccessKey string `json:"access_key,omitempty"`
+	SecretKey string `json:"secret_key,omitempty"`
+	// UseSSL 控制 OSS 是否使用 HTTPS。
+	UseSSL bool `json:"use_ssl,omitempty"`
+	// ForcePathStyle 控制 OSS 是否使用 path-style 地址；第一版保留字段供兼容服务商配置。
+	ForcePathStyle bool `json:"force_path_style,omitempty"`
+	// Prefix 是 OSS receiver 轮询对象前缀。
+	Prefix string `json:"prefix,omitempty"`
 	// HostKeyFingerprint 是 SFTP 服务端主机公钥指纹（SSH SHA256 格式）。
 	// 用法：必须与服务端实际指纹一致，防止中间人攻击；示例：SHA256:AbCd....
 	HostKeyFingerprint string `json:"host_key_fingerprint,omitempty"`
@@ -358,9 +422,9 @@ type ReceiverConfig struct {
 
 // SenderConfig 描述单个发送端实例。
 type SenderConfig struct {
-	// Type 指定发送端实现类型（udp_unicast/udp_multicast/tcp_gnet/kafka/sftp）。
+	// Type 指定发送端实现类型（udp_unicast/udp_multicast/tcp_gnet/kafka/sftp/oss/dds_skydds）。
 	// 用法：根据目标协议选择，字段校验与行为由 type 决定。
-	Type string `json:"type"` // udp_unicast | udp_multicast | tcp_gnet | kafka | sftp | dds_skydds
+	Type string `json:"type"` // udp_unicast | udp_multicast | tcp_gnet | kafka | sftp | oss | dds_skydds
 	// Remote 是目标地址；Kafka 场景下为 brokers 列表。
 	// 用法：udp/tcp/sftp 填 host:port；kafka 填逗号分隔 broker。
 	Remote string `json:"remote"`
@@ -497,6 +561,21 @@ type SenderConfig struct {
 	// HostKeyFingerprint 是 SFTP 服务端主机公钥指纹（SSH SHA256 格式）。
 	// 用法：必须与服务端实际指纹一致，防止中间人攻击；示例：SHA256:AbCd....
 	HostKeyFingerprint string `json:"host_key_fingerprint,omitempty"`
+	// OSS sender 参数。Type=oss 时 endpoint/bucket/access_key/secret_key 必填。
+	Endpoint       string `json:"endpoint,omitempty"`
+	Bucket         string `json:"bucket,omitempty"`
+	Region         string `json:"region,omitempty"`
+	AccessKey      string `json:"access_key,omitempty"`
+	SecretKey      string `json:"secret_key,omitempty"`
+	UseSSL         bool   `json:"use_ssl,omitempty"`
+	ForcePathStyle bool   `json:"force_path_style,omitempty"`
+	KeyPrefix      string `json:"key_prefix,omitempty"`
+	PartSize       int64  `json:"part_size,omitempty"`
+	StorageClass   string `json:"storage_class,omitempty"`
+	ContentType    string `json:"content_type,omitempty"`
+	// NotifyOnSuccess 是文件型 sender commit success 后的后置通知配置。
+	// 用法：仅 sftp/oss 文件提交成功后触发，不参与 task 普通 sender fan-out。
+	NotifyOnSuccess NotifyOnSuccessConfigs `json:"notify_on_success,omitempty"`
 }
 
 // KafkaAcksConfig 表示 Kafka sender 的 acks 配置，支持 JSON 数字或字符串。
@@ -572,6 +651,16 @@ type StageConfig struct {
 	// DefaultSender 是 switch 路由未命中时的默认 sender。
 	// 用法：为空表示未命中直接丢弃（stage 返回 false）。
 	DefaultSender string `json:"default_sender,omitempty"`
+	// Value 是直接设置类 stage 的目标值。
+	Value string `json:"value,omitempty"`
+	// Prefix 是路径前缀改写参数。
+	Prefix string `json:"prefix,omitempty"`
+	// Old/New 是简单字符串替换参数。
+	Old string `json:"old,omitempty"`
+	New string `json:"new,omitempty"`
+	// Pattern/Replacement 是正则改写参数。
+	Pattern     string `json:"pattern,omitempty"`
+	Replacement string `json:"replacement,omitempty"`
 }
 
 // SelectorConfig 描述一个“match key -> task set”的精确匹配器。

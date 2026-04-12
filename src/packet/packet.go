@@ -16,6 +16,7 @@ const (
 	ProtoSFTP   Proto = 4
 	ProtoSkyDDS Proto = 5
 	ProtoLocal  Proto = 6
+	ProtoOSS    Proto = 7
 )
 
 const (
@@ -55,6 +56,12 @@ type Meta struct {
 	// FilePath 是文件完整路径。
 	// 用法：保留来源路径上下文，便于目录映射与回放定位。
 	FilePath string
+	// TargetFileName 是目标侧文件名（不含目录）。
+	// 用法：由 pipeline 改写，sender 优先用于目标文件 basename 覆盖；为空时回退 FileName。
+	TargetFileName string
+	// TargetFilePath 是目标侧完整路径或对象 key。
+	// 用法：由 pipeline 改写，sender 优先使用；为空时回退 FilePath/FileName。
+	TargetFilePath string
 	// Offset 是当前 chunk 在文件中的起始偏移。
 	// 用法：sender 通过 WriteAt(offset) 实现乱序/重传安全写入。
 	Offset int64

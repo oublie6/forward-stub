@@ -1,0 +1,245 @@
+package receiver
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"path"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"forward-stub/src/config"
+	"forward-stub/src/logx"
+	"forward-stub/src/packet"
+
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+	"go.uber.org/zap/zapcore"
+)
+
+type OSSReceiver struct {
+	name string
+	cfg  config.ReceiverConfig
+	cli  *minio.Client
+
+	onPacket        func(*packet.Packet)
+	matchKeyBuilder ossMatchKeyBuilder
+	matchKeyMode    string
+
+	mu     sync.Mutex
+	cancel context.CancelFunc
+	done   chan struct{}
+	stats  *logx.TrafficCounter
+	seen   map[string]string
+}
+
+func NewOSSReceiver(name string, rc config.ReceiverConfig) (*OSSReceiver, error) {
+	if strings.TrimSpace(rc.Endpoint) == "" {
+		return nil, fmt.Errorf("oss receiver requires endpoint")
+	}
+	if strings.TrimSpace(rc.Bucket) == "" {
+		return nil, fmt.Errorf("oss receiver requires bucket")
+	}
+	if strings.TrimSpace(rc.AccessKey) == "" || strings.TrimSpace(rc.SecretKey) == "" {
+		return nil, fmt.Errorf("oss receiver requires access_key and secret_key")
+	}
+	opts := &minio.Options{
+		Creds:  credentials.NewStaticV4(strings.TrimSpace(rc.AccessKey), strings.TrimSpace(rc.SecretKey), ""),
+		Secure: rc.UseSSL,
+		Region: strings.TrimSpace(rc.Region),
+	}
+	if rc.ForcePathStyle {
+		opts.BucketLookup = minio.BucketLookupPath
+	}
+	cli, err := minio.New(strings.TrimSpace(rc.Endpoint), opts)
+	if err != nil {
+		return nil, err
+	}
+	builder, mode, err := compileOSSMatchKeyBuilder(rc.MatchKey, rc.Bucket)
+	if err != nil {
+		return nil, err
+	}
+	return &OSSReceiver{name: name, cfg: rc, cli: cli, seen: make(map[string]string), matchKeyBuilder: builder, matchKeyMode: mode}, nil
+}
+
+func (r *OSSReceiver) Name() string { return r.name }
+
+func (r *OSSReceiver) Key() string {
+	return "oss|" + strings.TrimSpace(r.cfg.Endpoint) + "|" + strings.TrimSpace(r.cfg.Bucket) + "|" + strings.TrimSpace(r.cfg.Prefix)
+}
+
+func (r *OSSReceiver) MatchKeyMode() string { return r.matchKeyMode }
+
+func (r *OSSReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
+	r.onPacket = onPacket
+
+	r.mu.Lock()
+	rctx, cancel := context.WithCancel(ctx)
+	r.cancel = cancel
+	r.done = make(chan struct{})
+	if logx.Enabled(zapcore.InfoLevel) {
+		r.stats = logx.AcquireTrafficCounter(
+			"receiver traffic stats",
+			"role", "receiver",
+			"receiver", r.Name(),
+			"receiver_key", r.Key(),
+			"proto", "oss",
+		)
+	}
+	r.mu.Unlock()
+
+	defer func() {
+		r.mu.Lock()
+		if r.stats != nil {
+			r.stats.Close()
+			r.stats = nil
+		}
+		if r.cancel != nil {
+			r.cancel()
+			r.cancel = nil
+		}
+		if r.done != nil {
+			close(r.done)
+			r.done = nil
+		}
+		r.mu.Unlock()
+	}()
+
+	poll := time.Duration(defaultInt(r.cfg.PollIntervalSec, 5)) * time.Second
+	for {
+		if err := r.scanOnce(rctx); err != nil {
+			logx.L().Warnw("oss receiver scan failed", "receiver", r.name, "error", err)
+		}
+		select {
+		case <-rctx.Done():
+			return nil
+		case <-time.After(poll):
+		}
+	}
+}
+
+func (r *OSSReceiver) Stop(ctx context.Context) error {
+	r.mu.Lock()
+	cancel := r.cancel
+	done := r.done
+	r.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if done == nil {
+		return nil
+	}
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (r *OSSReceiver) scanOnce(ctx context.Context) error {
+	bucket := strings.TrimSpace(r.cfg.Bucket)
+	opts := minio.ListObjectsOptions{Prefix: strings.TrimSpace(r.cfg.Prefix), Recursive: true, WithMetadata: true}
+	var objects []minio.ObjectInfo
+	for obj := range r.cli.ListObjects(ctx, bucket, opts) {
+		if obj.Err != nil {
+			return obj.Err
+		}
+		if obj.Key == "" || strings.HasSuffix(obj.Key, "/") || obj.Size < 0 {
+			continue
+		}
+		objects = append(objects, obj)
+	}
+	sort.Slice(objects, func(i, j int) bool { return objects[i].Key < objects[j].Key })
+	for _, obj := range objects {
+		if err := ctx.Err(); err != nil {
+			return nil
+		}
+		sig := fmt.Sprintf("%s|%d|%d|%s", obj.Key, obj.Size, obj.LastModified.UnixNano(), obj.ETag)
+		if r.isSeen(obj.Key, sig) {
+			continue
+		}
+		if err := r.streamObject(ctx, obj); err != nil {
+			return err
+		}
+		r.markSeen(obj.Key, sig)
+	}
+	return nil
+}
+
+func (r *OSSReceiver) streamObject(ctx context.Context, obj minio.ObjectInfo) error {
+	reader, err := r.cli.GetObject(ctx, strings.TrimSpace(r.cfg.Bucket), obj.Key, minio.GetObjectOptions{})
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	chunkSize := defaultInt(r.cfg.ChunkSize, 64*1024)
+	if chunkSize < 1024 {
+		chunkSize = 1024
+	}
+	buf := make([]byte, chunkSize)
+	offset := int64(0)
+	transferID := fmt.Sprintf("%s|%s|%d|%s", strings.TrimSpace(r.cfg.Bucket), obj.Key, obj.Size, obj.ETag)
+	matchKey := r.matchKeyBuilder(obj.Key)
+	fileName := path.Base(obj.Key)
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil
+		}
+		n, err := reader.Read(buf)
+		if n > 0 {
+			eof := err == io.EOF || offset+int64(n) >= obj.Size
+			payload, rel := packet.CopyFrom(buf[:n])
+			if r.stats != nil {
+				r.stats.AddBytes(n)
+			}
+			h := sha256.Sum256(buf[:n])
+			r.onPacket(&packet.Packet{
+				Envelope: packet.Envelope{
+					Kind:    packet.PayloadKindFileChunk,
+					Payload: payload,
+					Meta: packet.Meta{
+						Proto:        packet.ProtoOSS,
+						ReceiverName: r.name,
+						Remote:       obj.Key,
+						Local:        strings.TrimSpace(r.cfg.Bucket) + "@" + strings.TrimSpace(r.cfg.Endpoint),
+						MatchKey:     matchKey,
+						FileName:     fileName,
+						FilePath:     obj.Key,
+						TransferID:   transferID,
+						Offset:       offset,
+						TotalSize:    obj.Size,
+						Checksum:     hex.EncodeToString(h[:]),
+						EOF:          eof,
+					},
+				},
+				ReleaseFn: rel,
+			})
+			offset += int64(n)
+		}
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+func (r *OSSReceiver) isSeen(key, sig string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.seen[key] == sig
+}
+
+func (r *OSSReceiver) markSeen(key, sig string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.seen[key] = sig
+}
