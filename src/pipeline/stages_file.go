@@ -91,12 +91,19 @@ func targetFilenameOrSource(p *packet.Packet) string {
 	if strings.TrimSpace(p.Meta.FileName) != "" {
 		return p.Meta.FileName
 	}
-	return path.Base(targetPathOrSource(p))
+	base := path.Base(strings.TrimSpace(targetPathOrSource(p)))
+	if base == "." || base == "/" {
+		return ""
+	}
+	return base
 }
 
 func replacePathBase(filePath, fileName string) string {
 	fileName = strings.TrimSpace(fileName)
 	if fileName == "" {
+		if path.Base(strings.TrimSpace(filePath)) == "." {
+			return ""
+		}
 		return filePath
 	}
 	dir := path.Dir(filePath)

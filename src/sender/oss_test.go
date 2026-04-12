@@ -8,6 +8,7 @@ import (
 	"io"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,6 +18,8 @@ import (
 	"forward-stub/src/packet"
 
 	"github.com/minio/minio-go/v7"
+	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
 )
 
 type fakeOSSAPI struct {
@@ -25,10 +28,17 @@ type fakeOSSAPI struct {
 	partIDs     []int
 	completed   bool
 	completeKey string
+	aborts      []fakeOSSAbort
 
 	putStarted chan struct{}
 	releasePut chan struct{}
 	putOnce    sync.Once
+}
+
+type fakeOSSAbort struct {
+	bucket   string
+	object   string
+	uploadID string
 }
 
 func (f *fakeOSSAPI) NewMultipartUpload(context.Context, string, string, minio.PutObjectOptions) (string, error) {
@@ -56,6 +66,13 @@ func (f *fakeOSSAPI) CompleteMultipartUpload(_ context.Context, _, object, _ str
 	f.completed = true
 	f.completeKey = object
 	return minio.UploadInfo{}, nil
+}
+
+func (f *fakeOSSAPI) AbortMultipartUpload(_ context.Context, bucket, object, uploadID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.aborts = append(f.aborts, fakeOSSAbort{bucket: bucket, object: object, uploadID: uploadID})
+	return nil
 }
 
 type fakeNotifier struct {
@@ -181,25 +198,52 @@ func TestOSSSenderClearsStateWhenNotifyFailsAfterComplete(t *testing.T) {
 	}
 }
 
-func TestSFTPSenderClearsStateWhenNotifyFailsAfterCommit(t *testing.T) {
-	n := &fakeNotifier{err: errors.New("notify down")}
+func TestSFTPSenderRejectsFileChunkWithoutTransferID(t *testing.T) {
+	s := &SFTPSender{}
+	p := &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindFileChunk, Payload: []byte("x")}}
+	err := s.Send(context.Background(), p)
+	if err == nil {
+		t.Fatalf("expected missing transfer_id error")
+	}
+	if !strings.Contains(err.Error(), "transfer_id") {
+		t.Fatalf("error should mention transfer_id, got %v", err)
+	}
+}
+
+func TestSFTPSenderCloseClearsStateAndShard(t *testing.T) {
 	s := &SFTPSender{
-		name:          "sftp",
-		addr:          "127.0.0.1:22",
+		concurrency:   2,
+		locks:         make([]sync.Mutex, 2),
+		sshClients:    make([]*ssh.Client, 2),
+		sftpClis:      make([]*sftp.Client, 2),
+		connReady:     make([]atomic.Bool, 2),
+		states:        []map[string]*sftpTransferState{{"tx-a": {finalPath: "/out/a.txt"}}, {"tx-b": {finalPath: "/out/b.txt"}}},
+		transferShard: map[string]int{"tx-a": 0, "tx-b": 1},
+	}
+	if err := s.Close(context.Background()); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	for i := range s.states {
+		if len(s.states[i]) != 0 {
+			t.Fatalf("state shard %d should be cleared, got %v", i, s.states[i])
+		}
+	}
+	if len(s.transferShard) != 0 {
+		t.Fatalf("transfer shard should be cleared, got %v", s.transferShard)
+	}
+}
+
+func TestSFTPCleanupCommittedTransferClearsStateAndShard(t *testing.T) {
+	s := &SFTPSender{
 		states:        []map[string]*sftpTransferState{{"tx-sftp": {finalPath: "/out/a.txt"}}},
 		transferShard: map[string]int{"tx-sftp": 0},
-		notifiers:     []FileReadyNotifier{n},
 	}
-	p := &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{TransferID: "tx-sftp", FilePath: "in/a.txt", TotalSize: 1}}}
-	err := s.afterSFTPCommitLocked(context.Background(), 0, "tx-sftp", p, "/out/a.txt")
-	if err == nil {
-		t.Fatalf("expected notify failure error")
-	}
+	s.cleanupCommittedTransferLocked(0, "tx-sftp")
 	if _, ok := s.states[0]["tx-sftp"]; ok {
-		t.Fatalf("sftp transfer state should be cleared after commit even when notify fails")
+		t.Fatalf("sftp transfer state should be cleared after commit")
 	}
 	if _, ok := s.transferShard["tx-sftp"]; ok {
-		t.Fatalf("sftp transfer shard should be cleared after commit even when notify fails")
+		t.Fatalf("sftp transfer shard should be cleared after commit")
 	}
 }
 
@@ -289,6 +333,75 @@ func TestOSSSenderDoesNotBlockOtherTransfersDuringPartUpload(t *testing.T) {
 	close(api.releasePut)
 	if err := <-errCh; err != nil {
 		t.Fatalf("blocked transfer send failed after release: %v", err)
+	}
+}
+
+func TestOSSSenderCloseAbortsAndClearsInFlightTransfers(t *testing.T) {
+	api := &fakeOSSAPI{}
+	s := newOSSSenderWithAPI("oss", config.SenderConfig{Endpoint: "endpoint", Bucket: "bucket"}, api, nil, 4)
+	if err := s.Send(context.Background(), packetWithChecksum([]byte("ab"), packet.Meta{
+		TransferID: "tx-close",
+		FilePath:   "a.txt",
+		Offset:     0,
+		TotalSize:  4,
+	})); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if len(s.states) != 1 {
+		t.Fatalf("expected in-flight state before close, got %d", len(s.states))
+	}
+	if err := s.Close(context.Background()); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if len(s.states) != 0 {
+		t.Fatalf("states should be cleared after close, got %d", len(s.states))
+	}
+	api.mu.Lock()
+	defer api.mu.Unlock()
+	if len(api.aborts) != 1 {
+		t.Fatalf("expected one abort, got %d", len(api.aborts))
+	}
+	if api.aborts[0].object != "a.txt" || api.aborts[0].uploadID != "upload-1" {
+		t.Fatalf("unexpected abort: %+v", api.aborts[0])
+	}
+}
+
+func TestOSSSenderTerminalFailureClearsStateAndAborts(t *testing.T) {
+	api := &fakeOSSAPI{}
+	s := newOSSSenderWithAPI("oss", config.SenderConfig{Endpoint: "endpoint", Bucket: "bucket"}, api, nil, 4)
+	err := s.Send(context.Background(), packetWithChecksum([]byte("012345678"), packet.Meta{
+		TransferID: "tx-terminal",
+		FilePath:   "a.txt",
+		Offset:     10,
+		TotalSize:  19,
+	}))
+	if !errors.Is(err, errOSSPendingLimitExceeded) {
+		t.Fatalf("expected pending limit terminal error, got %v", err)
+	}
+	if _, ok := s.states["tx-terminal"]; ok {
+		t.Fatalf("terminal failure should clear transfer state")
+	}
+	api.mu.Lock()
+	abortCount := len(api.aborts)
+	abort := fakeOSSAbort{}
+	if abortCount > 0 {
+		abort = api.aborts[0]
+	}
+	api.mu.Unlock()
+	if abortCount != 1 {
+		t.Fatalf("expected one abort, got %d", abortCount)
+	}
+	if abort.object != "a.txt" || abort.uploadID != "upload-1" {
+		t.Fatalf("unexpected abort: %+v", abort)
+	}
+	if err := s.Send(context.Background(), packetWithChecksum([]byte("x"), packet.Meta{
+		TransferID: "tx-terminal",
+		FilePath:   "a.txt",
+		Offset:     0,
+		TotalSize:  1,
+		EOF:        true,
+	})); err != nil {
+		t.Fatalf("same transfer_id should rebuild cleanly after terminal failure: %v", err)
 	}
 }
 

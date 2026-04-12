@@ -3,6 +3,7 @@ package sender
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"forward-stub/src/config"
@@ -83,7 +84,7 @@ func (n orderedNotifier) Close(context.Context) error {
 	return nil
 }
 
-func TestNotifyFileReadyStopsOnFirstFailure(t *testing.T) {
+func TestNotifyFileReadyCallsAllNotifiersAndJoinsFailures(t *testing.T) {
 	var calls []int
 	errBoom := errors.New("boom")
 	err := notifyFileReady(context.Background(), []FileReadyNotifier{
@@ -94,8 +95,11 @@ func TestNotifyFileReadyStopsOnFirstFailure(t *testing.T) {
 	if !errors.Is(err, errBoom) {
 		t.Fatalf("notify error got=%v want=%v", err, errBoom)
 	}
-	if len(calls) != 2 || calls[0] != 1 || calls[1] != 2 {
-		t.Fatalf("notifiers should stop after first failure, calls=%v", calls)
+	if !strings.Contains(err.Error(), "notifier[1]") {
+		t.Fatalf("notify error should include failing notifier index, got=%v", err)
+	}
+	if len(calls) != 3 || calls[0] != 1 || calls[1] != 2 || calls[2] != 3 {
+		t.Fatalf("notifiers should continue after failure, calls=%v", calls)
 	}
 }
 

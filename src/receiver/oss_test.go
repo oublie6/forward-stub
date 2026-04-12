@@ -20,6 +20,22 @@ func TestOSSReceiverSeenTracksObjectSignature(t *testing.T) {
 	}
 }
 
+func TestOSSReceiverSeenEvictsOldestWhenBounded(t *testing.T) {
+	r := &OSSReceiver{seen: make(map[string]string), seenLimit: 2}
+	r.markSeen("a.txt", "sig-a")
+	r.markSeen("b.txt", "sig-b")
+	r.markSeen("c.txt", "sig-c")
+	if r.isSeen("a.txt", "sig-a") {
+		t.Fatalf("oldest seen entry should be evicted")
+	}
+	if !r.isSeen("b.txt", "sig-b") || !r.isSeen("c.txt", "sig-c") {
+		t.Fatalf("recent seen entries should remain")
+	}
+	if len(r.seen) != 2 {
+		t.Fatalf("seen map should stay bounded, got %d", len(r.seen))
+	}
+}
+
 func TestCompileOSSMatchKeyBuilderModes(t *testing.T) {
 	tests := []struct {
 		name string

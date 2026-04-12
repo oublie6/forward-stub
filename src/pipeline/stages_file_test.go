@@ -81,7 +81,21 @@ func TestFilenameRewriteFallsBackToPathBaseAndKeepsEmptyNamePath(t *testing.T) {
 
 	empty := &packet.Packet{}
 	RewriteTargetFilenameReplace("x", "y")([]*packet.Packet{empty})
-	if empty.Meta.TargetFileName != "." || empty.Meta.TargetFilePath != "." {
-		t.Fatalf("empty packet rewrite should follow current path.Base semantics, name=%q path=%q", empty.Meta.TargetFileName, empty.Meta.TargetFilePath)
+	if empty.Meta.TargetFileName != "" || empty.Meta.TargetFilePath != "" {
+		t.Fatalf("empty packet rewrite should not create pseudo filename, name=%q path=%q", empty.Meta.TargetFileName, empty.Meta.TargetFilePath)
+	}
+
+	emptyRegex := &packet.Packet{}
+	RewriteTargetFilenameRegex(regexp.MustCompile(`^(.+)\.csv$`), `${1}.ready.csv`)([]*packet.Packet{emptyRegex})
+	if emptyRegex.Meta.TargetFileName != "" || emptyRegex.Meta.TargetFilePath != "" {
+		t.Fatalf("empty packet regex rewrite should not create pseudo filename, name=%q path=%q", emptyRegex.Meta.TargetFileName, emptyRegex.Meta.TargetFilePath)
+	}
+}
+
+func TestPathRegexKeepsLeadingSlashCurrentSemantics(t *testing.T) {
+	p := &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{FilePath: "/in/raw/a.csv"}}}
+	RewriteTargetPathRegex(regexp.MustCompile(`^/in/`), "/out/")([]*packet.Packet{p})
+	if p.Meta.TargetFilePath != "/out/raw/a.csv" {
+		t.Fatalf("path regex should keep current leading slash semantics, got=%q", p.Meta.TargetFilePath)
 	}
 }

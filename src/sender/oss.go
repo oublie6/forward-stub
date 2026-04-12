@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -25,6 +26,7 @@ type ossMultipartAPI interface {
 	NewMultipartUpload(ctx context.Context, bucket, object string, opts minio.PutObjectOptions) (string, error)
 	PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data io.Reader, size int64, opts minio.PutObjectPartOptions) (minio.ObjectPart, error)
 	CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, parts []minio.CompletePart, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+	AbortMultipartUpload(ctx context.Context, bucket, object, uploadID string) error
 }
 
 type minioCoreAPI struct{ core *minio.Core }
@@ -40,6 +42,12 @@ func (m minioCoreAPI) PutObjectPart(ctx context.Context, bucket, object, uploadI
 func (m minioCoreAPI) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, parts []minio.CompletePart, opts minio.PutObjectOptions) (minio.UploadInfo, error) {
 	return m.core.CompleteMultipartUpload(ctx, bucket, object, uploadID, parts, opts)
 }
+
+func (m minioCoreAPI) AbortMultipartUpload(ctx context.Context, bucket, object, uploadID string) error {
+	return m.core.AbortMultipartUpload(ctx, bucket, object, uploadID)
+}
+
+var errOSSPendingLimitExceeded = errors.New("oss sender pending out-of-order chunks exceed bounded limit")
 
 // OSSSender 是基于 S3-compatible multipart upload 的文件发送端。
 //
@@ -184,6 +192,11 @@ func (s *OSSSender) Send(ctx context.Context, p *packet.Packet) error {
 
 	shouldDrive, err := st.acceptPacket(p, s.pendingLimit, s.partSize)
 	if err != nil {
+		if isOSSTerminalTransferError(err) {
+			if abortErr := s.failTransfer(ctx, transferID, st); abortErr != nil {
+				return errors.Join(err, abortErr)
+			}
+		}
 		return err
 	}
 	if !shouldDrive {
@@ -285,6 +298,21 @@ func (s *OSSSender) driveOSSUpload(ctx context.Context, transferID string, st *o
 	}
 }
 
+func isOSSTerminalTransferError(err error) bool {
+	// Terminal failures mean the in-memory transfer state is no longer trustworthy.
+	// Keeping it would make later chunks for the same transfer_id continue from a corrupted state.
+	return errors.Is(err, errOSSPendingLimitExceeded)
+}
+
+func (s *OSSSender) failTransfer(ctx context.Context, transferID string, st *ossTransferState) error {
+	s.mu.Lock()
+	if s.states[transferID] == st {
+		delete(s.states, transferID)
+	}
+	s.mu.Unlock()
+	return s.abortTransfer(ctx, st)
+}
+
 type ossUploadOpKind uint8
 
 const (
@@ -355,8 +383,45 @@ func (st *ossTransferState) hasUploadWorkLocked(partSize int64) bool {
 }
 
 func (s *OSSSender) Close(ctx context.Context) error {
+	s.mu.Lock()
+	states := make([]*ossTransferState, 0, len(s.states))
+	for _, st := range s.states {
+		states = append(states, st)
+	}
+	s.states = make(map[string]*ossTransferState)
+	s.mu.Unlock()
+
+	var errs []error
+	for _, st := range states {
+		if err := s.abortTransfer(ctx, st); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	for _, n := range s.notifiers {
 		_ = n.Close(ctx)
+	}
+	return errors.Join(errs...)
+}
+
+func (s *OSSSender) abortTransfer(ctx context.Context, st *ossTransferState) error {
+	if st == nil {
+		return nil
+	}
+	if st.initDone != nil {
+		<-st.initDone
+	}
+	if st.initErr != nil {
+		return nil
+	}
+	st.mu.Lock()
+	objectKey := st.objectKey
+	uploadID := st.uploadID
+	st.mu.Unlock()
+	if objectKey == "" || uploadID == "" {
+		return nil
+	}
+	if err := s.api.AbortMultipartUpload(ctx, s.bucket, objectKey, uploadID); err != nil {
+		return fmt.Errorf("abort oss multipart upload object=%s upload_id=%s: %w", objectKey, uploadID, err)
 	}
 	return nil
 }
@@ -379,7 +444,7 @@ func (st *ossTransferState) acceptChunk(offset int64, payload []byte, pendingLim
 	st.pendingSegments[offset] = cp
 	st.pendingBytes += int64(len(cp))
 	if st.pendingBytes > pendingLimit {
-		return fmt.Errorf("oss sender pending out-of-order chunks exceed bounded limit: pending=%d limit=%d", st.pendingBytes, pendingLimit)
+		return fmt.Errorf("%w: pending=%d limit=%d", errOSSPendingLimitExceeded, st.pendingBytes, pendingLimit)
 	}
 	return nil
 }
@@ -397,37 +462,6 @@ func (st *ossTransferState) drainContiguousSegments() {
 		st.pendingPartBuffer = append(st.pendingPartBuffer, seg...)
 		st.nextOffset += int64(len(seg))
 	}
-}
-
-// flushReadyParts 按 part_size 上传所有完整 part，尾 part 留到 complete 前再上传。
-func (st *ossTransferState) flushReadyParts(ctx context.Context, api ossMultipartAPI, bucket string, partSize int64) error {
-	for int64(len(st.pendingPartBuffer)) >= partSize {
-		if err := st.uploadPartN(ctx, api, bucket, int(partSize)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (st *ossTransferState) uploadPart(ctx context.Context, api ossMultipartAPI, bucket string) error {
-	return st.uploadPartN(ctx, api, bucket, len(st.pendingPartBuffer))
-}
-
-func (st *ossTransferState) uploadPartN(ctx context.Context, api ossMultipartAPI, bucket string, n int) error {
-	if n <= 0 {
-		return nil
-	}
-	partPayload := append([]byte(nil), st.pendingPartBuffer[:n]...)
-	partStart := st.uploadedEnd()
-	objPart, err := api.PutObjectPart(ctx, bucket, st.objectKey, st.uploadID, st.nextPartNumber, bytes.NewReader(partPayload), int64(len(partPayload)), minio.PutObjectPartOptions{})
-	if err != nil {
-		return err
-	}
-	st.uploadedParts = append(st.uploadedParts, ossUploadedPart{partNumber: st.nextPartNumber, etag: objPart.ETag, start: partStart, end: partStart + int64(len(partPayload))})
-	st.nextPartNumber++
-	copy(st.pendingPartBuffer, st.pendingPartBuffer[n:])
-	st.pendingPartBuffer = st.pendingPartBuffer[:len(st.pendingPartBuffer)-n]
-	return nil
 }
 
 func (st *ossTransferState) uploadedEnd() int64 {
