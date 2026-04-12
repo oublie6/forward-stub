@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -206,13 +207,14 @@ func (n *SkyDDSCommitNotifier) Close(context.Context) error {
 }
 
 func notifyFileReady(ctx context.Context, notifiers []FileReadyNotifier, event FileReadyEvent) error {
-	for _, n := range notifiers {
+	var errs []error
+	for i, n := range notifiers {
 		if err := n.NotifyFileReady(ctx, event); err != nil {
 			// TODO: 增加持久化补发表，避免 commit 成功后通知失败只能依赖上层重试。
-			return err
+			errs = append(errs, fmt.Errorf("notifier[%d]: %w", i, err))
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func baseFileReadyEvent(p *packet.Packet, senderName, targetProto, finalPath string) FileReadyEvent {

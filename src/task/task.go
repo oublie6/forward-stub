@@ -327,6 +327,7 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 				t.sendToSender(ctx, outPkt, s)
 				continue
 			}
+			// TODO: 增加 route_sender_miss 计数器，便于区分预期丢弃与配置漂移。
 			logx.L().Warnw("路由发送端未命中任务内发送端", "任务名称", t.Name, "路由发送端", outPkt.Meta.RouteSender)
 			continue
 		}

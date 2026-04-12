@@ -25,6 +25,7 @@ import (
 //
 // 它按对象 key 稳定排序后逐个流式读取对象，输出 PayloadKindFileChunk。
 // seen 表按 key 保存 size/mtime/etag 指纹：同名对象覆盖后指纹变化，会再次被处理。
+// seen 使用固定容量 FIFO 淘汰最早记录，避免长期运行时随着历史 key 无界增长。
 type OSSReceiver struct {
 	name string
 	cfg  config.ReceiverConfig
@@ -39,7 +40,13 @@ type OSSReceiver struct {
 	done   chan struct{}
 	stats  *logx.TrafficCounter
 	seen   map[string]string
+	// seenOrder 记录 key 首次进入 seen 的顺序；超过 seenLimit 后淘汰最旧 key。
+	// 这保留了最近窗口内的去重能力，同时把内存上界固定在简单可预期的范围。
+	seenOrder []string
+	seenLimit int
 }
+
+const defaultOSSReceiverSeenLimit = 10000
 
 // NewOSSReceiver 构造 OSSReceiver 并编译 match key builder。
 // endpoint/bucket/access_key/secret_key 必须完整；prefix 只影响轮询范围，不参与 match key 默认格式。
@@ -69,7 +76,7 @@ func NewOSSReceiver(name string, rc config.ReceiverConfig) (*OSSReceiver, error)
 	if err != nil {
 		return nil, err
 	}
-	return &OSSReceiver{name: name, cfg: rc, cli: cli, seen: make(map[string]string), matchKeyBuilder: builder, matchKeyMode: mode}, nil
+	return &OSSReceiver{name: name, cfg: rc, cli: cli, seen: make(map[string]string), seenLimit: defaultOSSReceiverSeenLimit, matchKeyBuilder: builder, matchKeyMode: mode}, nil
 }
 
 func (r *OSSReceiver) Name() string { return r.name }
@@ -256,5 +263,21 @@ func (r *OSSReceiver) isSeen(key, sig string) bool {
 func (r *OSSReceiver) markSeen(key, sig string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.seen == nil {
+		r.seen = make(map[string]string)
+	}
+	if _, ok := r.seen[key]; !ok {
+		r.seenOrder = append(r.seenOrder, key)
+	}
 	r.seen[key] = sig
+	limit := r.seenLimit
+	if limit <= 0 {
+		limit = defaultOSSReceiverSeenLimit
+	}
+	for len(r.seen) > limit && len(r.seenOrder) > 0 {
+		oldest := r.seenOrder[0]
+		copy(r.seenOrder, r.seenOrder[1:])
+		r.seenOrder = r.seenOrder[:len(r.seenOrder)-1]
+		delete(r.seen, oldest)
+	}
 }

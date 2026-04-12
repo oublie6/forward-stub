@@ -157,7 +157,7 @@ func (s *SFTPSender) Key() string { return "sftp|" + s.addr + "|" + s.remoteDir 
 
 // Send 接收一个 packet 并写入远端临时文件。
 // 当满足完成条件（EOF + 写满 total_size）时，会原子 rename 为最终文件。
-// 用法：推荐只投递 PayloadKindFileChunk 数据；若无 transfer_id 会自动生成临时会话。
+// 用法：推荐只投递 PayloadKindFileChunk 数据；file_chunk 必须携带稳定 transfer_id。
 func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -165,7 +165,10 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 
 	transferID := strings.TrimSpace(p.Meta.TransferID)
 	if transferID == "" {
-		transferID = fmt.Sprintf("stream-%d", time.Now().UnixNano())
+		if p.Kind == packet.PayloadKindFileChunk {
+			return fmt.Errorf("sftp sender requires transfer_id for file_chunk payload")
+		}
+		return fmt.Errorf("sftp sender requires transfer_id")
 	}
 	idx := s.pickShard(transferID)
 	if !s.connReady[idx].Load() {
@@ -264,8 +267,16 @@ func (s *SFTPSender) Close(ctx context.Context) error {
 	for i := 0; i < s.concurrency; i++ {
 		s.locks[i].Lock()
 		s.invalidateConnLocked(i)
+		// Close 只能证明本进程内存状态失效，不能证明远端 .part 一定由本生命周期创建。
+		// 因此这里清空状态但不批量删除远端临时文件，避免误删其他实例或旧会话仍在写的对象。
+		if s.states[i] != nil {
+			s.states[i] = make(map[string]*sftpTransferState)
+		}
 		s.locks[i].Unlock()
 	}
+	s.assignMu.Lock()
+	s.transferShard = make(map[string]int)
+	s.assignMu.Unlock()
 	for _, n := range s.notifiers {
 		_ = n.Close(ctx)
 	}
@@ -344,16 +355,6 @@ func (s *SFTPSender) cleanupCommittedTransferLocked(idx int, transferID string) 
 	s.assignMu.Lock()
 	delete(s.transferShard, transferID)
 	s.assignMu.Unlock()
-}
-
-func (s *SFTPSender) afterSFTPCommitLocked(ctx context.Context, idx int, transferID string, p *packet.Packet, finalPath string) error {
-	s.cleanupCommittedTransferLocked(idx, transferID)
-	if err := notifyFileReady(ctx, s.notifiers, sftpFileReadyEvent(p, s.name, s.addr, finalPath)); err != nil {
-		// TODO: 在这里接入通知 outbox / 持久化补发表。文件已经提交成功，不能再保留未完成传输状态。
-		logx.L().Errorw("SFTP文件已提交成功，通知失败", "发送端", s.name, "目标路径", finalPath, "错误", err)
-		return fmt.Errorf("sftp sender file committed but notify failed: %w", err)
-	}
-	return nil
 }
 
 func (s *SFTPSender) hostKeyCallback() ssh.HostKeyCallback {
