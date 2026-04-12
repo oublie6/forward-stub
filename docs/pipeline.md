@@ -50,6 +50,7 @@ receiver -> selector -> task -> pipeline -> sender
 
 - route stage 选中的 sender 名称，**必须已经出现在当前 task 的 `senders` 列表中**。
 - 否则配置校验会报错。
+- 如果运行态仍出现未命中，task 会记录 warn 并丢弃该 packet；这通常表示配置发布与运行态快照之间存在漂移，需要按 `docs/task-and-dispatch.md` 的边界排查。
 
 ## 5. 常见示例
 

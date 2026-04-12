@@ -29,13 +29,13 @@
 - 负责配置加载、默认值填充、语义校验。
 - 分系统配置与业务配置，业务配置支持热更新。
 - `system-config.business_defaults` 给业务配置提供系统级默认值（显式业务配置优先，最后回退代码默认值）。
-- 版本号驱动 runtime 更新，避免无意义重建。
+- `version` 进入运行时日志和排障上下文；是否重建由配置内容差量决定，而不是只看版本号。
 
 ### 1.3 运行层
 
 - `UpdateCache` 负责编译 pipeline、构建 sender/task/receiver。
 - `Store` 保存活跃实例并提供 dispatch 快照。
-- 生命周期遵循“构建成功后切换、失败不污染现网状态”。
+- 生命周期目标是“构建成功后切换”；增量 reload 的失败回滚边界以 `docs/第一次全局代码审查.md` 的问题清单和测试记录为准。
 
 ### 1.4 数据层
 
@@ -54,8 +54,8 @@
 3. runtime 编译 pipeline。
 4. runtime 构建 sender。
 5. runtime 构建 task（初始化执行模型）。
-6. runtime 构建并启动 receiver。
-7. Store 原子切换 selector 与 dispatch 快照。
+6. runtime 构建 receiver，并在启动前编译 receiver 当前 selector 快照。
+7. runtime 启动 receiver，后续数据按已发布快照进入 dispatch。
 8. 监听信号/文件变更，触发后续热更新。
 
 ### 2.2 单包数据路径
@@ -73,8 +73,8 @@
 - gnet 驱动 UDP/TCP IO，降低 goroutine 调度成本。
 - ants pool 支撑高并发任务执行。
 - payload 内存复用减少 GC 抖动。
-- 有界队列 + in-flight 计数实现可控背压。
-- dispatch 快照避免业务路径频繁锁竞争。
+- channel 模型通过有界队列表达顺序处理能力，所有执行模型都通过 in-flight 计数支持优雅停机。
+- dispatch 使用 receiver 当前 selector 快照，避免 selector 匹配时持 Store 锁。
 - 聚合统计常驻，减小业务路径观测开销。
 
 ---

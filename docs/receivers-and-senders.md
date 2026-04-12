@@ -109,8 +109,6 @@
 - 读取出的 packet 会携带 `file_name`、`file_path`、`transfer_id`、`offset`、`total_size`、`checksum`、`EOF` 等文件分块元数据。
 
 
-### 1.5 SkyDDS receiver
-
 ### 1.5 OSS receiver
 
 - `type=oss`
@@ -132,9 +130,10 @@
 - `type=dds_skydds`
 - 必填：`selector`、`dcps_config_file`、`domain_id`、`topic_name`、`message_model`
 - `message_model` 支持 `octet` 与 `batch_octet`
-- 可选：`wait_timeout`、`drain_max_items`
+- 可选：`wait_timeout`、`drain_max_items`、`drain_buffer_bytes`
   - `wait_timeout`：通知等待超时（duration，默认 `500ms`）
   - `drain_max_items`：每次 drain 拉取上限（正整数，默认 `2048`）
+  - `drain_buffer_bytes`：C++ bridge 单次 drain 的总缓冲上限（正整数，默认 `4194304`）
 - `match_key.mode` 仅支持留空（默认 `skydds|topic_name=<topic>`）或 `fixed`
 - 接收模型：C++ DataReader listener 入队并通知，Go 侧 `Wait(wait_timeout)` 被唤醒后执行 `Drain(drain_max_items)`；无论 `octet` 还是 `batch_octet`，进入 runtime 前都逐条 packet 下发。
 - 说明：当前主数据面不使用“Go 侧纯轮询 Poll/PollBatch”，也不使用“每条消息 direct callback Go”。

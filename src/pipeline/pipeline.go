@@ -3,8 +3,16 @@ package pipeline
 
 import "forward-stub/src/packet"
 
+// StageFunc 是 pipeline 内部处理一组 packet 的最小单元。
+//
+// 约束：
+//   - 返回空切片表示该 pipeline 终止；
+//   - stage 可以原地改写 packet，但若生成新 packet，必须让调用方能负责 Release；
+//   - 常规热路径应尽量复用输入切片，避免 per-packet 分配。
 type StageFunc func([]*packet.Packet) []*packet.Packet
 
+// Pipeline 是按顺序执行的 stage 链。
+// 它不参与 selector 主路由，只在 task 命中后处理 packet。
 type Pipeline struct {
 	Name   string
 	Stages []StageFunc

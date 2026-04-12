@@ -1,49 +1,27 @@
-# Roadmap
+# 后续演进记录
 
-## 1. 当前文档待补项
+本文不是当前实现的权威说明，只记录可后续评估的演进方向。当前行为以 README 和各主题文档为准。
 
-- control API 契约文档仍不完整。
-- SFTP 消费幂等策略未形成单独设计文档。
-- 运行指标统一标准尚未文档化。
+## 1. 运行时与可靠性
 
-## 2. 当前架构局限
+- 为 route sender miss、sender latency、receiver drop 等路径补充结构化指标。
+- 为配置热重载增加变更影响分析输出，提前展示会重建的 receiver/sender/task/pipeline。
+- 在更多协议组合下补充 reload 失败回滚测试。
 
-- 观测入口以日志为主，自动化指标体系待增强。
-- route stage 能力聚焦固定偏移匹配，表达能力有限。
-- 部分运行时策略需要更明确 ADR 记录。
+## 2. 配置与工具
 
-## 3. 可演进方向
+- 生成 machine-readable 配置 schema，用于 CI 和配置发布前校验。
+- 提供 example config 最小化检查工具，避免示例字段与 `src/config` 漂移。
+- 补充控制面 API 契约文档。
 
-### 3.1 运行时
+## 3. 可观测性
 
-- 增加 task 队列深度和丢包的结构化指标。
-- 增加 sender 延迟分布观测能力。
+- 评估 OpenTelemetry metrics/trace 导出。
+- 统一 traffic stats、runtime stats、协议错误计数的命名规范。
+- 为文件链路提交成功但通知失败的场景设计持久化 outbox/补发机制。
 
-### 3.2 配置系统
+## 4. 性能与容量
 
-- 增加配置变更影响分析工具。
-- 增加配置模板校验脚本。
-
-### 3.3 文档体系
-
-- 补充 `docs/benchmark.md` 的场景覆盖（如更多协议组合与执行模型维度）。
-- 继续用 `docs/architecture.md`、`docs/technical-architecture.md` 补充关键设计决策记录。
-
-## 4. 建议补充的代码注释与设计说明
-
-- `runtime.applyBusinessDelta` 决策分支说明。
-- `task.processAndSend` 在 route sender 场景的行为说明。
-- sender 并发参数在不同协议实现中的语义差异说明。
-
-## 5. 文档维护建议
-
-1. README 保持主使用手册和配置总览角色。
-2. docs 重点讲机制和维护，不重复粘贴大段 JSON。
-3. 每次新增协议或 stage 时同步更新 README 和 docs。
-4. 每次性能回归输出统一格式报告到 docs。
-
-## 6. 优先级建议
-
-- 高优先：观测与指标标准化。
-- 中优先：运行时增量更新策略文档化。
-- 中优先：SFTP 与 Kafka 场景运行说明强化。
+- 扩展 benchmark 场景，覆盖更多 receiver/sender 组合、执行模型和 reload 规模。
+- 增加千级 task/task_set/selector 配置下的增量更新 benchmark。
+- 为文件分块链路增加大文件、乱序、重复 chunk 的容量压测基线。

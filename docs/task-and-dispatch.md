@@ -122,7 +122,7 @@ task 决定的是“命中之后怎么处理”：
 - route stage 命中的 sender 必须已经在当前 `task.senders` 中列出。
 - route stage 不会改变 selector 的匹配结果。
 
-## 6.1 selector 与 pipeline stage 的边界
+## 7. selector 与 pipeline stage 的边界
 
 这次改造里需要特别强调：
 
@@ -130,7 +130,7 @@ task 决定的是“命中之后怎么处理”：
 - pipeline stage 只在 task 内部按顺序处理 packet。
 - selector 不参与 pipeline 内部处理细节。
 
-## 7. match key 示例
+## 8. match key 示例
 
 | 协议 | match key 示例 |
 |---|---|
@@ -140,7 +140,7 @@ task 决定的是“命中之后怎么处理”：
 | SFTP | `sftp|remote_dir=/input|file_name=orders.csv`（兼容默认） / `sftp|filename=orders.csv` |
 | local_timer | `local|receiver=local_timer`（兼容默认） / `local|fixed=chain-monitor` |
 
-## 8. 配置设计建议
+## 9. 配置设计建议
 
 - 用 receiver 表达**接入协议**。
 - 用 selector 表达**主路由**。

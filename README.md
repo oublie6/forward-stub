@@ -157,23 +157,22 @@ receiver -> selector -> task(pipeline + sender)
 ## 6. 验证命令
 
 ```bash
-go test ./src/config ./src/bootstrap ./...
+go test ./... -count=1
 ```
 
 如果只想先验证配置文件能否解析并通过校验，可直接运行仓库内对应测试，或使用：
 
 ```bash
-go test ./src/config -run Example
+go test ./src/config -run 'Example|Test.*Example' -count=1
 ```
 
 如需运行仓库内现有 benchmark，请使用：
 
 ```bash
-make perf
+go test ./src/runtime -bench . -benchmem -run '^$'
 ```
 
-当前 `make perf` 只运行 `src/runtime` 中已存在的 benchmark，仓库内不存在 `cmd/bench` 入口。
-
+更多测试、race 和分模块 benchmark 命令见 `docs/benchmark.md`。
 
 ## 7. SkyDDS（dds_skydds）轻量字节桥接
 

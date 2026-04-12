@@ -59,6 +59,7 @@ func NewUDPUnicastSender(name, localIP string, localPort int, remote string, soc
 	}
 	for i := 0; i < concurrency; i++ {
 		if err := s.ensureConn(i); err != nil {
+			_ = s.Close(context.Background())
 			return nil, err
 		}
 	}

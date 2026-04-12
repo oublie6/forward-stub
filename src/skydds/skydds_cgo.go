@@ -14,13 +14,18 @@ import "C"
 
 import (
 	"fmt"
+	"sync"
 	"time"
 	"unsafe"
 )
 
-type cgoWriter struct{ ptr *C.skydds_writer_t }
+type cgoWriter struct {
+	mu  sync.Mutex
+	ptr *C.skydds_writer_t
+}
 
 type cgoReader struct {
+	mu               sync.Mutex
 	ptr              *C.skydds_reader_t
 	model            string
 	drainBufferBytes int
@@ -53,11 +58,16 @@ func newReader(opts CommonOptions) (Reader, error) {
 }
 
 func (w *cgoWriter) Write(payload []byte) error {
-	if w == nil || w.ptr == nil {
+	if w == nil {
 		return fmt.Errorf("skydds writer is nil")
 	}
 	if len(payload) == 0 {
 		return nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.ptr == nil {
+		return fmt.Errorf("skydds writer is nil")
 	}
 	var errBuf [512]C.char
 	if code := C.skydds_writer_send(w.ptr, (*C.uint8_t)(unsafe.Pointer(&payload[0])), C.int(len(payload)), &errBuf[0], C.int(len(errBuf))); code != 0 {
@@ -67,7 +77,7 @@ func (w *cgoWriter) Write(payload []byte) error {
 }
 
 func (w *cgoWriter) WriteBatch(payloads [][]byte) error {
-	if w == nil || w.ptr == nil {
+	if w == nil {
 		return fmt.Errorf("skydds writer is nil")
 	}
 	if len(payloads) == 0 {
@@ -95,6 +105,11 @@ func (w *cgoWriter) WriteBatch(payloads [][]byte) error {
 		ptrBytes[i] = (*C.uint8_t)(p)
 	}
 
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.ptr == nil {
+		return fmt.Errorf("skydds writer is nil")
+	}
 	var errBuf [512]C.char
 	if code := C.skydds_writer_send_batch(
 		w.ptr,
@@ -110,7 +125,12 @@ func (w *cgoWriter) WriteBatch(payloads [][]byte) error {
 }
 
 func (w *cgoWriter) Close() error {
-	if w == nil || w.ptr == nil {
+	if w == nil {
+		return nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.ptr == nil {
 		return nil
 	}
 	C.skydds_writer_close(w.ptr)
@@ -141,7 +161,12 @@ func (r *cgoReader) Poll(timeout time.Duration) ([]byte, error) {
 }
 
 func (r *cgoReader) Wait(timeout time.Duration) (bool, error) {
-	if r == nil || r.ptr == nil {
+	if r == nil {
+		return false, fmt.Errorf("skydds reader is nil")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.ptr == nil {
 		return false, fmt.Errorf("skydds reader is nil")
 	}
 	var errBuf [512]C.char
@@ -159,7 +184,7 @@ func (r *cgoReader) Wait(timeout time.Duration) (bool, error) {
 }
 
 func (r *cgoReader) Drain(maxItems int) ([][]byte, error) {
-	if r == nil || r.ptr == nil {
+	if r == nil {
 		return nil, fmt.Errorf("skydds reader is nil")
 	}
 	if maxItems <= 0 {
@@ -170,6 +195,11 @@ func (r *cgoReader) Drain(maxItems int) ([][]byte, error) {
 	var outCount C.int
 	var outTotal C.int
 	var errBuf [512]C.char
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.ptr == nil {
+		return nil, fmt.Errorf("skydds reader is nil")
+	}
 	code := C.skydds_reader_drain(
 		r.ptr,
 		(*C.uint8_t)(unsafe.Pointer(&buf[0])),
@@ -220,7 +250,12 @@ func (r *cgoReader) PollBatch(timeout time.Duration) ([][]byte, error) {
 }
 
 func (r *cgoReader) Close() error {
-	if r == nil || r.ptr == nil {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.ptr == nil {
 		return nil
 	}
 	C.skydds_reader_close(r.ptr)

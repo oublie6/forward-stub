@@ -67,6 +67,7 @@ func NewUDPMulticastSender(name, localIP string, localPort int, group string, if
 	}
 	for i := 0; i < s.concurrency; i++ {
 		if err := s.ensureConn(i); err != nil {
+			_ = s.Close(context.Background())
 			return nil, err
 		}
 	}
