@@ -3,8 +3,11 @@ package config
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -37,6 +40,9 @@ func (c *Config) Validate() error {
 		if err != nil || d <= 0 {
 			return errors.New("logging gc_stats_log_interval must be a valid duration > 0")
 		}
+	}
+	if err := validateLoggingConfig(c.Logging); err != nil {
+		return err
 	}
 
 	if c.Control.PprofPort < -1 || c.Control.PprofPort > 65535 {
@@ -77,6 +83,17 @@ func (c *Config) Validate() error {
 						return fmt.Errorf("task %s pipeline %s route target sender %s not in task senders", tn, pn, target)
 					}
 				}
+			}
+		}
+	}
+
+	for pn, stages := range c.Pipelines {
+		if strings.TrimSpace(pn) == "" {
+			return errors.New("pipeline name empty")
+		}
+		for i, sc := range stages {
+			if err := validateStageConfig(pn, i, sc); err != nil {
+				return err
 			}
 		}
 	}
@@ -132,6 +149,15 @@ func (c *Config) Validate() error {
 		}
 		switch r.Type {
 		case "udp_gnet", "tcp_gnet":
+			if strings.TrimSpace(r.Listen) == "" {
+				return fmt.Errorf("receiver %s %s requires listen", rn, r.Type)
+			}
+			if err := validateHostPort("receiver", rn, "listen", stripAddrScheme(r.Listen)); err != nil {
+				return err
+			}
+			if r.Type == "tcp_gnet" && r.Frame != "" && r.Frame != "u16be" {
+				return fmt.Errorf("receiver %s tcp_gnet frame must be empty or u16be", rn)
+			}
 		case "local_timer":
 			if err := validateLocalTimerReceiver(rn, r); err != nil {
 				return err
@@ -217,7 +243,42 @@ func (c *Config) Validate() error {
 			return err
 		}
 		switch s.Type {
-		case "udp_unicast", "udp_multicast", "tcp_gnet":
+		case "udp_unicast":
+			if strings.TrimSpace(s.Remote) == "" {
+				return fmt.Errorf("sender %s udp_unicast requires remote", sn)
+			}
+			if err := validateHostPort("sender", sn, "remote", stripAddrScheme(s.Remote)); err != nil {
+				return err
+			}
+			if s.LocalPort <= 0 {
+				return fmt.Errorf("sender %s udp_unicast requires local_port", sn)
+			}
+			if strings.TrimSpace(s.LocalIP) != "" && net.ParseIP(strings.TrimSpace(s.LocalIP)) == nil {
+				return fmt.Errorf("sender %s udp_unicast local_ip invalid", sn)
+			}
+		case "udp_multicast":
+			if strings.TrimSpace(s.Remote) == "" {
+				return fmt.Errorf("sender %s udp_multicast requires remote", sn)
+			}
+			if err := validateHostPort("sender", sn, "remote", stripAddrScheme(s.Remote)); err != nil {
+				return err
+			}
+			if s.LocalPort <= 0 {
+				return fmt.Errorf("sender %s udp_multicast requires local_port", sn)
+			}
+			if strings.TrimSpace(s.LocalIP) != "" && net.ParseIP(strings.TrimSpace(s.LocalIP)) == nil {
+				return fmt.Errorf("sender %s udp_multicast local_ip invalid", sn)
+			}
+		case "tcp_gnet":
+			if strings.TrimSpace(s.Remote) == "" {
+				return fmt.Errorf("sender %s tcp_gnet requires remote", sn)
+			}
+			if err := validateHostPort("sender", sn, "remote", stripAddrScheme(s.Remote)); err != nil {
+				return err
+			}
+			if s.Frame != "" && s.Frame != "u16be" {
+				return fmt.Errorf("sender %s tcp_gnet frame must be empty or u16be", sn)
+			}
 		case "kafka":
 			if s.Remote == "" {
 				return fmt.Errorf("sender %s kafka requires remote as brokers csv", sn)
@@ -335,6 +396,102 @@ func validateKafkaAuth(kind, name, mechanism, username, password string) error {
 		return nil
 	}
 	return fmt.Errorf("%s %s kafka unsupported sasl_mechanism %s", kind, name, mechanism)
+}
+
+func validateLoggingConfig(lc LoggingConfig) error {
+	switch strings.ToLower(strings.TrimSpace(lc.Level)) {
+	case "", "debug", "info", "warn", "warning", "error":
+	default:
+		return fmt.Errorf("logging level unsupported: %s", lc.Level)
+	}
+	if strings.TrimSpace(lc.TrafficStatsInterval) != "" {
+		d, err := time.ParseDuration(lc.TrafficStatsInterval)
+		if err != nil || d <= 0 {
+			return errors.New("logging traffic_stats_interval must be a valid duration > 0")
+		}
+	}
+	if lc.TrafficStatsSampleEvery < 0 {
+		return errors.New("logging traffic_stats_sample_every must be >= 0")
+	}
+	return nil
+}
+
+func validateStageConfig(pipelineName string, idx int, sc StageConfig) error {
+	prefix := fmt.Sprintf("pipeline %s stage[%d] %s", pipelineName, idx, sc.Type)
+	switch sc.Type {
+	case "match_offset_bytes", "replace_offset_bytes":
+		if sc.Offset < 0 {
+			return fmt.Errorf("%s offset must be >= 0", prefix)
+		}
+		if _, err := hex.DecodeString(sc.Hex); err != nil {
+			return fmt.Errorf("%s hex invalid: %w", prefix, err)
+		}
+	case "route_offset_bytes_sender":
+		if sc.Offset < 0 {
+			return fmt.Errorf("%s offset must be >= 0", prefix)
+		}
+		if len(sc.Cases) == 0 {
+			return fmt.Errorf("%s requires non-empty cases", prefix)
+		}
+		keyLen := -1
+		for hk, senderName := range sc.Cases {
+			v, err := hex.DecodeString(hk)
+			if err != nil {
+				return fmt.Errorf("%s route case %s invalid hex: %w", prefix, hk, err)
+			}
+			if len(v) == 0 {
+				return fmt.Errorf("%s route case %s empty hex", prefix, hk)
+			}
+			if keyLen < 0 {
+				keyLen = len(v)
+			} else if len(v) != keyLen {
+				return fmt.Errorf("%s route case %s length mismatch, want %d got %d", prefix, hk, keyLen, len(v))
+			}
+			if strings.TrimSpace(senderName) == "" {
+				return fmt.Errorf("%s route case %s sender empty", prefix, hk)
+			}
+		}
+	case "set_target_file_path":
+		if strings.TrimSpace(sc.Value) == "" {
+			return fmt.Errorf("%s requires value", prefix)
+		}
+	case "rewrite_target_path_strip_prefix", "rewrite_target_path_add_prefix":
+		if strings.TrimSpace(sc.Prefix) == "" {
+			return fmt.Errorf("%s requires prefix", prefix)
+		}
+	case "rewrite_target_filename_replace":
+		if sc.Old == "" {
+			return fmt.Errorf("%s requires old", prefix)
+		}
+	case "rewrite_target_path_regex", "rewrite_target_filename_regex":
+		if _, err := regexp.Compile(sc.Pattern); err != nil {
+			return fmt.Errorf("%s invalid pattern: %w", prefix, err)
+		}
+	default:
+		return fmt.Errorf("pipeline %s unknown stage type: %s", pipelineName, sc.Type)
+	}
+	return nil
+}
+
+func validateHostPort(kind, name, field, addr string) error {
+	if strings.TrimSpace(addr) == "" {
+		return fmt.Errorf("%s %s %s must be host:port", kind, name, field)
+	}
+	if _, port, err := net.SplitHostPort(addr); err != nil || strings.TrimSpace(port) == "" {
+		if err != nil {
+			return fmt.Errorf("%s %s %s must be host:port: %w", kind, name, field, err)
+		}
+		return fmt.Errorf("%s %s %s must include port", kind, name, field)
+	}
+	return nil
+}
+
+func stripAddrScheme(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if i := strings.Index(addr, "://"); i >= 0 {
+		return addr[i+3:]
+	}
+	return addr
 }
 
 // ErrUnsupportedReceiverMatchKeyMode 返回统一的 receiver match key 模式非法错误。
