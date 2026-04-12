@@ -19,6 +19,13 @@ import (
 
 const fileReadyEventType = "file_ready"
 
+// FileReadyEvent 是文件型 sender 成功提交后的统一通知事件。
+//
+// 触发时机：
+//   - SFTP sender 在远端 Rename(temp, final) 成功后构造；
+//   - OSS sender 在 CompleteMultipartUpload 成功后构造。
+//
+// 事件中同时保留来源文件信息、目标侧最终位置，以及下游拉取文件所需的 fetch_* 字段。
 type FileReadyEvent struct {
 	EventType    string    `json:"event_type"`
 	TransferID   string    `json:"transfer_id"`
@@ -41,6 +48,9 @@ type FileReadyEvent struct {
 	FetchKey      string `json:"fetch_key,omitempty"`
 }
 
+// FileReadyNotifier 抽象文件提交成功后的通知通道。
+// 实现必须把 NotifyFileReady 视为“commit 已成功后的后置动作”；返回错误不会回滚已提交文件，
+// 只会让 sender 将错误返回给上层并记录日志，后续可接 outbox/补发机制。
 type FileReadyNotifier interface {
 	NotifyFileReady(ctx context.Context, event FileReadyEvent) error
 	Close(ctx context.Context) error
@@ -78,6 +88,8 @@ type KafkaCommitNotifier struct {
 	keySource string
 }
 
+// NewKafkaCommitNotifier 构造基于 Kafka 的 file_ready 通知器。
+// 调用时只创建 kgo client，不会主动发起 Produce；真正网络发送发生在 NotifyFileReady。
 func NewKafkaCommitNotifier(nc config.NotifyOnSuccessConfig) (*KafkaCommitNotifier, error) {
 	brs := kafkautil.SplitCSV(nc.Remote)
 	if len(brs) == 0 {
@@ -135,6 +147,8 @@ func NewKafkaCommitNotifier(nc config.NotifyOnSuccessConfig) (*KafkaCommitNotifi
 	return &KafkaCommitNotifier{client: cli, topic: nc.Topic, keySource: strings.TrimSpace(nc.RecordKeySource)}, nil
 }
 
+// NotifyFileReady 将 file_ready 事件序列化为 JSON 并同步 Produce 到 Kafka。
+// record key 由 record_key_source 决定；未配置时 key 为空，交由 Kafka 分区策略处理。
 func (n *KafkaCommitNotifier) NotifyFileReady(ctx context.Context, event FileReadyEvent) error {
 	b, err := json.Marshal(event)
 	if err != nil {
@@ -157,6 +171,8 @@ type SkyDDSCommitNotifier struct {
 
 var skyddsCommitWriterFactory = skydds.NewWriter
 
+// NewSkyDDSCommitNotifier 构造基于 SkyDDS OctetMsg 的 file_ready 通知器。
+// 当前只支持 message_model=octet，避免 commit 通知再引入批量聚合导致“文件已就绪但通知延迟”。
 func NewSkyDDSCommitNotifier(nc config.NotifyOnSuccessConfig) (*SkyDDSCommitNotifier, error) {
 	if strings.ToLower(strings.TrimSpace(nc.MessageModel)) != "octet" {
 		return nil, fmt.Errorf("skydds commit notifier only supports message_model=octet")
@@ -173,6 +189,7 @@ func NewSkyDDSCommitNotifier(nc config.NotifyOnSuccessConfig) (*SkyDDSCommitNoti
 	return &SkyDDSCommitNotifier{writer: w}, nil
 }
 
+// NotifyFileReady 将 file_ready 事件序列化为 JSON 后写入 SkyDDS。
 func (n *SkyDDSCommitNotifier) NotifyFileReady(_ context.Context, event FileReadyEvent) error {
 	b, err := json.Marshal(event)
 	if err != nil {

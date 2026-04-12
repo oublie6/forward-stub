@@ -15,6 +15,9 @@ func SetTargetFilePath(value string) StageFunc {
 	})
 }
 
+// RewriteTargetPathStripPrefix 从“当前目标路径，或来源路径”中去掉前缀。
+// 前缀不匹配时 strings.TrimPrefix 保持原值；随后统一去掉开头的 "/"，
+// 让 SFTP/OSS sender 后续只处理相对路径，避免 stage 之间重复关心路径安全。
 func RewriteTargetPathStripPrefix(prefix string) StageFunc {
 	prefix = strings.TrimSpace(prefix)
 	return mapStage(func(p *packet.Packet) bool {
@@ -25,6 +28,8 @@ func RewriteTargetPathStripPrefix(prefix string) StageFunc {
 	})
 }
 
+// RewriteTargetPathAddPrefix 为目标路径增加规范化后的相对前缀。
+// 当前路径为空时不会凭空生成文件名；前缀会通过 path.Clean 规整，避免多余斜杠影响 sender key/path。
 func RewriteTargetPathAddPrefix(prefix string) StageFunc {
 	prefix = cleanPathPrefix(prefix)
 	return mapStage(func(p *packet.Packet) bool {
@@ -38,6 +43,8 @@ func RewriteTargetPathAddPrefix(prefix string) StageFunc {
 	})
 }
 
+// RewriteTargetFilenameReplace 改写目标文件名，并同步替换目标路径 basename。
+// 这样下游 sender 只需要读取 TargetFilePath 就能拿到与 TargetFileName 一致的最终路径。
 func RewriteTargetFilenameReplace(old, new string) StageFunc {
 	return mapStage(func(p *packet.Packet) bool {
 		cur := targetFilenameOrSource(p)
@@ -47,6 +54,7 @@ func RewriteTargetFilenameReplace(old, new string) StageFunc {
 	})
 }
 
+// RewriteTargetPathRegex 用正则改写目标路径；不匹配时 regexp.ReplaceAllString 会保持原路径。
 func RewriteTargetPathRegex(re *regexp.Regexp, replacement string) StageFunc {
 	return mapStage(func(p *packet.Packet) bool {
 		p.Meta.TargetFilePath = re.ReplaceAllString(targetPathOrSource(p), replacement)
@@ -54,6 +62,7 @@ func RewriteTargetPathRegex(re *regexp.Regexp, replacement string) StageFunc {
 	})
 }
 
+// RewriteTargetFilenameRegex 用正则改写目标文件名，并把目标路径 basename 同步为改写后的文件名。
 func RewriteTargetFilenameRegex(re *regexp.Regexp, replacement string) StageFunc {
 	return mapStage(func(p *packet.Packet) bool {
 		p.Meta.TargetFileName = re.ReplaceAllString(targetFilenameOrSource(p), replacement)

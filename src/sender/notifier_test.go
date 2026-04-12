@@ -2,6 +2,7 @@ package sender
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"forward-stub/src/config"
@@ -61,4 +62,71 @@ func TestKafkaCommitNotifierConstructsWithoutDial(t *testing.T) {
 	if got := fileReadyRecordKey("transfer_id", FileReadyEvent{TransferID: "tx"}); string(got) != "tx" {
 		t.Fatalf("record key got=%q", got)
 	}
+}
+
+type orderedNotifier struct {
+	id     int
+	calls  *[]int
+	closed *int
+	err    error
+}
+
+func (n orderedNotifier) NotifyFileReady(context.Context, FileReadyEvent) error {
+	*n.calls = append(*n.calls, n.id)
+	return n.err
+}
+
+func (n orderedNotifier) Close(context.Context) error {
+	if n.closed != nil {
+		(*n.closed)++
+	}
+	return nil
+}
+
+func TestNotifyFileReadyStopsOnFirstFailure(t *testing.T) {
+	var calls []int
+	errBoom := errors.New("boom")
+	err := notifyFileReady(context.Background(), []FileReadyNotifier{
+		orderedNotifier{id: 1, calls: &calls},
+		orderedNotifier{id: 2, calls: &calls, err: errBoom},
+		orderedNotifier{id: 3, calls: &calls},
+	}, FileReadyEvent{EventType: fileReadyEventType})
+	if !errors.Is(err, errBoom) {
+		t.Fatalf("notify error got=%v want=%v", err, errBoom)
+	}
+	if len(calls) != 2 || calls[0] != 1 || calls[1] != 2 {
+		t.Fatalf("notifiers should stop after first failure, calls=%v", calls)
+	}
+}
+
+func TestBuildFileReadyNotifiersClosesAlreadyBuiltOnLaterFailure(t *testing.T) {
+	oldSkyFactory := skyddsCommitWriterFactory
+	defer func() { skyddsCommitWriterFactory = oldSkyFactory }()
+
+	closed := 0
+	skyddsCommitWriterFactory = func(skydds.CommonOptions) (skydds.Writer, error) {
+		return closeCountingSkyDDSWriter{closed: &closed}, nil
+	}
+
+	_, err := buildFileReadyNotifiers(config.NotifyOnSuccessConfigs{
+		{Type: "dds_skydds", DCPSConfigFile: "dds.ini", DomainID: 0, TopicName: "ready", MessageModel: "octet"},
+		{Type: "unknown"},
+	})
+	if err == nil {
+		t.Fatalf("expected build failure")
+	}
+	if closed != 1 {
+		t.Fatalf("already built notifier should be closed once, got %d", closed)
+	}
+}
+
+type closeCountingSkyDDSWriter struct {
+	closed *int
+}
+
+func (w closeCountingSkyDDSWriter) Write([]byte) error        { return nil }
+func (w closeCountingSkyDDSWriter) WriteBatch([][]byte) error { return nil }
+func (w closeCountingSkyDDSWriter) Close() error {
+	*w.closed++
+	return nil
 }

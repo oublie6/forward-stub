@@ -17,6 +17,7 @@ import (
 
 type fakeOSSAPI struct {
 	partSizes   []int64
+	partIDs     []int
 	completed   bool
 	completeKey string
 }
@@ -28,6 +29,7 @@ func (f *fakeOSSAPI) NewMultipartUpload(context.Context, string, string, minio.P
 func (f *fakeOSSAPI) PutObjectPart(_ context.Context, _, _, _ string, partID int, data io.Reader, size int64, _ minio.PutObjectPartOptions) (minio.ObjectPart, error) {
 	_, _ = io.Copy(io.Discard, data)
 	f.partSizes = append(f.partSizes, size)
+	f.partIDs = append(f.partIDs, partID)
 	return minio.ObjectPart{PartNumber: partID, ETag: "etag"}, nil
 }
 
@@ -174,6 +176,36 @@ func TestOSSRangeMergeReadyToComplete(t *testing.T) {
 	st.nextOffset = 6
 	if !st.readyToComplete() {
 		t.Fatalf("expected complete range to be ready")
+	}
+}
+
+func TestOSSSenderIgnoresDuplicateChunksAndWaitsForGap(t *testing.T) {
+	api := &fakeOSSAPI{}
+	s := newOSSSenderWithAPI("oss", config.SenderConfig{Endpoint: "endpoint", Bucket: "bucket"}, api, nil, 4)
+
+	// 先到达 offset=4 的乱序 chunk 时只能暂存，不能提前上传或 complete。
+	if err := s.Send(context.Background(), packetWithChecksum([]byte("ef"), packet.Meta{TransferID: "tx-gap", FilePath: "a.txt", Offset: 4, TotalSize: 6, EOF: true})); err != nil {
+		t.Fatalf("send out-of-order tail: %v", err)
+	}
+	if api.completed || len(api.partSizes) != 0 {
+		t.Fatalf("tail chunk should wait for missing prefix, completed=%v parts=%v", api.completed, api.partSizes)
+	}
+
+	if err := s.Send(context.Background(), packetWithChecksum([]byte("ab"), packet.Meta{TransferID: "tx-gap", FilePath: "a.txt", Offset: 0, TotalSize: 6})); err != nil {
+		t.Fatalf("send head: %v", err)
+	}
+	if err := s.Send(context.Background(), packetWithChecksum([]byte("ab"), packet.Meta{TransferID: "tx-gap", FilePath: "a.txt", Offset: 0, TotalSize: 6})); err != nil {
+		t.Fatalf("send duplicate head: %v", err)
+	}
+	if err := s.Send(context.Background(), packetWithChecksum([]byte("cd"), packet.Meta{TransferID: "tx-gap", FilePath: "a.txt", Offset: 2, TotalSize: 6})); err != nil {
+		t.Fatalf("send middle: %v", err)
+	}
+
+	if !api.completed {
+		t.Fatalf("multipart should complete once gap is filled")
+	}
+	if !reflect.DeepEqual(api.partSizes, []int64{4, 2}) {
+		t.Fatalf("duplicate chunk should not create extra uploaded part, parts=%v", api.partSizes)
 	}
 }
 

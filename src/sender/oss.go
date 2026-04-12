@@ -19,7 +19,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-const defaultOSSPartSize int64 = 5 << 20
+const defaultOSSPartSize = config.DefaultOSSPartSize
 
 type ossMultipartAPI interface {
 	NewMultipartUpload(ctx context.Context, bucket, object string, opts minio.PutObjectOptions) (string, error)
@@ -41,6 +41,13 @@ func (m minioCoreAPI) CompleteMultipartUpload(ctx context.Context, bucket, objec
 	return m.core.CompleteMultipartUpload(ctx, bucket, object, uploadID, parts, opts)
 }
 
+// OSSSender 是基于 S3-compatible multipart upload 的文件发送端。
+//
+// 运行模型：
+//  1. 每个 transfer_id 创建一个 multipart upload session；
+//  2. chunk 可乱序到达，连续区间进入 pendingPartBuffer，空洞后的区间进入有界 pendingSegments；
+//  3. pendingPartBuffer 达到 part_size 后上传一个 part；
+//  4. EOF 且覆盖区间完整后上传尾 part、complete 对象并触发通知。
 type OSSSender struct {
 	name         string
 	endpoint     string
@@ -56,19 +63,24 @@ type OSSSender struct {
 }
 
 type ossTransferState struct {
-	objectKey     string
-	uploadID      string
-	totalSize     int64
-	eofSeen       bool
+	// objectKey/uploadID 在首个 chunk 到达时确定，后续同一 transfer_id 固定复用。
+	objectKey string
+	uploadID  string
+	totalSize int64
+	eofSeen   bool
+	// coveredRanges 记录“已收到”的文件区间，用来判断是否存在空洞。
+	// 它和 nextOffset 分开维护：前者判断完整性，后者驱动可连续上传的字节流。
 	coveredRanges []fileRange
 	coveredBytes  int64
 
+	// nextOffset 是当前已连续接收并写入 pendingPartBuffer 的文件偏移。
 	nextOffset        int64
 	pendingPartBuffer []byte
-	pendingSegments   map[int64][]byte
-	pendingBytes      int64
-	uploadedParts     []ossUploadedPart
-	nextPartNumber    int
+	// pendingSegments 暂存 offset > nextOffset 的乱序 chunk；pendingLimit 限制其总内存。
+	pendingSegments map[int64][]byte
+	pendingBytes    int64
+	uploadedParts   []ossUploadedPart
+	nextPartNumber  int
 }
 
 type ossUploadedPart struct {
@@ -78,6 +90,8 @@ type ossUploadedPart struct {
 	end        int64
 }
 
+// NewOSSSender 构造 OSSSender 并创建底层 minio Core。
+// 调用方应先执行 Config.ApplyDefaults + Validate；若 part_size 仍未设置，这里会再次回退默认值作为保护。
 func NewOSSSender(name string, sc config.SenderConfig) (*OSSSender, error) {
 	if strings.TrimSpace(sc.Endpoint) == "" {
 		return nil, fmt.Errorf("oss sender requires endpoint")
@@ -133,6 +147,8 @@ func (s *OSSSender) Name() string { return s.name }
 
 func (s *OSSSender) Key() string { return "oss|" + s.endpoint + "|" + s.bucket + "|" + s.keyPrefix }
 
+// Send 接收一个 file_chunk 并推进 multipart 状态机。
+// 重复 chunk 会被幂等忽略；乱序 chunk 只在有界缓存内等待，避免上游缺口导致 sender 内存无限增长。
 func (s *OSSSender) Send(ctx context.Context, p *packet.Packet) error {
 	if p.Kind != packet.PayloadKindFileChunk {
 		return fmt.Errorf("oss sender only accepts file_chunk payload")
@@ -235,6 +251,8 @@ func (st *ossTransferState) acceptChunk(offset int64, payload []byte, pendingLim
 	return nil
 }
 
+// drainContiguousSegments 把已补齐缺口后的乱序片段接到连续缓冲区。
+// 只有 offset 恰好等于 nextOffset 的片段才会被消费，确保 multipart 上传顺序与文件偏移一致。
 func (st *ossTransferState) drainContiguousSegments() {
 	for {
 		seg, ok := st.pendingSegments[st.nextOffset]
@@ -248,6 +266,7 @@ func (st *ossTransferState) drainContiguousSegments() {
 	}
 }
 
+// flushReadyParts 按 part_size 上传所有完整 part，尾 part 留到 complete 前再上传。
 func (st *ossTransferState) flushReadyParts(ctx context.Context, api ossMultipartAPI, bucket string, partSize int64) error {
 	for int64(len(st.pendingPartBuffer)) >= partSize {
 		if err := st.uploadPartN(ctx, api, bucket, int(partSize)); err != nil {

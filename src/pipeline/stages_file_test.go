@@ -35,3 +35,53 @@ func TestFileTargetRegexStages(t *testing.T) {
 		t.Fatalf("filename regex name=%q path=%q", p.Meta.TargetFileName, p.Meta.TargetFilePath)
 	}
 }
+
+func TestFileTargetPathBoundaryStages(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(*packet.Packet)
+		want string
+	}{
+		{
+			name: "strip prefix missing keeps path but normalizes leading slash",
+			run:  func(p *packet.Packet) { RewriteTargetPathStripPrefix("/missing/")([]*packet.Packet{p}) },
+			want: "in/raw/a.csv",
+		},
+		{
+			name: "add prefix cleans repeated slashes",
+			run:  func(p *packet.Packet) { RewriteTargetPathAddPrefix("//out//ready//")([]*packet.Packet{p}) },
+			want: "out/ready/in/raw/a.csv",
+		},
+		{
+			name: "path regex no match keeps source path",
+			run: func(p *packet.Packet) {
+				RewriteTargetPathRegex(regexp.MustCompile(`^no-match/`), "out/")([]*packet.Packet{p})
+			},
+			want: "/in/raw/a.csv",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{FilePath: "/in/raw/a.csv", FileName: "a.csv"}}}
+			tt.run(p)
+			if p.Meta.TargetFilePath != tt.want {
+				t.Fatalf("target path got=%q want=%q", p.Meta.TargetFilePath, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilenameRewriteFallsBackToPathBaseAndKeepsEmptyNamePath(t *testing.T) {
+	// 没有 FileName 时应从 FilePath 的 basename 推导文件名，并同步改写 TargetFilePath。
+	p := &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{FilePath: "raw/deep/a.csv"}}}
+	RewriteTargetFilenameReplace(".csv", ".ready")([]*packet.Packet{p})
+	if p.Meta.TargetFileName != "a.ready" || p.Meta.TargetFilePath != "raw/deep/a.ready" {
+		t.Fatalf("fallback filename rewrite name=%q path=%q", p.Meta.TargetFileName, p.Meta.TargetFilePath)
+	}
+
+	empty := &packet.Packet{}
+	RewriteTargetFilenameReplace("x", "y")([]*packet.Packet{empty})
+	if empty.Meta.TargetFileName != "." || empty.Meta.TargetFilePath != "." {
+		t.Fatalf("empty packet rewrite should follow current path.Base semantics, name=%q path=%q", empty.Meta.TargetFileName, empty.Meta.TargetFilePath)
+	}
+}
