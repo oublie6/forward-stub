@@ -177,27 +177,42 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 		}
 	}
 	s.locks[idx].Lock()
-	defer s.locks[idx].Unlock()
+	readyEvent, err := s.sendLocked(idx, transferID, p)
+	s.locks[idx].Unlock()
+	if err != nil {
+		return err
+	}
+	if readyEvent != nil {
+		if err := notifyFileReady(ctx, s.notifiers, *readyEvent); err != nil {
+			// TODO: 在这里接入通知 outbox / 持久化补发表。文件已经提交成功，不能再保留未完成传输状态。
+			logx.L().Errorw("SFTP文件已提交成功，通知失败", "发送端", s.name, "目标路径", readyEvent.FetchPath, "错误", err)
+			return fmt.Errorf("sftp sender file committed but notify failed: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *SFTPSender) sendLocked(idx int, transferID string, p *packet.Packet) (*FileReadyEvent, error) {
 	if s.sftpClis[idx] == nil || s.sshClients[idx] == nil {
 		if err := s.ensureConnLocked(idx); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if want := strings.TrimSpace(p.Meta.Checksum); want != "" {
 		h := sha256.Sum256(p.Payload)
 		if got := hex.EncodeToString(h[:]); !strings.EqualFold(got, want) {
-			return fmt.Errorf("sftp sender checksum mismatch: got=%s want=%s transfer=%s", got, want, transferID)
+			return nil, fmt.Errorf("sftp sender checksum mismatch: got=%s want=%s transfer=%s", got, want, transferID)
 		}
 	}
 	st, ok := s.states[idx][transferID]
 	if !ok {
 		finalPath, err := sftpFinalPath(s.remoteDir, p, transferID)
 		if err != nil {
-			return fmt.Errorf("sftp sender build final path failed: %w", err)
+			return nil, fmt.Errorf("sftp sender build final path failed: %w", err)
 		}
 		if err := s.sftpClis[idx].MkdirAll(path.Dir(finalPath)); err != nil {
 			s.invalidateConnLocked(idx)
-			return err
+			return nil, err
 		}
 		st = &sftpTransferState{
 			finalPath: finalPath,
@@ -213,16 +228,16 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 	f, err := s.sftpClis[idx].OpenFile(st.tempPath, os.O_WRONLY|os.O_CREATE)
 	if err != nil {
 		s.invalidateConnLocked(idx)
-		return err
+		return nil, err
 	}
 	if _, err = f.WriteAt(p.Payload, p.Meta.Offset); err != nil {
 		_ = f.Close()
 		s.invalidateConnLocked(idx)
-		return err
+		return nil, err
 	}
 	if err = f.Close(); err != nil {
 		s.invalidateConnLocked(idx)
-		return err
+		return nil, err
 	}
 	st.addRange(p.Meta.Offset, p.Meta.Offset+int64(len(p.Payload)))
 	if p.Meta.EOF {
@@ -233,13 +248,14 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 		_ = s.sftpClis[idx].Remove(st.finalPath)
 		if err := s.sftpClis[idx].Rename(st.tempPath, st.finalPath); err != nil {
 			s.invalidateConnLocked(idx)
-			return err
+			return nil, err
 		}
-		if err := s.afterSFTPCommitLocked(ctx, idx, transferID, p, st.finalPath); err != nil {
-			return err
-		}
+		finalPath := st.finalPath
+		s.cleanupCommittedTransferLocked(idx, transferID)
+		event := sftpFileReadyEvent(p, s.name, s.addr, finalPath)
+		return &event, nil
 	}
-	return nil
+	return nil, nil
 }
 
 // Close 关闭底层 SFTP/SSH 连接并释放资源。

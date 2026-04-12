@@ -111,3 +111,23 @@ func BenchmarkTaskRouteSenderLookup(b *testing.B) {
 		tk.Handle(context.Background(), pkt)
 	}
 }
+
+func BenchmarkTaskRouteSenderLookupStaticPacket(b *testing.B) {
+	senders := make([]sender.Sender, 0, 64)
+	for i := 0; i < 64; i++ {
+		senders = append(senders, &namedCaptureSender{testNamedSender: testNamedSender{name: "s" + string(rune('A'+(i%26))) + string(rune('a'+(i/26)))}})
+	}
+	target := &namedCaptureSender{testNamedSender: testNamedSender{name: "target"}}
+	senders = append(senders, target)
+	tk := &Task{Name: "bench-route-static", ExecutionModel: ExecutionModelFastPath, Senders: senders}
+	if err := tk.Start(); err != nil {
+		b.Fatalf("start task: %v", err)
+	}
+	defer tk.StopGraceful()
+
+	pkt := &packet.Packet{Envelope: packet.Envelope{Payload: []byte("x"), Meta: packet.Meta{RouteSender: "target"}}}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		tk.Handle(context.Background(), pkt)
+	}
+}

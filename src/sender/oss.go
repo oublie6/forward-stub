@@ -63,6 +63,12 @@ type OSSSender struct {
 }
 
 type ossTransferState struct {
+	// mu 只保护单个 transfer 的状态机。OSSSender.mu 只保护 states map，
+	// multipart upload / complete / notify 都不能放在 sender 级别锁内。
+	mu       sync.Mutex
+	initDone chan struct{}
+	initErr  error
+
 	// objectKey/uploadID 在首个 chunk 到达时确定，后续同一 transfer_id 固定复用。
 	objectKey string
 	uploadID  string
@@ -81,6 +87,7 @@ type ossTransferState struct {
 	pendingBytes    int64
 	uploadedParts   []ossUploadedPart
 	nextPartNumber  int
+	uploading       bool
 }
 
 type ossUploadedPart struct {
@@ -164,29 +171,66 @@ func (s *OSSSender) Send(ctx context.Context, p *packet.Packet) error {
 		return fmt.Errorf("oss sender requires transfer_id")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	st, ok := s.states[transferID]
-	if !ok {
-		objectKey, err := ossObjectKey(s.keyPrefix, p)
-		if err != nil {
-			return err
-		}
-		uploadID, err := s.api.NewMultipartUpload(ctx, s.bucket, objectKey, s.putOpts)
-		if err != nil {
-			return err
-		}
-		st = &ossTransferState{
-			objectKey:         objectKey,
-			uploadID:          uploadID,
-			totalSize:         p.Meta.TotalSize,
-			pendingSegments:   make(map[int64][]byte),
-			nextPartNumber:    1,
-			pendingPartBuffer: make([]byte, 0, minInt64(s.partSize, 16<<20)),
-		}
-		s.states[transferID] = st
+	st, creator, err := s.getOrCreateTransferState(ctx, transferID, p)
+	if err != nil {
+		return err
 	}
+	if !creator {
+		<-st.initDone
+		if st.initErr != nil {
+			return st.initErr
+		}
+	}
+
+	shouldDrive, err := st.acceptPacket(p, s.pendingLimit, s.partSize)
+	if err != nil {
+		return err
+	}
+	if !shouldDrive {
+		return nil
+	}
+	return s.driveOSSUpload(ctx, transferID, st, p)
+}
+
+func (s *OSSSender) getOrCreateTransferState(ctx context.Context, transferID string, p *packet.Packet) (*ossTransferState, bool, error) {
+	s.mu.Lock()
+	st, ok := s.states[transferID]
+	if ok {
+		s.mu.Unlock()
+		return st, false, nil
+	}
+	st = &ossTransferState{
+		initDone:        make(chan struct{}),
+		totalSize:       p.Meta.TotalSize,
+		pendingSegments: make(map[int64][]byte),
+		nextPartNumber:  1,
+	}
+	s.states[transferID] = st
+	s.mu.Unlock()
+
+	var err error
+	st.objectKey, err = ossObjectKey(s.keyPrefix, p)
+	if err == nil {
+		st.uploadID, err = s.api.NewMultipartUpload(ctx, s.bucket, st.objectKey, s.putOpts)
+	}
+	if err != nil {
+		st.initErr = err
+		s.mu.Lock()
+		if s.states[transferID] == st {
+			delete(s.states, transferID)
+		}
+		s.mu.Unlock()
+		close(st.initDone)
+		return st, true, err
+	}
+	st.pendingPartBuffer = make([]byte, 0, minInt64(s.partSize, 16<<20))
+	close(st.initDone)
+	return st, true, nil
+}
+
+func (st *ossTransferState) acceptPacket(p *packet.Packet, pendingLimit, partSize int64) (bool, error) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	if p.Meta.TotalSize > 0 {
 		st.totalSize = p.Meta.TotalSize
 	}
@@ -194,31 +238,120 @@ func (s *OSSSender) Send(ctx context.Context, p *packet.Packet) error {
 		st.eofSeen = true
 	}
 	st.addRange(p.Meta.Offset, p.Meta.Offset+int64(len(p.Payload)))
-	if err := st.acceptChunk(p.Meta.Offset, p.Payload, s.pendingLimit); err != nil {
-		return err
+	if err := st.acceptChunk(p.Meta.Offset, p.Payload, pendingLimit); err != nil {
+		return false, err
 	}
-	if err := st.flushReadyParts(ctx, s.api, s.bucket, s.partSize); err != nil {
-		return err
+	if st.uploading {
+		return false, nil
+	}
+	if !st.hasUploadWorkLocked(partSize) {
+		return false, nil
+	}
+	st.uploading = true
+	return true, nil
+}
+
+func (s *OSSSender) driveOSSUpload(ctx context.Context, transferID string, st *ossTransferState, p *packet.Packet) error {
+	for {
+		op := st.nextUploadOperation(s.partSize)
+		switch op.kind {
+		case ossUploadOpNone:
+			return nil
+		case ossUploadOpPart:
+			objPart, err := s.api.PutObjectPart(ctx, s.bucket, st.objectKey, st.uploadID, op.partNumber, bytes.NewReader(op.payload), int64(len(op.payload)), minio.PutObjectPartOptions{})
+			if err != nil {
+				st.finishPartUpload(op, "", err)
+				return err
+			}
+			st.finishPartUpload(op, objPart.ETag, nil)
+		case ossUploadOpComplete:
+			if _, err := s.api.CompleteMultipartUpload(ctx, s.bucket, op.objectKey, op.uploadID, op.parts, s.putOpts); err != nil {
+				st.finishCompleteUpload()
+				return err
+			}
+			st.finishCompleteUpload()
+			s.mu.Lock()
+			if s.states[transferID] == st {
+				delete(s.states, transferID)
+			}
+			s.mu.Unlock()
+			if err := notifyFileReady(ctx, s.notifiers, ossFileReadyEvent(p, s.name, s.endpoint, s.bucket, op.objectKey)); err != nil {
+				// TODO: 在这里接入通知 outbox / 持久化补发表。对象已经 complete 成功，不能再保留 multipart 未完成状态。
+				logx.L().Errorw("OSS对象已complete成功，通知失败", "发送端", s.name, "bucket", s.bucket, "key", op.objectKey, "错误", err)
+				return fmt.Errorf("oss sender object completed but notify failed: %w", err)
+			}
+			return nil
+		}
+	}
+}
+
+type ossUploadOpKind uint8
+
+const (
+	ossUploadOpNone ossUploadOpKind = iota
+	ossUploadOpPart
+	ossUploadOpComplete
+)
+
+type ossUploadOp struct {
+	kind       ossUploadOpKind
+	partNumber int
+	partStart  int64
+	payload    []byte
+	objectKey  string
+	uploadID   string
+	parts      []minio.CompletePart
+}
+
+func (st *ossTransferState) nextUploadOperation(partSize int64) ossUploadOp {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if int64(len(st.pendingPartBuffer)) >= partSize {
+		return st.reservePartUploadLocked(int(partSize))
 	}
 	if st.readyToComplete() {
 		if len(st.pendingPartBuffer) > 0 {
-			if err := st.uploadPart(ctx, s.api, s.bucket); err != nil {
-				return err
-			}
+			return st.reservePartUploadLocked(len(st.pendingPartBuffer))
 		}
-		parts := st.completeParts()
-		if _, err := s.api.CompleteMultipartUpload(ctx, s.bucket, st.objectKey, st.uploadID, parts, s.putOpts); err != nil {
-			return err
-		}
-		objectKey := st.objectKey
-		delete(s.states, transferID)
-		if err := notifyFileReady(ctx, s.notifiers, ossFileReadyEvent(p, s.name, s.endpoint, s.bucket, objectKey)); err != nil {
-			// TODO: 在这里接入通知 outbox / 持久化补发表。对象已经 complete 成功，不能再保留 multipart 未完成状态。
-			logx.L().Errorw("OSS对象已complete成功，通知失败", "发送端", s.name, "bucket", s.bucket, "key", objectKey, "错误", err)
-			return fmt.Errorf("oss sender object completed but notify failed: %w", err)
-		}
+		return ossUploadOp{kind: ossUploadOpComplete, objectKey: st.objectKey, uploadID: st.uploadID, parts: st.completeParts()}
 	}
-	return nil
+	st.uploading = false
+	return ossUploadOp{kind: ossUploadOpNone}
+}
+
+func (st *ossTransferState) reservePartUploadLocked(n int) ossUploadOp {
+	partPayload := append([]byte(nil), st.pendingPartBuffer[:n]...)
+	partStart := st.uploadedEnd()
+	copy(st.pendingPartBuffer, st.pendingPartBuffer[n:])
+	st.pendingPartBuffer = st.pendingPartBuffer[:len(st.pendingPartBuffer)-n]
+	return ossUploadOp{
+		kind:       ossUploadOpPart,
+		partNumber: st.nextPartNumber,
+		partStart:  partStart,
+		payload:    partPayload,
+	}
+}
+
+func (st *ossTransferState) finishPartUpload(op ossUploadOp, etag string, uploadErr error) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if uploadErr != nil {
+		st.pendingPartBuffer = append(op.payload, st.pendingPartBuffer...)
+		st.uploading = false
+		return
+	}
+	st.uploadedParts = append(st.uploadedParts, ossUploadedPart{partNumber: op.partNumber, etag: etag, start: op.partStart, end: op.partStart + int64(len(op.payload))})
+	st.nextPartNumber++
+}
+
+func (st *ossTransferState) finishCompleteUpload() {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.uploading = false
+}
+
+func (st *ossTransferState) hasUploadWorkLocked(partSize int64) bool {
+	return int64(len(st.pendingPartBuffer)) >= partSize || st.readyToComplete()
 }
 
 func (s *OSSSender) Close(ctx context.Context) error {

@@ -164,23 +164,15 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 
 	t.inflightCount.Add(1)
 	t.inflight.Add(1)
-	run := func(runCtx context.Context) {
-		// run 是三种执行模型共享的真正业务闭包：
-		// 先在退出时归还 inflight 和记忆体，再执行 pipeline+sender。
-		defer t.inflight.Done()
-		defer t.inflightCount.Add(-1)
-		defer pkt.Release()
-		t.processAndSend(runCtx, pkt)
-	}
 
 	switch t.ExecutionModel {
 	case ExecutionModelFastPath:
 		// fastpath 直接在当前 goroutine 内执行，没有额外排队/切换成本。
-		run(ctx)
+		t.runPacket(ctx, pkt)
 		return
 	case ExecutionModelPool:
 		// pool 模型下 Submit 失败通常意味着协程池已停止或处于异常状态，需要记录丢弃日志并主动释放 packet。
-		if err := t.pool.Submit(func() { run(ctx) }); err != nil {
+		if err := t.pool.Submit(func() { t.runPacket(ctx, pkt) }); err != nil {
 			t.inflight.Done()
 			t.inflightCount.Add(-1)
 			pkt.Release()
@@ -209,17 +201,19 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 	}
 }
 
+func (t *Task) runPacket(ctx context.Context, pkt *packet.Packet) {
+	defer t.inflight.Done()
+	defer t.inflightCount.Add(-1)
+	defer pkt.Release()
+	t.processAndSend(ctx, pkt)
+}
+
 // channelWorker 是 channel 模型的唯一消费协程。
 // 它串行处理队列中的 taskRequest，因此天然保证同一 task 内的顺序一致性。
 func (t *Task) channelWorker() {
 	defer t.wg.Done()
 	for req := range t.ch {
-		func(r taskRequest) {
-			defer t.inflight.Done()
-			defer t.inflightCount.Add(-1)
-			defer r.pkt.Release()
-			t.processAndSend(r.ctx, r.pkt)
-		}(req)
+		t.runPacket(req.ctx, req.pkt)
 	}
 }
 
@@ -302,7 +296,9 @@ func (t *Task) StopGraceful() {
 // 3. 若 pipeline 指定 RouteSender，则只向命中的 sender 投递；
 // 4. 否则广播到 task 绑定的全部 sender。
 func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
-	packets := []*packet.Packet{pkt}
+	var single [1]*packet.Packet
+	single[0] = pkt
+	packets := single[:]
 	for _, pl := range t.Pipelines {
 		next := make([]*packet.Packet, 0, len(packets))
 		for _, inPkt := range packets {
@@ -317,9 +313,12 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 		}
 		packets = next
 	}
-	releaseLater := make(map[*packet.Packet]struct{})
+	var releaseLater map[*packet.Packet]struct{}
 	for _, outPkt := range packets {
 		if outPkt != pkt {
+			if releaseLater == nil {
+				releaseLater = make(map[*packet.Packet]struct{})
+			}
 			releaseLater[outPkt] = struct{}{}
 		}
 		if outPkt.Meta.RouteSender != "" {

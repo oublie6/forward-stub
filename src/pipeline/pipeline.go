@@ -12,7 +12,9 @@ type Pipeline struct {
 
 // Process 负责该函数对应的核心逻辑，详见实现细节。
 func (pl *Pipeline) Process(p *packet.Packet) []*packet.Packet {
-	packets := []*packet.Packet{p}
+	var single [1]*packet.Packet
+	single[0] = p
+	packets := single[:]
 	for _, st := range pl.Stages {
 		packets = st(packets)
 		if len(packets) == 0 {
