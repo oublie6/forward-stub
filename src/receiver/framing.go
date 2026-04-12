@@ -9,7 +9,8 @@ type Framer interface {
 
 type U16BEFramer struct{}
 
-// Feed 负责该函数对应的核心逻辑，详见实现细节。
+// Feed 从 TCP 字节流中切出 2 字节大端长度前缀帧。
+// remain 必须由调用方保留到下一次输入，避免半包被丢弃。
 func (f U16BEFramer) Feed(in []byte) ([][]byte, []byte, error) {
 	var frames [][]byte
 	buf := in

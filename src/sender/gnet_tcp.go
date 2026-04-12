@@ -33,7 +33,8 @@ type GnetTCPSender struct {
 	framePool sync.Pool
 }
 
-// NewGnetTCPSender 负责该函数对应的核心逻辑，详见实现细节。
+// NewGnetTCPSender 创建 TCP sender 并预连接指定数量的 gnet 连接。
+// withU16BELen=true 时 Send 会在写出前加 2 字节大端长度头。
 func NewGnetTCPSender(name, remote string, withU16BELen bool, concurrency, socketSendBuffer int, gnetLogLevel string) (*GnetTCPSender, error) {
 	if concurrency <= 0 {
 		concurrency = 1
@@ -57,13 +58,14 @@ func NewGnetTCPSender(name, remote string, withU16BELen bool, concurrency, socke
 	return s, nil
 }
 
-// Name 负责该函数对应的核心逻辑，详见实现细节。
+// Name 返回 sender 配置名。
 func (s *GnetTCPSender) Name() string { return s.name }
 
-// Key 负责该函数对应的核心逻辑，详见实现细节。
+// Key 返回连接身份键；TCP sender 按远端地址复用。
 func (s *GnetTCPSender) Key() string { return "tcp_gnet|" + s.remote }
 
-// Send 负责该函数对应的核心逻辑，详见实现细节。
+// Send 轮询选择一条 TCP 连接异步写出 payload。
+// u16be framing 复用 framePool 缓冲，AsyncWrite 回调负责归还，避免热路径持续分配。
 func (s *GnetTCPSender) Send(ctx context.Context, p *packet.Packet) error {
 	c := s.pickConn()
 	if c == nil {
@@ -108,7 +110,7 @@ func (s *GnetTCPSender) Send(ctx context.Context, p *packet.Packet) error {
 	return nil
 }
 
-// Close 负责该函数对应的核心逻辑，详见实现细节。
+// Close 关闭所有连接并停止 gnet client；允许重复调用。
 func (s *GnetTCPSender) Close(ctx context.Context) error {
 	if conns := s.loadConns(); len(conns) > 0 {
 		for _, c := range conns {
@@ -135,7 +137,8 @@ func (s *GnetTCPSender) loadConns() []gnet.Conn {
 	return conns
 }
 
-// ensureClientAndDial 负责该函数对应的核心逻辑，详见实现细节。
+// ensureClientAndDial 确保 gnet client 存在，并补齐当前 sender 的连接池。
+// 该函数只在构造或连接池为空时调用，不在正常发送热路径中反复建连。
 func (s *GnetTCPSender) ensureClientAndDial() error {
 	s.cliMu.Lock()
 	defer s.cliMu.Unlock()
@@ -175,7 +178,7 @@ func (s *GnetTCPSender) ensureClientAndDial() error {
 	return nil
 }
 
-// pickConn 负责该函数对应的核心逻辑，详见实现细节。
+// pickConn 按原子递增下标做近似轮询，避免发送热路径加锁。
 func (s *GnetTCPSender) pickConn() gnet.Conn {
 	conns := s.loadConns()
 	if len(conns) == 0 {

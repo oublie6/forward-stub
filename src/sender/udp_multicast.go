@@ -34,7 +34,8 @@ type UDPMulticastSender struct {
 	nextIdx     atomic.Uint64
 }
 
-// NewUDPMulticastSender 负责该函数对应的核心逻辑，详见实现细节。
+// NewUDPMulticastSender 创建固定本地源端口的 UDP 组播 sender。
+// 构造阶段会设置 TTL、回环和可选网卡，避免运行时热路径反复处理组播 socket option。
 func NewUDPMulticastSender(name, localIP string, localPort int, group string, ifaceName string, ttl int, loop bool, socketSendBuffer, concurrency int) (*UDPMulticastSender, error) {
 	gaddr, err := net.ResolveUDPAddr("udp", group)
 	if err != nil {
@@ -72,15 +73,15 @@ func NewUDPMulticastSender(name, localIP string, localPort int, group string, if
 	return s, nil
 }
 
-// Name 负责该函数对应的核心逻辑，详见实现细节。
+// Name 返回 sender 配置名。
 func (s *UDPMulticastSender) Name() string { return s.name }
 
-// Key 负责该函数对应的核心逻辑，详见实现细节。
+// Key 返回本地源地址到组播地址的身份键。
 func (s *UDPMulticastSender) Key() string {
 	return fmt.Sprintf("udp_multicast|%s->%s", s.local.String(), s.group.String())
 }
 
-// Send 负责该函数对应的核心逻辑，详见实现细节。
+// Send 按分片轮询 socket 写出组播 payload。
 func (s *UDPMulticastSender) Send(ctx context.Context, p *packet.Packet) error {
 	idx := nextShardIndex(&s.nextIdx, s.shardMask)
 	c := s.conns[idx].Load()
@@ -95,7 +96,7 @@ func (s *UDPMulticastSender) Send(ctx context.Context, p *packet.Packet) error {
 	return err
 }
 
-// Close 负责该函数对应的核心逻辑，详见实现细节。
+// Close 关闭所有分片 socket；允许重复调用。
 func (s *UDPMulticastSender) Close(ctx context.Context) error {
 	for i := 0; i < s.concurrency; i++ {
 		s.locks[i].Lock()
@@ -108,7 +109,7 @@ func (s *UDPMulticastSender) Close(ctx context.Context) error {
 	return nil
 }
 
-// getConn 负责该函数对应的核心逻辑，详见实现细节。
+// getConn 在分片 socket 丢失时串行重建该分片。
 func (s *UDPMulticastSender) getConn(idx int) (*net.UDPConn, error) {
 	s.locks[idx].Lock()
 	defer s.locks[idx].Unlock()
@@ -121,14 +122,14 @@ func (s *UDPMulticastSender) getConn(idx int) (*net.UDPConn, error) {
 	return s.conns[idx].Load(), nil
 }
 
-// ensureConn 负责该函数对应的核心逻辑，详见实现细节。
+// ensureConn 是 ensureConnLocked 的加锁包装，仅用于构造和异常重连路径。
 func (s *UDPMulticastSender) ensureConn(idx int) error {
 	s.locks[idx].Lock()
 	defer s.locks[idx].Unlock()
 	return s.ensureConnLocked(idx)
 }
 
-// ensureConnLocked 负责该函数对应的核心逻辑，详见实现细节。
+// ensureConnLocked 在调用者持有分片锁时创建 UDP socket 并设置组播参数。
 func (s *UDPMulticastSender) ensureConnLocked(idx int) error {
 	if s.conns[idx].Load() != nil {
 		return nil

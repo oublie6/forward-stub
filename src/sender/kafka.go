@@ -31,7 +31,8 @@ type KafkaSender struct {
 	nextIdx atomic.Uint64
 }
 
-// NewKafkaSender 负责该函数对应的核心逻辑，详见实现细节。
+// NewKafkaSender 创建 franz-go producer 分片。
+// 所有 Kafka 选项在构造阶段编译完成，Send 热路径只选择 client、构造 record 并同步发送。
 func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 	if strings.TrimSpace(sc.Topic) == "" {
 		return nil, errors.New("kafka sender requires topic")
@@ -139,13 +140,14 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 	return s, nil
 }
 
-// Name 负责该函数对应的核心逻辑，详见实现细节。
+// Name 返回 sender 配置名。
 func (s *KafkaSender) Name() string { return s.name }
 
-// Key 负责该函数对应的核心逻辑，详见实现细节。
+// Key 返回 Kafka broker+topic 身份键。
 func (s *KafkaSender) Key() string { return "kafka|" + strings.Join(s.brokers, ",") + "|" + s.topic }
 
-// Send 负责该函数对应的核心逻辑，详见实现细节。
+// Send 同步生产一条 Kafka record。
+// record key 来源已在配置校验阶段约束，运行时只按预编译字段取值。
 func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
 	idx := nextShardIndex(&s.nextIdx, s.shardMask)
 	cli := s.clients[idx].Load()
@@ -161,7 +163,7 @@ func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
 	return nil
 }
 
-// Close 负责该函数对应的核心逻辑，详见实现细节。
+// Close 关闭所有 producer 分片；允许重复调用。
 func (s *KafkaSender) Close(ctx context.Context) error {
 	for i := 0; i < s.concurrency; i++ {
 		cli := s.clients[i].Swap(nil)

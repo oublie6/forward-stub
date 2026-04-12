@@ -377,7 +377,7 @@ kill -USR1 <pid>
 
 #### Windows
 
-- 当前实现没有 reload signal；建议使用文件监听方式
+- 当前 Windows 实现没有 reload signal；建议使用文件监听方式。
 
 ### 7.5 重载成功 / 失败日志特征
 
@@ -849,7 +849,6 @@ curl http://127.0.0.1:6060/debug/pprof/
 ### 13.1 常用启动命令
 
 ```bash
-./bin/forward-stub -system-config ./configs/system.example.json -business-config ./configs/business.example.json
 ./bin/forward-stub -system-config ./configs/system.example.json -business-config ./configs/business.example.json
 ```
 

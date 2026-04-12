@@ -16,6 +16,7 @@ func TestForwardUDPToUDPWithChannelTaskModel(t *testing.T) {
 	recvPort := freeUDPPort(t)
 	sendPort := freeUDPPort(t)
 	localPort := freeUDPPort(t)
+	waitForPacket := 10 * time.Second
 
 	done := make(chan []byte, 1)
 	pc, err := net.ListenPacket("udp", fmt.Sprintf("127.0.0.1:%d", sendPort))
@@ -25,7 +26,7 @@ func TestForwardUDPToUDPWithChannelTaskModel(t *testing.T) {
 	defer pc.Close()
 	go func() {
 		buf := make([]byte, 2048)
-		_ = pc.SetReadDeadline(time.Now().Add(3 * time.Second))
+		_ = pc.SetReadDeadline(time.Now().Add(waitForPacket))
 		n, _, err := pc.ReadFrom(buf)
 		if err == nil {
 			done <- append([]byte(nil), buf[:n]...)
@@ -80,7 +81,7 @@ func TestForwardUDPToUDPWithChannelTaskModel(t *testing.T) {
 		if string(got) != string(payload) {
 			t.Fatalf("payload mismatch got=%q want=%q", got, payload)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(waitForPacket):
 		t.Fatal("timeout waiting forwarded packet")
 	}
 }

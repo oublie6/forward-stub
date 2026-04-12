@@ -38,7 +38,7 @@
 
 - 空字符串：不拆帧，收到多少就交给上游多少。
 - `u16be`：按 2 字节大端长度前缀拆帧。
-- receiver 侧不支持 `none`，`none` 只是 sender 侧为兼容空字符串提供的别名。
+- receiver 侧不支持 `none`。
 
 ### 1.3 Kafka receiver
 
@@ -173,7 +173,7 @@
 
 `frame` 说明：
 
-- `""` 或 `none`：直接发送原始 payload。
+- `""`：直接发送原始 payload。
 - `u16be`：发送前加 2 字节大端长度头。
 
 ### 2.4 Kafka sender

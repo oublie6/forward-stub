@@ -17,7 +17,7 @@
 
 - `main.go` 仅保留进程入口，所有启动编排沉淀到 `src/bootstrap`。
 - `bootstrap.Run` 负责：
-  - 解析 CLI 参数（`-config` / `-system-config` / `-business-config`）。
+  - 解析 CLI 参数（`-system-config` / `-business-config`）。
   - 读取并校验配置。
   - 初始化 logger 和 pprof。
   - 启动 runtime、信号监听、文件变更监听。

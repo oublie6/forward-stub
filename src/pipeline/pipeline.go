@@ -10,7 +10,8 @@ type Pipeline struct {
 	Stages []StageFunc
 }
 
-// Process 负责该函数对应的核心逻辑，详见实现细节。
+// Process 按配置顺序执行所有 stage。
+// 任一 stage 返回空切片即表示该 packet 被丢弃；无 stage 时原包原样通过。
 func (pl *Pipeline) Process(p *packet.Packet) []*packet.Packet {
 	var single [1]*packet.Packet
 	single[0] = p

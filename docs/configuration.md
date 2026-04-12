@@ -362,7 +362,7 @@
 |---|---|---:|---|---|---|
 | `type` | string | 是 | 无 | 全部 sender | 当前支持 `udp_unicast`、`udp_multicast`、`tcp_gnet`、`kafka`、`sftp`、`oss`、`dds_skydds`。 |
 | `remote` | string | 多数场景是 | 无 | 全部 sender | UDP/TCP/SFTP 为目标地址；Kafka 为 broker CSV；OSS 使用 `endpoint`。 |
-| `frame` | string | 否 | 空字符串 | 仅 `tcp_gnet` | sender 侧支持空字符串、`none`、`u16be`。 |
+| `frame` | string | 否 | 空字符串 | 仅 `tcp_gnet` | sender 侧支持空字符串或 `u16be`。 |
 | `concurrency` | int | 否 | `8` | 全部 sender | 对不同 sender 含义略有不同，但统一要求：若显式配置为正数，则必须是 **2 的幂**。 |
 | `socket_send_buffer` | int | 否 | `1073741824` | 仅 `udp_unicast` / `udp_multicast` / `tcp_gnet` | socket 内核发送缓冲。 |
 | `topic` | string | Kafka 必填 | 无 | 仅 `kafka` | 目标主题。 |
@@ -395,7 +395,7 @@
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---:|---|---|
 | `remote` | string | 是 | 无 | 目标 TCP 地址。 |
-| `frame` | string | 否 | 空字符串 | 支持 `""`、`none`、`u16be`。`u16be` 会在发送前添加 2 字节大端长度头。 |
+| `frame` | string | 否 | 空字符串 | 支持 `""`、`u16be`。`u16be` 会在发送前添加 2 字节大端长度头。 |
 | `concurrency` | int | 否 | `8` | 建立多条连接做轮询发送。 |
 | `socket_send_buffer` | int | 否 | `1073741824` | 写缓冲。 |
 

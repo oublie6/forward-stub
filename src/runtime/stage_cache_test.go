@@ -28,6 +28,40 @@ func TestCompilePipelinesWithStageCacheReuseBySignature(t *testing.T) {
 	}
 }
 
+func TestCompilePipelinesWithStageCacheCleansFailedNewEntries(t *testing.T) {
+	st := NewStore()
+	cfg := map[string][]config.StageConfig{
+		"p1": {
+			{Type: "match_offset_bytes", Offset: 0, Hex: "aabb"},
+			{Type: "match_offset_bytes", Offset: 0, Hex: "not-hex"},
+		},
+	}
+
+	if _, _, err := st.compilePipelinesWithStageCache(cfg); err == nil {
+		t.Fatalf("expected compile error")
+	}
+	if len(st.stageCache) != 0 {
+		t.Fatalf("failed compile should not leave unreferenced stage cache entries, got %d", len(st.stageCache))
+	}
+}
+
+func TestClonePipelineConfigMapBreaksCallerAliasing(t *testing.T) {
+	src := map[string][]config.StageConfig{
+		"p1": {{Type: "match_offset_bytes", Offset: 0, Hex: "aa"}},
+	}
+	cp := clonePipelineConfigMap(src)
+
+	src["p1"][0].Hex = "bb"
+	src["p2"] = []config.StageConfig{{Type: "replace_offset_bytes", Offset: 0, Hex: "cc"}}
+
+	if got := cp["p1"][0].Hex; got != "aa" {
+		t.Fatalf("cloned pipeline stage should not follow caller mutation, got %s", got)
+	}
+	if _, ok := cp["p2"]; ok {
+		t.Fatalf("cloned pipeline map should not follow caller-added pipeline")
+	}
+}
+
 // TestStageCacheTaskRefsTrackAddAndRemove 验证 task 生命周期会同步更新 stage 缓存引用计数。
 func TestStageCacheTaskRefsTrackAddAndRemove(t *testing.T) {
 	st := NewStore()

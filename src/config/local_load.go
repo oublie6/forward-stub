@@ -24,7 +24,8 @@ func decodeJSONStrict(data []byte, v interface{}) error {
 	return nil
 }
 
-// LoadLocal 负责该函数对应的核心逻辑，详见实现细节。
+// LoadLocal 按旧单文件格式读取完整 Config。
+// 新启动入口使用 LoadLocalPair；该函数保留给测试和兼容工具。
 func LoadLocal(path string) (Config, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {

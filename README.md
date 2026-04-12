@@ -6,7 +6,7 @@
 receiver -> selector -> task(pipeline + sender)
 ```
 
-本文只保留**配置入口说明、最小示例、示例索引、文档索引**；完整字段手册请直接查看 `docs/configuration.md`。
+本文只保留**配置入口说明、最小示例、示例索引、文档索引**。字段枚举、默认值、热更新边界、协议细节以 `docs/` 中的权威文档为准。
 
 ## 1. 配置入口说明
 
@@ -124,15 +124,17 @@ receiver -> selector -> task(pipeline + sender)
 
 ## 4. 文档索引
 
-- `docs/configuration.md`：**完整配置参考手册**，逐项列出字段、类型、默认值、枚举、适用范围、约束与注意事项。
-- `docs/receivers-and-senders.md`：按协议类型解释 receiver / sender 的专属配置、match key 行为和 Kafka 直映射配置。
-- `docs/task-and-dispatch.md`：说明 selector、task_set、task、dispatch、route sender 的关系。
-- `docs/execution-model.md`：说明 `fastpath`、`pool`、`channel` 的配置与选型建议。
-- `docs/observability.md`：说明 logging、payload 日志、流量统计、GC 日志、pprof 等配置与排障方式。
-- `docs/runtime-and-lifecycle.md`：说明默认值生效层次、初始化冷路径、热更新边界和停机顺序。
-- `docs/runtime-sequence-and-flow.md`：说明启动、收包、dispatch、热重载、停机的关键时序与统计对象生命周期。
-- `docs/operations-manual.md`：面向运维、实施、测试和值班人员的标准操作手册，覆盖部署、启动、重载、停机、巡检与排障。
-- `docs/pipeline.md`：说明 pipeline stage 类型与字段约束。
+- `docs/configuration.md`：**配置字段权威入口**，列出字段、类型、默认值、枚举、适用范围、约束与示例一致性要求。
+- `docs/receivers-and-senders.md`：**协议行为权威入口**，解释各 receiver / sender 的专属配置、match key 行为和协议边界。
+- `docs/task-and-dispatch.md`：**路由与任务权威入口**，说明 selector、task_set、task、dispatch、route sender 的关系。
+- `docs/pipeline.md`：**pipeline stage 权威入口**，说明 stage 类型、字段约束和丢弃语义。
+- `docs/execution-model.md`：`fastpath`、`pool`、`channel` 的配置与选型建议。
+- `docs/runtime-and-lifecycle.md`：默认值生效层次、初始化冷路径、热更新边界和停机顺序。
+- `docs/runtime-sequence-and-flow.md`：启动、收包、dispatch、热重载、停机的关键时序与统计对象生命周期。
+- `docs/observability.md`：logging、payload 日志、流量统计、GC 日志、pprof 等配置与排障方式。
+- `docs/operations-manual.md`：运维、实施、测试和值班人员的标准操作手册。
+- `docs/deployment.md`：本地、Docker、Kubernetes 部署入口。
+- `docs/skydds.md`：SkyDDS SDK、cgo 构建和 `dds_skydds` 协议说明。
 
 ## 5. 配置使用上的关键规则
 
@@ -152,19 +154,7 @@ receiver -> selector -> task(pipeline + sender)
 - 显式配置模式后，会在 receiver 初始化或热重载重建阶段预编译为协议专属 builder；UDP/TCP 热路径只做一次轻量函数调用，TCP/SFTP 还会尽量按连接或文件复用已生成的 key。
 - 详见 `docs/configuration.md`、`docs/receivers-and-senders.md`、`docs/runtime-and-lifecycle.md`。
 
-## 6. 本次文档对齐后的关注点
-
-当前 README 与 `docs/` 已统一到以下代码行为：
-
-- 顶层配置：`version`、`control`、`logging`、`receivers`、`selectors`、`task_sets`、`senders`、`pipelines`、`tasks`、`business_defaults`。
-- logging：日志级别、文件滚动、流量统计、payload 日志、payload 池、GC 周期日志。
-- receivers：UDP/TCP gnet、Kafka、SFTP、local_timer 及其类型专属字段、match key builder 生命周期。
-- senders：UDP 单播、UDP 组播、TCP、Kafka、SFTP 及其类型专属字段。
-- selector / task_set / task / pipeline：引用关系、默认值、执行模型、stage 参数、route sender 行为。
-- 运行时：冷启动、热更新、receiver/task 统计对象生命周期、pprof、GC 日志。
-- 示例文件：单文件全量、system/business 全量、最小示例、按协议/执行模型拆分示例。
-
-## 7. 验证命令
+## 6. 验证命令
 
 ```bash
 go test ./src/config ./src/bootstrap ./...
@@ -185,17 +175,9 @@ make perf
 当前 `make perf` 只运行 `src/runtime` 中已存在的 benchmark，仓库内不存在 `cmd/bench` 入口。
 
 
-## 8. SkyDDS（dds_skydds）轻量字节桥接
+## 7. SkyDDS（dds_skydds）轻量字节桥接
 
-当前新增 `dds_skydds` receiver/sender，支持 SkyDDS `OctetMsg` 与 `BatchOctetMsg` 字节桥接（不是完整 DDS 框架）。
-
-目录约定：
-
-- 安装包：`third_party/skydds/packages/`
-- SDK 解压目录：`third_party/skydds/sdk/`
-- 安装包格式：仅 `*.tar.gz`
-
-快速步骤：
+`dds_skydds` receiver/sender 支持 SkyDDS `OctetMsg` 与 `BatchOctetMsg` 字节桥接。完整 SDK 目录约定、cgo/C++ 调用链、Batch 语义和测试方法见 `docs/skydds.md`。
 
 ```bash
 ./scripts/skydds/setup_linux.sh
@@ -206,13 +188,6 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 ./scripts/skydds/test_loop.sh
 ```
 
-如需构建“在镜像构建阶段自动解压 SkyDDS 包并编译 `-tags skydds`”的服务镜像，见：
-`deploy/docker/skydds-runtime-bookworm/Dockerfile` 与 `deploy/docker/build-and-save-skydds-runtime-bookworm.sh`。
-该服务镜像基于 `forward-stub-base:bookworm` 继续构建。
-该服务镜像当前 arm64 主线基于 `forward-stub-base:bookworm-arm64` 继续构建。
-
 示例配置：
 - Octet: `configs/skydds.business.example.json`
 - Batch: `configs/skydds-batch.business.example.json`
-
-详见 `docs/skydds.md`。
