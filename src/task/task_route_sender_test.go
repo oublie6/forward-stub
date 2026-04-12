@@ -53,6 +53,42 @@ func TestTaskRouteSenderSendsOnlyMatchedSender(t *testing.T) {
 	}
 }
 
+func TestTaskRouteSenderMissDropsWithoutDefaultFanout(t *testing.T) {
+	s1 := &namedCaptureSender{testNamedSender: testNamedSender{name: "kafka-a"}}
+	s2 := &namedCaptureSender{testNamedSender: testNamedSender{name: "kafka-b"}}
+	tk := &Task{Name: "route-miss", ExecutionModel: ExecutionModelFastPath, Senders: []sender.Sender{s1, s2}}
+	if err := tk.Start(); err != nil {
+		t.Fatalf("start task: %v", err)
+	}
+	defer tk.StopGraceful()
+
+	payload, rel := packet.CopyFrom([]byte("x"))
+	pkt := &packet.Packet{Envelope: packet.Envelope{Payload: payload, Meta: packet.Meta{RouteSender: "missing"}}, ReleaseFn: rel}
+	tk.Handle(context.Background(), pkt)
+
+	if s1.Count() != 0 || s2.Count() != 0 {
+		t.Fatalf("route miss should not fan out to default senders: s1=%d s2=%d", s1.Count(), s2.Count())
+	}
+}
+
+func TestTaskNoRouteSenderFansOutToAllSenders(t *testing.T) {
+	s1 := &namedCaptureSender{testNamedSender: testNamedSender{name: "kafka-a"}}
+	s2 := &namedCaptureSender{testNamedSender: testNamedSender{name: "kafka-b"}}
+	tk := &Task{Name: "fanout", ExecutionModel: ExecutionModelFastPath, Senders: []sender.Sender{s1, s2}}
+	if err := tk.Start(); err != nil {
+		t.Fatalf("start task: %v", err)
+	}
+	defer tk.StopGraceful()
+
+	payload, rel := packet.CopyFrom([]byte("x"))
+	pkt := &packet.Packet{Envelope: packet.Envelope{Payload: payload}, ReleaseFn: rel}
+	tk.Handle(context.Background(), pkt)
+
+	if s1.Count() != 1 || s2.Count() != 1 {
+		t.Fatalf("no route should fan out to all senders: s1=%d s2=%d", s1.Count(), s2.Count())
+	}
+}
+
 func BenchmarkTaskRouteSenderLookup(b *testing.B) {
 	senders := make([]sender.Sender, 0, 64)
 	for i := 0; i < 64; i++ {
@@ -72,6 +108,26 @@ func BenchmarkTaskRouteSenderLookup(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		payload, rel := packet.CopyFrom([]byte("x"))
 		pkt := &packet.Packet{Envelope: packet.Envelope{Payload: payload, Meta: packet.Meta{RouteSender: "target"}}, ReleaseFn: rel}
+		tk.Handle(context.Background(), pkt)
+	}
+}
+
+func BenchmarkTaskRouteSenderLookupStaticPacket(b *testing.B) {
+	senders := make([]sender.Sender, 0, 64)
+	for i := 0; i < 64; i++ {
+		senders = append(senders, &namedCaptureSender{testNamedSender: testNamedSender{name: "s" + string(rune('A'+(i%26))) + string(rune('a'+(i/26)))}})
+	}
+	target := &namedCaptureSender{testNamedSender: testNamedSender{name: "target"}}
+	senders = append(senders, target)
+	tk := &Task{Name: "bench-route-static", ExecutionModel: ExecutionModelFastPath, Senders: senders}
+	if err := tk.Start(); err != nil {
+		b.Fatalf("start task: %v", err)
+	}
+	defer tk.StopGraceful()
+
+	pkt := &packet.Packet{Envelope: packet.Envelope{Payload: []byte("x"), Meta: packet.Meta{RouteSender: "target"}}}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
 		tk.Handle(context.Background(), pkt)
 	}
 }

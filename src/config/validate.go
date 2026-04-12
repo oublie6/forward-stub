@@ -9,7 +9,9 @@ import (
 	"time"
 )
 
-// Validate 负责该函数对应的核心逻辑，详见实现细节。
+// Validate 校验完整 Config 的语义、引用关系和协议字段联动。
+// 调用约定：应先执行 ApplyDefaults，再调用 Validate；这样依赖默认值的字段
+// （例如 Kafka balancers、OSS part_size、SkyDDS drain 参数）会以最终生效值参与校验。
 func (c *Config) Validate() error {
 	if len(c.Tasks) == 0 {
 		return errors.New("no tasks")

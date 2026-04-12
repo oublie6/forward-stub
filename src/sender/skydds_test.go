@@ -43,6 +43,40 @@ func (m *skyddsWriterMock) Close() error {
 	return nil
 }
 
+func (m *skyddsWriterMock) writeCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.writes)
+}
+
+func (m *skyddsWriterMock) writeAt(i int) []byte {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]byte(nil), m.writes[i]...)
+}
+
+func (m *skyddsWriterMock) batchCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.batches)
+}
+
+func (m *skyddsWriterMock) batchAt(i int) [][]byte {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := make([][]byte, len(m.batches[i]))
+	for j := range m.batches[i] {
+		cp[j] = append([]byte(nil), m.batches[i][j]...)
+	}
+	return cp
+}
+
+func (m *skyddsWriterMock) closeCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.closeHit
+}
+
 func TestNewSkyDDSSenderPassesCommonOptions(t *testing.T) {
 	orig := skyddsWriterFactory
 	defer func() { skyddsWriterFactory = orig }()
@@ -76,11 +110,11 @@ func TestSkyDDSSenderOctetWrite(t *testing.T) {
 	if err := s.Send(context.Background(), &packet.Packet{Envelope: packet.Envelope{Payload: []byte("hello")}}); err != nil {
 		t.Fatalf("send: %v", err)
 	}
-	if len(mw.writes) != 1 {
-		t.Fatalf("expected 1 octet write, got %d", len(mw.writes))
+	if got := mw.writeCount(); got != 1 {
+		t.Fatalf("expected 1 octet write, got %d", got)
 	}
-	if string(mw.writes[0]) != "hello" {
-		t.Fatalf("payload mismatch: %q", string(mw.writes[0]))
+	if got := string(mw.writeAt(0)); got != "hello" {
+		t.Fatalf("payload mismatch: %q", got)
 	}
 }
 
@@ -92,11 +126,12 @@ func TestSkyDDSSenderBatchFlushByNum(t *testing.T) {
 	}
 	_ = s.Send(context.Background(), &packet.Packet{Envelope: packet.Envelope{Payload: []byte("a")}})
 	_ = s.Send(context.Background(), &packet.Packet{Envelope: packet.Envelope{Payload: []byte("b")}})
-	if got := len(mw.batches); got != 1 {
+	if got := mw.batchCount(); got != 1 {
 		t.Fatalf("expected 1 batch, got %d", got)
 	}
-	if string(mw.batches[0][0]) != "a" || string(mw.batches[0][1]) != "b" {
-		t.Fatalf("batch order mismatch: %+v", mw.batches[0])
+	batch := mw.batchAt(0)
+	if string(batch[0]) != "a" || string(batch[1]) != "b" {
+		t.Fatalf("batch order mismatch: %+v", batch)
 	}
 }
 
@@ -108,11 +143,11 @@ func TestSkyDDSSenderBatchFlushBySize(t *testing.T) {
 	}
 	_ = s.Send(context.Background(), &packet.Packet{Envelope: packet.Envelope{Payload: []byte("ab")}})
 	_ = s.Send(context.Background(), &packet.Packet{Envelope: packet.Envelope{Payload: []byte("c")}})
-	if got := len(mw.batches); got != 1 {
+	if got := mw.batchCount(); got != 1 {
 		t.Fatalf("expected flush by size, got %d batches", got)
 	}
-	if len(mw.batches[0]) != 2 {
-		t.Fatalf("expected 2 items in flushed batch, got %d", len(mw.batches[0]))
+	if got := len(mw.batchAt(0)); got != 2 {
+		t.Fatalf("expected 2 items in flushed batch, got %d", got)
 	}
 }
 
@@ -124,7 +159,7 @@ func TestSkyDDSSenderBatchFlushByDelay(t *testing.T) {
 	}
 	_ = s.Send(context.Background(), &packet.Packet{Envelope: packet.Envelope{Payload: []byte("a")}})
 	time.Sleep(80 * time.Millisecond)
-	if got := len(mw.batches); got != 1 {
+	if got := mw.batchCount(); got != 1 {
 		t.Fatalf("expected 1 delayed batch, got %d", got)
 	}
 }
@@ -136,11 +171,12 @@ func TestSkyDDSSenderBatchOversizeSingle(t *testing.T) {
 		t.Fatalf("new sender: %v", err)
 	}
 	_ = s.Send(context.Background(), &packet.Packet{Envelope: packet.Envelope{Payload: []byte("12345")}})
-	if got := len(mw.batches); got != 1 {
+	if got := mw.batchCount(); got != 1 {
 		t.Fatalf("expected immediate oversize flush, got %d", got)
 	}
-	if len(mw.batches[0]) != 1 || string(mw.batches[0][0]) != "12345" {
-		t.Fatalf("oversize payload mismatch: %+v", mw.batches[0])
+	batch := mw.batchAt(0)
+	if len(batch) != 1 || string(batch[0]) != "12345" {
+		t.Fatalf("oversize payload mismatch: %+v", batch)
 	}
 }
 
@@ -155,10 +191,10 @@ func TestSkyDDSSenderBatchFlushOnClose(t *testing.T) {
 	if err := s.Close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	if got := len(mw.batches); got != 1 {
+	if got := mw.batchCount(); got != 1 {
 		t.Fatalf("expected 1 close batch, got %d", got)
 	}
-	if got := mw.closeHit; got != 1 {
+	if got := mw.closeCount(); got != 1 {
 		t.Fatalf("expected writer close called once, got %d", got)
 	}
 }

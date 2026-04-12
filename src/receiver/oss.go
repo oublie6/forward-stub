@@ -21,6 +21,10 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// OSSReceiver 是基于轮询 bucket/prefix 的 OSS 接收端。
+//
+// 它按对象 key 稳定排序后逐个流式读取对象，输出 PayloadKindFileChunk。
+// seen 表按 key 保存 size/mtime/etag 指纹：同名对象覆盖后指纹变化，会再次被处理。
 type OSSReceiver struct {
 	name string
 	cfg  config.ReceiverConfig
@@ -37,6 +41,8 @@ type OSSReceiver struct {
 	seen   map[string]string
 }
 
+// NewOSSReceiver 构造 OSSReceiver 并编译 match key builder。
+// endpoint/bucket/access_key/secret_key 必须完整；prefix 只影响轮询范围，不参与 match key 默认格式。
 func NewOSSReceiver(name string, rc config.ReceiverConfig) (*OSSReceiver, error) {
 	if strings.TrimSpace(rc.Endpoint) == "" {
 		return nil, fmt.Errorf("oss receiver requires endpoint")
@@ -68,12 +74,16 @@ func NewOSSReceiver(name string, rc config.ReceiverConfig) (*OSSReceiver, error)
 
 func (r *OSSReceiver) Name() string { return r.name }
 
+// Key 返回 receiver 去重键，用于 runtime 在热更新时判断是否可复用实例。
 func (r *OSSReceiver) Key() string {
 	return "oss|" + strings.TrimSpace(r.cfg.Endpoint) + "|" + strings.TrimSpace(r.cfg.Bucket) + "|" + strings.TrimSpace(r.cfg.Prefix)
 }
 
+// MatchKeyMode 返回初始化时编译生效的 match_key.mode，主要用于观测和测试。
 func (r *OSSReceiver) MatchKeyMode() string { return r.matchKeyMode }
 
+// Start 启动轮询循环，直到 ctx 取消或 Stop 被调用。
+// 每轮 scanOnce 失败只记录告警并进入下一轮，避免临时 OSS 错误直接退出 receiver。
 func (r *OSSReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)) error {
 	r.onPacket = onPacket
 
@@ -122,6 +132,7 @@ func (r *OSSReceiver) Start(ctx context.Context, onPacket func(*packet.Packet)) 
 	}
 }
 
+// Stop 请求停止轮询并等待 Start 返回。
 func (r *OSSReceiver) Stop(ctx context.Context) error {
 	r.mu.Lock()
 	cancel := r.cancel
@@ -141,6 +152,8 @@ func (r *OSSReceiver) Stop(ctx context.Context) error {
 	}
 }
 
+// scanOnce 执行一次对象列表扫描。
+// 目录占位对象、空 key、异常 size 会被跳过；对象按 key 排序以保持可重复处理顺序。
 func (r *OSSReceiver) scanOnce(ctx context.Context) error {
 	bucket := strings.TrimSpace(r.cfg.Bucket)
 	opts := minio.ListObjectsOptions{Prefix: strings.TrimSpace(r.cfg.Prefix), Recursive: true, WithMetadata: true}
@@ -171,6 +184,8 @@ func (r *OSSReceiver) scanOnce(ctx context.Context) error {
 	return nil
 }
 
+// streamObject 将单个 OSS object 按 chunk 转成 packet。
+// chunk_size 未配置时为 64 KiB；显式配置小于 1024 会被抬升，避免过小 chunk 放大调度开销。
 func (r *OSSReceiver) streamObject(ctx context.Context, obj minio.ObjectInfo) error {
 	reader, err := r.cli.GetObject(ctx, strings.TrimSpace(r.cfg.Bucket), obj.Key, minio.GetObjectOptions{})
 	if err != nil {

@@ -271,6 +271,11 @@ func applyBusinessDefaults(c *Config, d BusinessDefaultsConfig) {
 		if sc.SocketSendBuffer <= 0 {
 			sc.SocketSendBuffer = DefaultSenderSocketSendBuffer
 		}
+		if sc.Type == "oss" && sc.PartSize <= 0 {
+			// OSS multipart 的 part_size 既被 Validate 校验，也被 sender 状态机用来限制乱序缓存。
+			// 在统一默认值入口回写，避免构造器已有默认值却被配置校验提前拦截。
+			sc.PartSize = DefaultOSSPartSize
+		}
 		if sc.Type == "kafka" {
 			if sc.DialTimeout == "" {
 				sc.DialTimeout = DefaultKafkaDialTimeout

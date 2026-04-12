@@ -255,7 +255,7 @@
 ### 2.6 OSS sender
 
 - `type=oss`
-- 必填：`endpoint`、`bucket`、`access_key`、`secret_key`、`part_size`
+- 必填：`endpoint`、`bucket`、`access_key`、`secret_key`
 - 可选：`region`、`use_ssl`、`force_path_style`、`key_prefix`、`storage_class`、`content_type`、`notify_on_success`
 
 行为说明：
@@ -263,6 +263,7 @@
 - 只接受 `PayloadKindFileChunk`。
 - 同一个 `transfer_id` 对应一个 multipart upload session。
 - 不把完整文件先落到本地；上游小 chunk 会在内存中有界聚合为 multipart part。
+- `part_size` 未配置或配置为 `<=0` 时，在统一默认值阶段回写为 `5242880`（5 MiB）。
 - chunk 进入时校验 `checksum`，不一致立即报错。
 - 重复 offset 区间不会破坏最终对象；乱序 chunk 会在有界缓存内等待连续区间。
 - EOF 到达、覆盖范围完整、待上传缓冲 flush 完成、所有 part 成功上传后，才调用 `CompleteMultipartUpload`。
@@ -273,6 +274,7 @@ object key 生成规则：
 1. packet 中已有 `TargetFilePath` 时优先使用。
 2. 否则使用 `key_prefix + FilePath`。
 3. `FilePath` 为空时回退 `key_prefix + FileName`。
+4. 当 `TargetFilePath` 为空但 `TargetFileName` 非空时，会用 `TargetFileName` 覆盖来源路径的 basename。
 
 路径会先清洗为安全相对路径，拒绝空 key 与 `..`。
 
@@ -298,6 +300,11 @@ object key 生成规则：
 - `type=kafka`：发送一条 JSON `file_ready` 事件到 Kafka，支持 `remote`、`topic`、`record_key_source`、Kafka TLS/SASL 与 timeout 字段。
 - `type=dds_skydds`：发送一条 JSON `file_ready` 事件到 SkyDDS，第一版只支持 `message_model=octet`。
 
+配置兼容两种写法：
+
+- 单对象：`"notify_on_success": {"type":"kafka", ...}`
+- 数组：`"notify_on_success": [{"type":"kafka", ...}, {"type":"dds_skydds", ...}]`
+
 通知事件包含来源协议/路径、目标协议/最终路径、`transfer_id`、文件大小、sender/receiver 名称、ready 时间，以及接收方取文件所需定位信息：
 
 - SFTP：`fetch_protocol=sftp`、`fetch_host`、`fetch_port`、`fetch_path`
@@ -317,6 +324,14 @@ object key 生成规则：
 - `rewrite_target_filename_replace`：用 `old` / `new` 做文件名简单替换。
 - `rewrite_target_path_regex`：用 `pattern` / `replacement` 正则改写路径。
 - `rewrite_target_filename_regex`：用 `pattern` / `replacement` 正则改写文件名，并同步更新目标路径 basename。
+
+边界语义：
+
+- 路径 stage 优先读取当前 `TargetFilePath`，为空时读取来源 `FilePath`。
+- 文件名 stage 优先读取当前 `TargetFileName`，为空时读取来源 `FileName`，再为空则取当前路径 basename。
+- strip prefix 不匹配时保留原路径内容，但会去掉开头 `/`。
+- regex 不匹配时保留当前值。
+- `rewrite_target_filename_*` 会同步替换 `TargetFilePath` 的 basename，避免文件名与路径末段不一致。
 
 ## 3. receiver 与 sender 之间的关系
 

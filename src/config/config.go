@@ -27,6 +27,7 @@ const (
 	DefaultReceiverSocketRecvBuffer  = 1 << 30
 	DefaultSenderConcurrency         = 8
 	DefaultSenderSocketSendBuffer    = 1 << 30
+	DefaultOSSPartSize               = 5 << 20
 	DefaultTaskPoolSize              = 4096
 	DefaultTaskChannelQueueSize      = 8192
 	DefaultKafkaDialTimeout          = "10s"

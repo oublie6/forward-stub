@@ -494,7 +494,7 @@
 | `use_ssl` | bool | 否 | `false` | 是否使用 HTTPS。 |
 | `force_path_style` | bool | 否 | `false` | 强制使用 path-style bucket 地址。 |
 | `key_prefix` | string | 否 | 空 | 当 packet 未携带 `TargetFilePath` 时，拼到 `FilePath` / `FileName` 前。 |
-| `part_size` | int | 是 | 无 | multipart part 聚合阈值，必须 `>0`。 |
+| `part_size` | int | 否 | `5242880` | multipart part 聚合阈值；省略或 `<=0` 时默认 5 MiB，最终校验要求默认化后的值 `>0`。 |
 | `storage_class` | string | 否 | 空 | 透传到 `PutObjectOptions.StorageClass`。 |
 | `content_type` | string | 否 | 空 | 透传到 `PutObjectOptions.ContentType`。 |
 
@@ -504,7 +504,7 @@ object key 生成优先级：
 2. `key_prefix + FilePath`
 3. `key_prefix + FileName`
 
-所有 key 都会做路径清洗，拒绝空 key 与 `..` 路径。sender 只接受 `PayloadKindFileChunk`，会校验 chunk `checksum`；`CompleteMultipartUpload` 成功后才触发 `notify_on_success`。
+所有 key 都会做路径清洗，拒绝空 key 与 `..` 路径。sender 只接受 `PayloadKindFileChunk`，会校验 chunk `checksum`；重复 chunk 会被幂等忽略，乱序 chunk 只在有界缓存内等待缺口补齐；`CompleteMultipartUpload` 成功后才触发 `notify_on_success`。
 
 ### 9.8 notify_on_success
 
@@ -525,7 +525,27 @@ object key 生成优先级：
 }
 ```
 
-SkyDDS 示例：
+数组写法可同时配置多种通知；任一通知失败时 sender 返回错误，但已提交文件不会回滚：
+
+```json
+"notify_on_success": [
+  {
+    "type": "kafka",
+    "remote": "127.0.0.1:9092",
+    "topic": "file-ready",
+    "record_key_source": "transfer_id"
+  },
+  {
+    "type": "dds_skydds",
+    "dcps_config_file": "dds_tcp_conf.ini",
+    "domain_id": 0,
+    "topic_name": "FileReady",
+    "message_model": "octet"
+  }
+]
+```
+
+SkyDDS 单对象示例：
 
 ```json
 "notify_on_success": {
@@ -576,6 +596,9 @@ Kafka 通知支持 `remote`、`topic`、`record_key_source`、`client_id`、`use
 - `FileName` / `FilePath` 保持来源语义。
 - stage 只改 `TargetFileName` / `TargetFilePath`。
 - 文件型 sender 优先使用 `Target*`，为空时回退 `File*`。
+- `rewrite_target_path_strip_prefix` 在前缀不匹配时保持原路径内容，但会去掉开头的 `/`，保证下游看到相对路径。
+- `rewrite_target_path_regex` / `rewrite_target_filename_regex` 在正则不匹配时保持当前路径/文件名。
+- 文件名改写 stage 会同步更新 `TargetFilePath` 的 basename；若未配置 `FileName`，会从当前路径 basename 推导。
 
 ### 10.3 route stage 与 task.senders 的关系
 

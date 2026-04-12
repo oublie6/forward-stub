@@ -7,7 +7,11 @@ import (
 	"errors"
 	"io"
 	"reflect"
+	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"forward-stub/src/config"
 	"forward-stub/src/packet"
@@ -16,9 +20,15 @@ import (
 )
 
 type fakeOSSAPI struct {
+	mu          sync.Mutex
 	partSizes   []int64
+	partIDs     []int
 	completed   bool
 	completeKey string
+
+	putStarted chan struct{}
+	releasePut chan struct{}
+	putOnce    sync.Once
 }
 
 func (f *fakeOSSAPI) NewMultipartUpload(context.Context, string, string, minio.PutObjectOptions) (string, error) {
@@ -26,23 +36,37 @@ func (f *fakeOSSAPI) NewMultipartUpload(context.Context, string, string, minio.P
 }
 
 func (f *fakeOSSAPI) PutObjectPart(_ context.Context, _, _, _ string, partID int, data io.Reader, size int64, _ minio.PutObjectPartOptions) (minio.ObjectPart, error) {
+	if f.putStarted != nil {
+		f.putOnce.Do(func() { close(f.putStarted) })
+	}
+	if f.releasePut != nil {
+		<-f.releasePut
+	}
 	_, _ = io.Copy(io.Discard, data)
+	f.mu.Lock()
 	f.partSizes = append(f.partSizes, size)
+	f.partIDs = append(f.partIDs, partID)
+	f.mu.Unlock()
 	return minio.ObjectPart{PartNumber: partID, ETag: "etag"}, nil
 }
 
 func (f *fakeOSSAPI) CompleteMultipartUpload(_ context.Context, _, object, _ string, _ []minio.CompletePart, _ minio.PutObjectOptions) (minio.UploadInfo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.completed = true
 	f.completeKey = object
 	return minio.UploadInfo{}, nil
 }
 
 type fakeNotifier struct {
+	mu     sync.Mutex
 	events []FileReadyEvent
 	err    error
 }
 
 func (n *fakeNotifier) NotifyFileReady(_ context.Context, event FileReadyEvent) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.events = append(n.events, event)
 	if n.err != nil {
 		return n.err
@@ -51,6 +75,18 @@ func (n *fakeNotifier) NotifyFileReady(_ context.Context, event FileReadyEvent) 
 }
 
 func (n *fakeNotifier) Close(context.Context) error { return nil }
+
+func (f *fakeOSSAPI) snapshot() (bool, string, []int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.completed, f.completeKey, append([]int64(nil), f.partSizes...)
+}
+
+func (n *fakeNotifier) eventCount() int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return len(n.events)
+}
 
 func TestOSSObjectKeyRules(t *testing.T) {
 	p := &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{TargetFilePath: "/target/a.csv", FilePath: "/src/b.csv", FileName: "b.csv"}}}
@@ -105,14 +141,15 @@ func TestOSSSenderAggregatesChunksAndCompletesAfterEOF(t *testing.T) {
 			t.Fatalf("send offset %d: %v", c.off, err)
 		}
 	}
-	if !api.completed {
+	completed, completeKey, partSizes := api.snapshot()
+	if !completed {
 		t.Fatalf("multipart was not completed")
 	}
-	if !reflect.DeepEqual(api.partSizes, []int64{4, 2}) {
-		t.Fatalf("part sizes got=%v", api.partSizes)
+	if !reflect.DeepEqual(partSizes, []int64{4, 2}) {
+		t.Fatalf("part sizes got=%v", partSizes)
 	}
-	if api.completeKey != "out/in/a.txt" {
-		t.Fatalf("complete key got=%q", api.completeKey)
+	if completeKey != "out/in/a.txt" {
+		t.Fatalf("complete key got=%q", completeKey)
 	}
 	if len(n.events) != 1 || n.events[0].FetchKey != "out/in/a.txt" || n.events[0].FilePath != "out/in/a.txt" {
 		t.Fatalf("notify event mismatch: %+v", n.events)
@@ -135,7 +172,8 @@ func TestOSSSenderClearsStateWhenNotifyFailsAfterComplete(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected notify failure error")
 	}
-	if !api.completed {
+	completed, _, _ := api.snapshot()
+	if !completed {
 		t.Fatalf("multipart should have completed before notify failure")
 	}
 	if _, ok := s.states["tx-notify-fail"]; ok {
@@ -175,6 +213,127 @@ func TestOSSRangeMergeReadyToComplete(t *testing.T) {
 	if !st.readyToComplete() {
 		t.Fatalf("expected complete range to be ready")
 	}
+}
+
+func TestOSSSenderIgnoresDuplicateChunksAndWaitsForGap(t *testing.T) {
+	api := &fakeOSSAPI{}
+	s := newOSSSenderWithAPI("oss", config.SenderConfig{Endpoint: "endpoint", Bucket: "bucket"}, api, nil, 4)
+
+	// 先到达 offset=4 的乱序 chunk 时只能暂存，不能提前上传或 complete。
+	if err := s.Send(context.Background(), packetWithChecksum([]byte("ef"), packet.Meta{TransferID: "tx-gap", FilePath: "a.txt", Offset: 4, TotalSize: 6, EOF: true})); err != nil {
+		t.Fatalf("send out-of-order tail: %v", err)
+	}
+	completed, _, partSizes := api.snapshot()
+	if completed || len(partSizes) != 0 {
+		t.Fatalf("tail chunk should wait for missing prefix, completed=%v parts=%v", completed, partSizes)
+	}
+
+	if err := s.Send(context.Background(), packetWithChecksum([]byte("ab"), packet.Meta{TransferID: "tx-gap", FilePath: "a.txt", Offset: 0, TotalSize: 6})); err != nil {
+		t.Fatalf("send head: %v", err)
+	}
+	if err := s.Send(context.Background(), packetWithChecksum([]byte("ab"), packet.Meta{TransferID: "tx-gap", FilePath: "a.txt", Offset: 0, TotalSize: 6})); err != nil {
+		t.Fatalf("send duplicate head: %v", err)
+	}
+	if err := s.Send(context.Background(), packetWithChecksum([]byte("cd"), packet.Meta{TransferID: "tx-gap", FilePath: "a.txt", Offset: 2, TotalSize: 6})); err != nil {
+		t.Fatalf("send middle: %v", err)
+	}
+
+	completed, _, partSizes = api.snapshot()
+	if !completed {
+		t.Fatalf("multipart should complete once gap is filled")
+	}
+	if !reflect.DeepEqual(partSizes, []int64{4, 2}) {
+		t.Fatalf("duplicate chunk should not create extra uploaded part, parts=%v", partSizes)
+	}
+}
+
+func TestOSSSenderDoesNotBlockOtherTransfersDuringPartUpload(t *testing.T) {
+	api := &fakeOSSAPI{putStarted: make(chan struct{}), releasePut: make(chan struct{})}
+	s := newOSSSenderWithAPI("oss", config.SenderConfig{Endpoint: "endpoint", Bucket: "bucket"}, api, nil, 4)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.Send(context.Background(), packetWithChecksum([]byte("abcd"), packet.Meta{
+			TransferID: "tx-blocked",
+			FilePath:   "blocked.bin",
+			Offset:     0,
+			TotalSize:  8,
+		}))
+	}()
+
+	select {
+	case <-api.putStarted:
+	case <-time.After(time.Second):
+		t.Fatalf("first transfer did not enter blocked multipart upload")
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.Send(context.Background(), packetWithChecksum([]byte("x"), packet.Meta{
+			TransferID: "tx-independent",
+			FilePath:   "independent.bin",
+			Offset:     0,
+			TotalSize:  2,
+		}))
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("independent transfer send failed: %v", err)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatalf("independent transfer was blocked by another transfer's multipart upload")
+	}
+
+	close(api.releasePut)
+	if err := <-errCh; err != nil {
+		t.Fatalf("blocked transfer send failed after release: %v", err)
+	}
+}
+
+func BenchmarkOSSSenderMultipartComplete(b *testing.B) {
+	api := &fakeOSSAPI{}
+	s := newOSSSenderWithAPI("oss", config.SenderConfig{Endpoint: "endpoint", Bucket: "bucket"}, api, nil, 4)
+	payload := []byte("abcd")
+	b.ReportAllocs()
+	b.SetBytes(int64(len(payload)))
+	for i := 0; i < b.N; i++ {
+		p := packetWithChecksum(payload, packet.Meta{
+			TransferID: "bench-" + strconv.Itoa(i),
+			FilePath:   "bench.bin",
+			Offset:     0,
+			TotalSize:  int64(len(payload)),
+			EOF:        true,
+		})
+		if err := s.Send(context.Background(), p); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkOSSSenderParallelTransfers(b *testing.B) {
+	api := &fakeOSSAPI{}
+	s := newOSSSenderWithAPI("oss", config.SenderConfig{Endpoint: "endpoint", Bucket: "bucket"}, api, nil, 4)
+	payload := []byte("abcd")
+	var seq atomic.Uint64
+	b.ReportAllocs()
+	b.SetBytes(int64(len(payload)))
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			id := seq.Add(1)
+			p := packetWithChecksum(payload, packet.Meta{
+				TransferID: "bench-par-" + strconv.FormatUint(id, 10),
+				FilePath:   "bench.bin",
+				Offset:     0,
+				TotalSize:  int64(len(payload)),
+				EOF:        true,
+			})
+			if err := s.Send(context.Background(), p); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 }
 
 func packetWithChecksum(payload []byte, meta packet.Meta) *packet.Packet {

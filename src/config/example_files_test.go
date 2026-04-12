@@ -20,6 +20,7 @@ func TestExampleSystemBusinessPairsParseAndValidate(t *testing.T) {
 		{name: "udp_tcp", systemFile: "system.example.json", bizFile: "udp-tcp.business.example.json"},
 		{name: "kafka", systemFile: "system.example.json", bizFile: "kafka.business.example.json"},
 		{name: "sftp", systemFile: "system.example.json", bizFile: "sftp.business.example.json"},
+		{name: "oss", systemFile: "system.example.json", bizFile: "oss.business.example.json"},
 		{name: "task_models", systemFile: "system.example.json", bizFile: "task-models.business.example.json"},
 	}
 

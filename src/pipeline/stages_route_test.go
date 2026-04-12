@@ -29,3 +29,31 @@ func TestRouteSenderByOffsetBytesDefault(t *testing.T) {
 		t.Fatalf("unexpected default route sender: %s", p.Meta.RouteSender)
 	}
 }
+
+func BenchmarkRouteSenderByOffsetBytesHit(b *testing.B) {
+	st := RouteSenderByOffsetBytes(8, 4, map[string]string{string([]byte{0xAA, 0xBB, 0xCC, 0xDD}): "target"}, "")
+	p := &packet.Packet{Envelope: packet.Envelope{Payload: []byte{0, 1, 2, 3, 4, 5, 6, 7, 0xAA, 0xBB, 0xCC, 0xDD, 9, 10}}}
+	in := []*packet.Packet{p}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		p.Meta.RouteSender = ""
+		out := st(in)
+		if len(out) != 1 || p.Meta.RouteSender != "target" {
+			b.Fatalf("route mismatch")
+		}
+	}
+}
+
+func BenchmarkRouteSenderByOffsetBytesDefault(b *testing.B) {
+	st := RouteSenderByOffsetBytes(8, 4, map[string]string{string([]byte{0xAA, 0xBB, 0xCC, 0xDD}): "target"}, "fallback")
+	p := &packet.Packet{Envelope: packet.Envelope{Payload: []byte{0, 1, 2, 3, 4, 5, 6, 7, 0x10, 0x20, 0x30, 0x40, 9, 10}}}
+	in := []*packet.Packet{p}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		p.Meta.RouteSender = ""
+		out := st(in)
+		if len(out) != 1 || p.Meta.RouteSender != "fallback" {
+			b.Fatalf("route mismatch")
+		}
+	}
+}

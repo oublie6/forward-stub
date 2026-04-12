@@ -1,0 +1,95 @@
+{
+  "version": 1009,
+  "receivers": {
+    "rx_oss": {
+      "type": "oss",
+      "endpoint": "minio.example.com:9000",
+      "bucket": "incoming",
+      "region": "us-east-1",
+      "access_key": "demo-ak",
+      "secret_key": "demo-sk",
+      "use_ssl": false,
+      "force_path_style": true,
+      "prefix": "raw/",
+      "poll_interval_sec": 5,
+      "chunk_size": 65536,
+      "selector": "sel_oss",
+      "match_key": {
+        "mode": "filename"
+      }
+    }
+  },
+  "selectors": {
+    "sel_oss": {
+      "matches": {
+        "oss|filename=orders.csv": "ts_oss_file"
+      },
+      "default_task_set": "ts_oss_file"
+    }
+  },
+  "task_sets": {
+    "ts_oss_file": [
+      "task_oss_archive"
+    ]
+  },
+  "senders": {
+    "tx_oss_archive": {
+      "type": "oss",
+      "endpoint": "minio.example.com:9000",
+      "bucket": "archive",
+      "region": "us-east-1",
+      "access_key": "demo-ak",
+      "secret_key": "demo-sk",
+      "use_ssl": false,
+      "force_path_style": true,
+      "key_prefix": "ready",
+      "storage_class": "STANDARD",
+      "content_type": "application/octet-stream",
+      "notify_on_success": [
+        {
+          "type": "kafka",
+          "remote": "127.0.0.1:9092",
+          "topic": "file-ready",
+          "record_key_source": "transfer_id",
+          "client_id": "forward-stub-oss-ready"
+        },
+        {
+          "type": "dds_skydds",
+          "dcps_config_file": "dds_tcp_conf.ini",
+          "domain_id": 0,
+          "topic_name": "FileReady",
+          "message_model": "octet"
+        }
+      ]
+    }
+  },
+  "pipelines": {
+    "pl_archive_name": [
+      {
+        "type": "rewrite_target_path_strip_prefix",
+        "prefix": "raw/"
+      },
+      {
+        "type": "rewrite_target_path_add_prefix",
+        "prefix": "orders/2026"
+      },
+      {
+        "type": "rewrite_target_filename_replace",
+        "old": ".csv",
+        "new": ".ready.csv"
+      }
+    ]
+  },
+  "tasks": {
+    "task_oss_archive": {
+      "execution_model": "channel",
+      "channel_queue_size": 1024,
+      "pipelines": [
+        "pl_archive_name"
+      ],
+      "senders": [
+        "tx_oss_archive"
+      ]
+    }
+  }
+}
