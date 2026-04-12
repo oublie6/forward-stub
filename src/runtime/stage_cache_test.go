@@ -58,3 +58,21 @@ func TestStageCacheTaskRefsTrackAddAndRemove(t *testing.T) {
 		t.Fatalf("expected task t1 removed from stage entry")
 	}
 }
+
+func TestAddTaskRollsBackSenderRefsOnMissingSender(t *testing.T) {
+	st := NewStore()
+	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{testNamedSender: testNamedSender{name: "s1"}}}
+	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
+	st.pipelineCfg = map[string][]config.StageConfig{"p1": {}}
+
+	err := st.addTask("t-bad", config.TaskConfig{Pipelines: []string{"p1"}, Senders: []string{"s1", "missing"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil)
+	if err == nil {
+		t.Fatalf("expected missing sender error")
+	}
+	if got := st.senders["s1"].Refs; got != 0 {
+		t.Fatalf("sender refs should rollback on addTask failure, got %d", got)
+	}
+	if _, ok := st.tasks["t-bad"]; ok {
+		t.Fatalf("failed task should not be registered")
+	}
+}

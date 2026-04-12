@@ -38,6 +38,62 @@ func TestExpandTaskDeltaForSenderChangesRebuildsImpactedUnchangedTasks(t *testin
 	}
 }
 
+func TestApplyBusinessDeltaAddsReceiverWithNewSelectorAndTask(t *testing.T) {
+	ctx := context.Background()
+	st := NewStore()
+	base := config.Config{
+		Receivers: map[string]config.ReceiverConfig{},
+		Selectors: map[string]config.SelectorConfig{"sel1": {DefaultTaskSet: "ts1"}},
+		TaskSets:  map[string][]string{"ts1": {"t1"}},
+		Senders:   map[string]config.SenderConfig{"s1": {Type: "kafka", Remote: "127.0.0.1:1", Topic: "out"}},
+		Pipelines: map[string][]config.StageConfig{"p1": {}},
+		Tasks:     map[string]config.TaskConfig{"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}},
+	}
+	if err := UpdateCache(ctx, st, base); err != nil {
+		t.Fatalf("base update: %v", err)
+	}
+	defer func() { _ = st.StopAll(context.Background()) }()
+
+	next := config.Config{
+		Receivers: map[string]config.ReceiverConfig{"r2": {
+			Type:     "local_timer",
+			Selector: "sel2",
+			Generator: config.LocalGeneratorConfig{
+				Interval:    "1h",
+				PayloadData: "x",
+				// text payload keeps receiver construction fully local and deterministic.
+				PayloadFormat: "text",
+			},
+		}},
+		Selectors: map[string]config.SelectorConfig{
+			"sel1": {DefaultTaskSet: "ts1"},
+			"sel2": {DefaultTaskSet: "ts2"},
+		},
+		TaskSets: map[string][]string{"ts1": {"t1"}, "ts2": {"t2"}},
+		Senders:  map[string]config.SenderConfig{"s1": {Type: "kafka", Remote: "127.0.0.1:1", Topic: "out"}},
+		Pipelines: map[string][]config.StageConfig{
+			"p1": {},
+		},
+		Tasks: map[string]config.TaskConfig{
+			"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"},
+			"t2": {Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"},
+		},
+	}
+	if err := UpdateCache(ctx, st, next); err != nil {
+		t.Fatalf("delta update with new receiver selector task: %v", err)
+	}
+	st.mu.RLock()
+	rs := st.receivers["r2"]
+	st.mu.RUnlock()
+	if rs == nil {
+		t.Fatalf("new receiver should be registered")
+	}
+	compiled, _ := rs.Selector.Load().(*CompiledSelector)
+	if compiled == nil || len(compiled.DefaultValues) != 1 || compiled.DefaultValues[0].Name != "t2" {
+		t.Fatalf("new receiver selector should point to new task, got %#v", compiled)
+	}
+}
+
 // TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts 验证 sender 影响范围会并入既有 task 增删集合并保持有序。
 func TestExpandTaskDeltaForSenderChangesKeepsExistingTaskDeltaAndSorts(t *testing.T) {
 	oldTasks := map[string]config.TaskConfig{

@@ -132,6 +132,17 @@ func TestOSSSenderRejectsNonFileChunk(t *testing.T) {
 	}
 }
 
+func TestOSSSenderRejectsNegativeOffsetBeforeCreatingState(t *testing.T) {
+	s := newOSSSenderWithAPI("oss", config.SenderConfig{Endpoint: "e", Bucket: "b"}, &fakeOSSAPI{}, nil, 4)
+	p := packetWithChecksum([]byte("x"), packet.Meta{TransferID: "tx-neg", FilePath: "a.txt", Offset: -1, TotalSize: 1})
+	if err := s.Send(context.Background(), p); err == nil {
+		t.Fatalf("expected negative offset error")
+	}
+	if len(s.states) != 0 {
+		t.Fatalf("negative offset should not create transfer state")
+	}
+}
+
 func TestOSSSenderAggregatesChunksAndCompletesAfterEOF(t *testing.T) {
 	api := &fakeOSSAPI{}
 	n := &fakeNotifier{}
@@ -207,6 +218,30 @@ func TestSFTPSenderRejectsFileChunkWithoutTransferID(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "transfer_id") {
 		t.Fatalf("error should mention transfer_id, got %v", err)
+	}
+}
+
+func TestSFTPSenderRejectsNonFileChunk(t *testing.T) {
+	s := &SFTPSender{}
+	p := &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindStream, Payload: []byte("x"), Meta: packet.Meta{TransferID: "tx"}}}
+	err := s.Send(context.Background(), p)
+	if err == nil {
+		t.Fatalf("expected non file_chunk error")
+	}
+	if !strings.Contains(err.Error(), "file_chunk") {
+		t.Fatalf("error should mention file_chunk, got %v", err)
+	}
+}
+
+func TestSFTPSenderRejectsNegativeOffsetBeforeShardState(t *testing.T) {
+	s := &SFTPSender{}
+	p := &packet.Packet{Envelope: packet.Envelope{Kind: packet.PayloadKindFileChunk, Payload: []byte("x"), Meta: packet.Meta{TransferID: "tx-neg", Offset: -1}}}
+	err := s.Send(context.Background(), p)
+	if err == nil {
+		t.Fatalf("expected negative offset error")
+	}
+	if len(s.transferShard) != 0 {
+		t.Fatalf("negative offset should not assign transfer shard")
 	}
 }
 

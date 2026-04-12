@@ -157,22 +157,35 @@ func (t *Task) Start() error {
 //   - 一旦 accepting=false，新的 packet 会立即丢弃并释放；
 //   - 成功进入 inflight 后，无论后续走哪条分支，都必须确保 Done 与 Release 成对执行。
 func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
+	t.stateMu.RLock()
 	if !t.accepting.Load() {
+		t.stateMu.RUnlock()
 		pkt.Release()
 		return
 	}
 
 	t.inflightCount.Add(1)
 	t.inflight.Add(1)
+	mode := t.ExecutionModel
+	pool := t.pool
+	ch := t.ch
+	t.stateMu.RUnlock()
 
-	switch t.ExecutionModel {
+	switch mode {
 	case ExecutionModelFastPath:
 		// fastpath 直接在当前 goroutine 内执行，没有额外排队/切换成本。
 		t.runPacket(ctx, pkt)
 		return
 	case ExecutionModelPool:
 		// pool 模型下 Submit 失败通常意味着协程池已停止或处于异常状态，需要记录丢弃日志并主动释放 packet。
-		if err := t.pool.Submit(func() { t.runPacket(ctx, pkt) }); err != nil {
+		if pool == nil {
+			t.inflight.Done()
+			t.inflightCount.Add(-1)
+			pkt.Release()
+			logx.L().Errorw("任务丢弃数据包：协程池未初始化", "任务名称", t.Name, "协程池大小", t.PoolSize)
+			return
+		}
+		if err := pool.Submit(func() { t.runPacket(ctx, pkt) }); err != nil {
 			t.inflight.Done()
 			t.inflightCount.Add(-1)
 			pkt.Release()
@@ -181,8 +194,15 @@ func (t *Task) Handle(ctx context.Context, pkt *packet.Packet) {
 		}
 		return
 	case ExecutionModelChannel:
+		if ch == nil {
+			t.inflight.Done()
+			t.inflightCount.Add(-1)
+			pkt.Release()
+			logx.L().Errorw("任务丢弃数据包：channel未初始化", "任务名称", t.Name, "channel队列长度", t.ChannelQueueSize)
+			return
+		}
 		select {
-		case t.ch <- taskRequest{ctx: ctx, pkt: pkt}:
+		case ch <- taskRequest{ctx: ctx, pkt: pkt}:
 			return
 		case <-ctx.Done():
 			// channel 模型在入队前若上游 context 已取消，应立即放弃，避免停机时无意义堆积。
@@ -260,7 +280,9 @@ func (t *Task) DetachTrafficCounter() *logx.TrafficCounter {
 //
 // 线程安全：通常只应由生命周期管理线程调用一次；内部状态释放做了必要的幂等保护。
 func (t *Task) StopGraceful() {
+	t.stateMu.Lock()
 	t.accepting.Store(false)
+	t.stateMu.Unlock()
 	t.inflight.Wait()
 	logx.UnregisterTaskRuntimeStats(t.Name)
 	t.stateMu.Lock()

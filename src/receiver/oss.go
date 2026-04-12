@@ -216,7 +216,7 @@ func (r *OSSReceiver) streamObject(ctx context.Context, obj minio.ObjectInfo) er
 		}
 		n, err := reader.Read(buf)
 		if n > 0 {
-			eof := err == io.EOF || offset+int64(n) >= obj.Size
+			eof := fileChunkEOF(offset, n, obj.Size, err)
 			payload, rel := packet.CopyFrom(buf[:n])
 			if r.stats != nil {
 				r.stats.AddBytes(n)

@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -80,5 +81,41 @@ func TestTaskSubmitBlocksWhenPoolBusyWithoutQueueSizeConfig(t *testing.T) {
 	}
 	if r1.Load() != 1 || r2.Load() != 1 {
 		t.Fatalf("both packets should complete, released1=%d released2=%d", r1.Load(), r2.Load())
+	}
+}
+
+type noopSender struct {
+	testNamedSender
+}
+
+var _ sender.Sender = (*noopSender)(nil)
+
+func (s *noopSender) Send(context.Context, *packet.Packet) error { return nil }
+
+func TestTaskStopGracefulConcurrentHandleDoesNotUseReleasedRuntime(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		tk := &Task{
+			ExecutionModel:   ExecutionModelChannel,
+			ChannelQueueSize: 2,
+			Senders:          []sender.Sender{&noopSender{testNamedSender: testNamedSender{name: "noop"}}},
+		}
+		if err := tk.Start(); err != nil {
+			t.Fatalf("start task: %v", err)
+		}
+
+		var released atomic.Int32
+		var wg sync.WaitGroup
+		for j := 0; j < 8; j++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				tk.Handle(context.Background(), trackedPacket([]byte("x"), &released))
+			}()
+		}
+		tk.StopGraceful()
+		wg.Wait()
+		if got := released.Load(); got != 8 {
+			t.Fatalf("all packets should be released after concurrent stop, got %d", got)
+		}
 	}
 }

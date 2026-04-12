@@ -235,7 +235,7 @@ func (r *SFTPReceiver) streamFile(ctx context.Context, scli *sftp.Client, filePa
 		}
 		n, err := f.Read(buf)
 		if n > 0 {
-			eof := err == io.EOF
+			eof := fileChunkEOF(offset, n, totalSize, err)
 			payload, rel := packet.CopyFrom(buf[:n])
 			if r.stats != nil {
 				r.stats.AddBytes(n)
@@ -332,4 +332,8 @@ func defaultInt(v, d int) int {
 		return d
 	}
 	return v
+}
+
+func fileChunkEOF(offset int64, n int, totalSize int64, readErr error) bool {
+	return readErr == io.EOF || (totalSize >= 0 && offset+int64(n) >= totalSize)
 }
