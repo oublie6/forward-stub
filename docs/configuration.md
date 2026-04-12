@@ -285,7 +285,7 @@
 | `force_path_style` | bool | 否 | `false` | 强制使用 path-style bucket 地址。 |
 | `prefix` | string | 否 | 空 | 轮询对象前缀。 |
 | `poll_interval_sec` | int | 否 | 运行时默认 `5` 秒 | 轮询周期。 |
-| `chunk_size` | int | 是 | 运行时最小 `1024` | 单 chunk 字节数。 |
+| `chunk_size` | int | 否 | 运行时默认 `65536` | 单 chunk 字节数；省略或配置为 `0` 时使用 64 KiB，若显式配置小于 `1024` 会自动抬升到 `1024`。 |
 
 行为说明：
 

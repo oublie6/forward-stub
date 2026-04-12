@@ -235,14 +235,9 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 			s.invalidateConnLocked(idx)
 			return err
 		}
-		if err := notifyFileReady(ctx, s.notifiers, sftpFileReadyEvent(p, s.name, s.addr, st.finalPath)); err != nil {
-			logx.L().Errorw("SFTP文件提交成功但通知失败", "发送端", s.name, "目标路径", st.finalPath, "错误", err)
+		if err := s.afterSFTPCommitLocked(ctx, idx, transferID, p, st.finalPath); err != nil {
 			return err
 		}
-		delete(s.states[idx], transferID)
-		s.assignMu.Lock()
-		delete(s.transferShard, transferID)
-		s.assignMu.Unlock()
 	}
 	return nil
 }
@@ -326,6 +321,23 @@ func (s *SFTPSender) pickShard(transferID string) int {
 	idx := nextShardIndex(&s.nextIdx, s.shardMask)
 	s.transferShard[transferID] = idx
 	return idx
+}
+
+func (s *SFTPSender) cleanupCommittedTransferLocked(idx int, transferID string) {
+	delete(s.states[idx], transferID)
+	s.assignMu.Lock()
+	delete(s.transferShard, transferID)
+	s.assignMu.Unlock()
+}
+
+func (s *SFTPSender) afterSFTPCommitLocked(ctx context.Context, idx int, transferID string, p *packet.Packet, finalPath string) error {
+	s.cleanupCommittedTransferLocked(idx, transferID)
+	if err := notifyFileReady(ctx, s.notifiers, sftpFileReadyEvent(p, s.name, s.addr, finalPath)); err != nil {
+		// TODO: 在这里接入通知 outbox / 持久化补发表。文件已经提交成功，不能再保留未完成传输状态。
+		logx.L().Errorw("SFTP文件已提交成功，通知失败", "发送端", s.name, "目标路径", finalPath, "错误", err)
+		return fmt.Errorf("sftp sender file committed but notify failed: %w", err)
+	}
+	return nil
 }
 
 func (s *SFTPSender) hostKeyCallback() ssh.HostKeyCallback {
