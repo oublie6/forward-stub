@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 
 	"forward-stub/src/config"
@@ -137,6 +138,38 @@ func compileStage(sc config.StageConfig) (pipeline.StageFunc, error) {
 			routes[string(v)] = sn
 		}
 		return pipeline.RouteSenderByOffsetBytes(sc.Offset, keyLen, routes, sc.DefaultSender), nil
+	case "set_target_file_path":
+		if sc.Value == "" {
+			return nil, fmt.Errorf("set_target_file_path requires value")
+		}
+		return pipeline.SetTargetFilePath(sc.Value), nil
+	case "rewrite_target_path_strip_prefix":
+		if sc.Prefix == "" {
+			return nil, fmt.Errorf("rewrite_target_path_strip_prefix requires prefix")
+		}
+		return pipeline.RewriteTargetPathStripPrefix(sc.Prefix), nil
+	case "rewrite_target_path_add_prefix":
+		if sc.Prefix == "" {
+			return nil, fmt.Errorf("rewrite_target_path_add_prefix requires prefix")
+		}
+		return pipeline.RewriteTargetPathAddPrefix(sc.Prefix), nil
+	case "rewrite_target_filename_replace":
+		if sc.Old == "" {
+			return nil, fmt.Errorf("rewrite_target_filename_replace requires old")
+		}
+		return pipeline.RewriteTargetFilenameReplace(sc.Old, sc.New), nil
+	case "rewrite_target_path_regex":
+		re, err := regexp.Compile(sc.Pattern)
+		if err != nil {
+			return nil, fmt.Errorf("rewrite_target_path_regex invalid pattern: %w", err)
+		}
+		return pipeline.RewriteTargetPathRegex(re, sc.Replacement), nil
+	case "rewrite_target_filename_regex":
+		re, err := regexp.Compile(sc.Pattern)
+		if err != nil {
+			return nil, fmt.Errorf("rewrite_target_filename_regex invalid pattern: %w", err)
+		}
+		return pipeline.RewriteTargetFilenameRegex(re, sc.Replacement), nil
 	default:
 		return nil, fmt.Errorf("unknown stage type: %s", sc.Type)
 	}

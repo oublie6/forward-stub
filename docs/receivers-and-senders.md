@@ -2,7 +2,7 @@
 
 本文从**协议类型**而不是顶层 JSON 结构出发，解释每种 receiver / sender 的有效字段、match key、默认值来源和注意事项。
 
-补充说明：`match_key` 已下沉到 receiver 自身实现。各协议会在初始化阶段把 `match_key.mode` 编译成专用 builder；UDP/TCP/Kafka/SFTP 都是在各自 receiver 构建阶段完成这件事，避免热路径继续经过统一公共拼接函数。
+补充说明：`match_key` 已下沉到 receiver 自身实现。各协议会在初始化阶段把 `match_key.mode` 编译成专用 builder；UDP/TCP/Kafka/SFTP/OSS 都是在各自 receiver 构建阶段完成这件事，避免热路径继续经过统一公共拼接函数。
 
 ## 1. Receiver：负责接入并构造 packet + match key
 
@@ -111,6 +111,24 @@
 
 ### 1.5 SkyDDS receiver
 
+### 1.5 OSS receiver
+
+- `type=oss`
+- 关键字段：`endpoint`、`bucket`、`access_key`、`secret_key`、`selector`、`chunk_size`
+- 可选字段：`region`、`use_ssl`、`force_path_style`、`prefix`、`poll_interval_sec`
+- `match key` 默认输出：`oss|bucket=<bucket>|key=<object key>`。
+- `match_key.mode` 支持：`remote_path`、`filename`、`fixed`。
+
+运行时行为：
+
+- 按 `bucket + prefix` 轮询对象，跳过目录占位对象。
+- 对象列表按 key 排序，保证处理顺序稳定。
+- 对每个对象调用 `GetObject` 流式读取，并按 `chunk_size` 输出 `file_chunk`。
+- packet meta 会写入 `ProtoOSS`、`Remote=object key`、`Local=bucket@endpoint`、`FileName=path.Base(key)`、`FilePath=key`、`TransferID=bucket|key|size|etag`。
+- 去重指纹包含 `key + size + last_modified + etag`，避免只按对象名导致覆盖对象漏处理。
+
+### 1.6 SkyDDS receiver
+
 - `type=dds_skydds`
 - 必填：`selector`、`dcps_config_file`、`domain_id`、`topic_name`、`message_model`
 - `message_model` 支持 `octet` 与 `batch_octet`
@@ -120,14 +138,6 @@
 - `match_key.mode` 仅支持留空（默认 `skydds|topic_name=<topic>`）或 `fixed`
 - 接收模型：C++ DataReader listener 入队并通知，Go 侧 `Wait(wait_timeout)` 被唤醒后执行 `Drain(drain_max_items)`；无论 `octet` 还是 `batch_octet`，进入 runtime 前都逐条 packet 下发。
 - 说明：当前主数据面不使用“Go 侧纯轮询 Poll/PollBatch”，也不使用“每条消息 direct callback Go”。
-
-### 2.6 SkyDDS sender
-
-- `type=dds_skydds`
-- 必填：`dcps_config_file`、`domain_id`、`topic_name`、`message_model`
-- `message_model` 支持 `octet` 与 `batch_octet`
-- 通过 C ABI + C++ wrapper 调用 SkyDDS `DataWriter` 写 `OctetMsg` / `BatchOctetMsg`
-- 当 `message_model=batch_octet` 时必须配置 `batch_num`/`batch_size`/`batch_delay`，并按三阈值（条数/字节/等待时长）触发 flush
 
 ## 2. Sender：负责最终输出
 
@@ -239,6 +249,74 @@
 - 未配置 `temp_suffix` 时，运行时默认使用 `.part`。
 - sender 会先把 chunk 写入临时文件，直到收到 EOF 且写满总长度后再 rename 为正式文件。
 - 如果 packet 带了 `checksum`，sender 会先做校验，不一致会直接报错。
+- sender 优先使用 `TargetFilePath`，为空时回退 `FilePath`，再回退 `FileName`；最终路径会清洗为安全相对路径并拼到 `remote_dir` 下。
+- 远端 rename 成功后，才会执行 `notify_on_success`。
+
+### 2.6 OSS sender
+
+- `type=oss`
+- 必填：`endpoint`、`bucket`、`access_key`、`secret_key`、`part_size`
+- 可选：`region`、`use_ssl`、`force_path_style`、`key_prefix`、`storage_class`、`content_type`、`notify_on_success`
+
+行为说明：
+
+- 只接受 `PayloadKindFileChunk`。
+- 同一个 `transfer_id` 对应一个 multipart upload session。
+- 不把完整文件先落到本地；上游小 chunk 会在内存中有界聚合为 multipart part。
+- chunk 进入时校验 `checksum`，不一致立即报错。
+- 重复 offset 区间不会破坏最终对象；乱序 chunk 会在有界缓存内等待连续区间。
+- EOF 到达、覆盖范围完整、待上传缓冲 flush 完成、所有 part 成功上传后，才调用 `CompleteMultipartUpload`。
+- `CompleteMultipartUpload` 成功后，才会执行 `notify_on_success`。
+
+object key 生成规则：
+
+1. packet 中已有 `TargetFilePath` 时优先使用。
+2. 否则使用 `key_prefix + FilePath`。
+3. `FilePath` 为空时回退 `key_prefix + FileName`。
+
+路径会先清洗为安全相对路径，拒绝空 key 与 `..`。
+
+### 2.7 SkyDDS sender
+
+- `type=dds_skydds`
+- 必填：`dcps_config_file`、`domain_id`、`topic_name`、`message_model`
+- `message_model` 支持 `octet` 与 `batch_octet`
+- 通过 C ABI + C++ wrapper 调用 SkyDDS `DataWriter` 写 `OctetMsg` / `BatchOctetMsg`
+- 当 `message_model=batch_octet` 时必须配置 `batch_num`/`batch_size`/`batch_delay`，并按三阈值（条数/字节/等待时长）触发 flush
+
+### 2.8 文件提交成功通知
+
+`notify_on_success` 是文件型 sender 的 commit success 后置动作，不是 task 普通 sender fan-out。
+
+触发点：
+
+- SFTP：远端临时文件 rename 为最终文件成功后。
+- OSS：multipart upload complete 成功后。
+
+支持通知类型：
+
+- `type=kafka`：发送一条 JSON `file_ready` 事件到 Kafka，支持 `remote`、`topic`、`record_key_source`、Kafka TLS/SASL 与 timeout 字段。
+- `type=dds_skydds`：发送一条 JSON `file_ready` 事件到 SkyDDS，第一版只支持 `message_model=octet`。
+
+通知事件包含来源协议/路径、目标协议/最终路径、`transfer_id`、文件大小、sender/receiver 名称、ready 时间，以及接收方取文件所需定位信息：
+
+- SFTP：`fetch_protocol=sftp`、`fetch_host`、`fetch_port`、`fetch_path`
+- OSS：`fetch_protocol=oss`、`fetch_endpoint`、`fetch_bucket`、`fetch_key`
+
+如果文件已经 commit 成功但通知失败，sender 会返回错误并打印清晰日志；代码中预留了后续持久化补发扩展点。
+
+### 2.9 文件名/路径改写 stage
+
+文件型 pipeline 可改写 `TargetFileName` / `TargetFilePath`，保留来源字段 `FileName` / `FilePath` 不变。sender 优先使用 `Target*`，为空时回退 `File*`。
+
+支持 stage：
+
+- `set_target_file_path`：用 `value` 直接设置目标路径。
+- `rewrite_target_path_strip_prefix`：用 `prefix` 从当前目标路径或来源路径去掉前缀。
+- `rewrite_target_path_add_prefix`：用 `prefix` 给目标路径加前缀。
+- `rewrite_target_filename_replace`：用 `old` / `new` 做文件名简单替换。
+- `rewrite_target_path_regex`：用 `pattern` / `replacement` 正则改写路径。
+- `rewrite_target_filename_regex`：用 `pattern` / `replacement` 正则改写文件名，并同步更新目标路径 basename。
 
 ## 3. receiver 与 sender 之间的关系
 
@@ -257,6 +335,7 @@
 
 - SFTP receiver 负责读取远端文件并产出 `file_chunk`。
 - SFTP sender 负责接收 `file_chunk` 并落盘。
+- OSS receiver/sender 与 SFTP 一样走文件分块语义，但 OSS sender 使用 multipart upload 提交。
 - pipeline 只负责 task 内部按当前支持的 stage 处理 packet。
 
 ## 4. payload 日志配置在哪一层生效
@@ -282,3 +361,5 @@
 - `local_ip` / `local_port` / `iface` / `ttl` / `loop` 只对 UDP sender 生效。
 - Kafka timeout / acks / balancers / key / compression 只对 Kafka 生效。
 - `remote_dir` / `temp_suffix` / `host_key_fingerprint` 只对 SFTP 生效。
+- `endpoint` / `bucket` / `key_prefix` / `part_size` / `storage_class` / `content_type` 只对 OSS 生效。
+- `notify_on_success` 只对文件型 sender 的 commit success 后置通知生效。

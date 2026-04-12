@@ -38,6 +38,11 @@ const (
 	sftpMatchKeyModeFilename      = "filename"
 	sftpMatchKeyModeFixed         = "fixed"
 
+	ossMatchKeyModeLegacyDefault = ""
+	ossMatchKeyModeRemotePath    = "remote_path"
+	ossMatchKeyModeFilename      = "filename"
+	ossMatchKeyModeFixed         = "fixed"
+
 	localTimerMatchKeyModeLegacyDefault = ""
 	localTimerMatchKeyModeFixed         = "fixed"
 )
@@ -49,6 +54,8 @@ type tcpMatchKeyBuilder func(cs *connState) string
 type kafkaMatchKeyBuilder func(rec *kgo.Record) string
 
 type sftpMatchKeyBuilder func(filePath string) string
+
+type ossMatchKeyBuilder func(key string) string
 
 type localTimerMatchKeyBuilder func() string
 
@@ -265,6 +272,30 @@ func compileSFTPMatchKeyBuilder(cfg config.ReceiverMatchKeyConfig, remoteDir str
 		return func(_ string) string { return key }, mode, nil
 	default:
 		return nil, "", config.ErrUnsupportedReceiverMatchKeyMode("sftp", mode)
+	}
+}
+
+func compileOSSMatchKeyBuilder(cfg config.ReceiverMatchKeyConfig, bucket string) (ossMatchKeyBuilder, string, error) {
+	mode := strings.TrimSpace(cfg.Mode)
+	switch mode {
+	case ossMatchKeyModeLegacyDefault:
+		bucketValue := strings.TrimSpace(bucket)
+		return func(key string) string {
+			return buildTwoFieldMatchKey("oss", "bucket", bucketValue, "key", key)
+		}, receiverMatchKeyModeCompatDefault, nil
+	case ossMatchKeyModeRemotePath:
+		return func(key string) string {
+			return buildSingleFieldMatchKey("oss", "remote_path", key)
+		}, mode, nil
+	case ossMatchKeyModeFilename:
+		return func(key string) string {
+			return buildSingleFieldMatchKey("oss", "filename", path.Base(key))
+		}, mode, nil
+	case ossMatchKeyModeFixed:
+		key := precomputeSingleFieldMatchKey("oss", "fixed", cfg.FixedValue)
+		return func(_ string) string { return key }, mode, nil
+	default:
+		return nil, "", config.ErrUnsupportedReceiverMatchKeyMode("oss", mode)
 	}
 }
 

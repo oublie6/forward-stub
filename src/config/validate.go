@@ -189,6 +189,19 @@ func (c *Config) Validate() error {
 			if err := ValidateSSHHostKeyFingerprint(r.HostKeyFingerprint); err != nil {
 				return fmt.Errorf("receiver %s sftp host_key_fingerprint invalid: %w", rn, err)
 			}
+		case "oss":
+			if strings.TrimSpace(r.Endpoint) == "" {
+				return fmt.Errorf("receiver %s oss requires endpoint", rn)
+			}
+			if strings.TrimSpace(r.Bucket) == "" {
+				return fmt.Errorf("receiver %s oss requires bucket", rn)
+			}
+			if strings.TrimSpace(r.AccessKey) == "" || strings.TrimSpace(r.SecretKey) == "" {
+				return fmt.Errorf("receiver %s oss requires access_key and secret_key", rn)
+			}
+			if r.ChunkSize <= 0 {
+				return fmt.Errorf("receiver %s oss chunk_size must be > 0", rn)
+			}
 		default:
 			return fmt.Errorf("receiver %s unknown type %s", rn, r.Type)
 		}
@@ -196,6 +209,9 @@ func (c *Config) Validate() error {
 
 	for sn, s := range c.Senders {
 		if err := validateSenderConcurrency(sn, s.Concurrency); err != nil {
+			return err
+		}
+		if err := validateNotifyOnSuccess(sn, s.NotifyOnSuccess); err != nil {
 			return err
 		}
 		switch s.Type {
@@ -286,6 +302,19 @@ func (c *Config) Validate() error {
 			if err := ValidateSSHHostKeyFingerprint(s.HostKeyFingerprint); err != nil {
 				return fmt.Errorf("sender %s sftp host_key_fingerprint invalid: %w", sn, err)
 			}
+		case "oss":
+			if strings.TrimSpace(s.Endpoint) == "" {
+				return fmt.Errorf("sender %s oss requires endpoint", sn)
+			}
+			if strings.TrimSpace(s.Bucket) == "" {
+				return fmt.Errorf("sender %s oss requires bucket", sn)
+			}
+			if strings.TrimSpace(s.AccessKey) == "" || strings.TrimSpace(s.SecretKey) == "" {
+				return fmt.Errorf("sender %s oss requires access_key and secret_key", sn)
+			}
+			if s.PartSize <= 0 {
+				return fmt.Errorf("sender %s oss part_size must be > 0", sn)
+			}
 		default:
 			return fmt.Errorf("sender %s unknown type %s", sn, s.Type)
 		}
@@ -339,6 +368,12 @@ func validateReceiverMatchKey(name string, rc ReceiverConfig) error {
 		default:
 			return fmt.Errorf("receiver %s: %w", name, ErrUnsupportedReceiverMatchKeyMode(rc.Type, mode))
 		}
+	case "oss":
+		switch mode {
+		case "", "remote_path", "filename", "fixed":
+		default:
+			return fmt.Errorf("receiver %s: %w", name, ErrUnsupportedReceiverMatchKeyMode(rc.Type, mode))
+		}
 	case "dds_skydds":
 		switch mode {
 		case "", "fixed":
@@ -359,6 +394,65 @@ func validateReceiverMatchKey(name string, rc ReceiverConfig) error {
 	}
 	if mode != "fixed" && strings.TrimSpace(fixedValue) != "" {
 		return fmt.Errorf("receiver %s %s match_key.fixed_value 仅可在 mode=fixed 时配置", name, rc.Type)
+	}
+	return nil
+}
+
+func validateNotifyOnSuccess(senderName string, notifiers NotifyOnSuccessConfigs) error {
+	for i, nc := range notifiers {
+		prefix := fmt.Sprintf("sender %s notify_on_success[%d]", senderName, i)
+		switch strings.TrimSpace(nc.Type) {
+		case "kafka":
+			if strings.TrimSpace(nc.Remote) == "" {
+				return fmt.Errorf("%s kafka requires remote", prefix)
+			}
+			if strings.TrimSpace(nc.Topic) == "" {
+				return fmt.Errorf("%s kafka requires topic", prefix)
+			}
+			if err := validateKafkaAuth("notify_on_success", senderName, nc.SASLMechanism, nc.Username, nc.Password); err != nil {
+				return err
+			}
+			if err := validatePositiveDurationByType("sender", senderName, "notify_on_success.kafka", "dial_timeout", nc.DialTimeout); err != nil {
+				return err
+			}
+			if err := validatePositiveDurationByType("sender", senderName, "notify_on_success.kafka", "request_timeout", nc.RequestTimeout); err != nil {
+				return err
+			}
+			if err := validatePositiveDurationByType("sender", senderName, "notify_on_success.kafka", "retry_timeout", nc.RetryTimeout); err != nil {
+				return err
+			}
+			if err := validatePositiveDurationByType("sender", senderName, "notify_on_success.kafka", "retry_backoff", nc.RetryBackoff); err != nil {
+				return err
+			}
+			if err := validatePositiveDurationByType("sender", senderName, "notify_on_success.kafka", "metadata_max_age", nc.MetadataMaxAge); err != nil {
+				return err
+			}
+			if err := validatePositiveDurationByType("sender", senderName, "notify_on_success.kafka", "conn_idle_timeout", nc.ConnIdleTimeout); err != nil {
+				return err
+			}
+			switch strings.TrimSpace(nc.RecordKeySource) {
+			case "", "transfer_id", "file_path", "file_name", "sender_name", "receiver_name", "fetch_path":
+			default:
+				return fmt.Errorf("%s kafka record_key_source unsupported: %s", prefix, nc.RecordKeySource)
+			}
+		case "dds_skydds":
+			if strings.TrimSpace(nc.DCPSConfigFile) == "" {
+				return fmt.Errorf("%s dds_skydds requires dcps_config_file", prefix)
+			}
+			if nc.DomainID < 0 {
+				return fmt.Errorf("%s dds_skydds domain_id must be >= 0", prefix)
+			}
+			if strings.TrimSpace(nc.TopicName) == "" {
+				return fmt.Errorf("%s dds_skydds requires topic_name", prefix)
+			}
+			if strings.ToLower(strings.TrimSpace(nc.MessageModel)) != "octet" {
+				return fmt.Errorf("%s dds_skydds message_model only supports octet in this version", prefix)
+			}
+		case "":
+			return fmt.Errorf("%s type required", prefix)
+		default:
+			return fmt.Errorf("%s unsupported type %s", prefix, nc.Type)
+		}
 	}
 	return nil
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"forward-stub/src/config"
+	"forward-stub/src/logx"
 	"forward-stub/src/packet"
 
 	"github.com/pkg/sftp"
@@ -86,6 +87,8 @@ type SFTPSender struct {
 	// states 保存每个分片 transfer_id 到组装状态的映射。
 	// 用法：跨多次 Send 追踪同一文件的写入进度。
 	states []map[string]*sftpTransferState
+	// notifiers 是文件 rename 成功后的后置通知动作。
+	notifiers []FileReadyNotifier
 
 	assignMu      sync.Mutex
 	transferShard map[string]int
@@ -107,6 +110,10 @@ func NewSFTPSender(name string, sc config.SenderConfig) (*SFTPSender, error) {
 	if err := config.ValidateSSHHostKeyFingerprint(sc.HostKeyFingerprint); err != nil {
 		return nil, fmt.Errorf("sftp sender invalid host_key_fingerprint: %w", err)
 	}
+	notifiers, err := buildFileReadyNotifiers(sc.NotifyOnSuccess)
+	if err != nil {
+		return nil, err
+	}
 	suffix := strings.TrimSpace(sc.TempSuffix)
 	if suffix == "" {
 		suffix = ".part"
@@ -120,6 +127,7 @@ func NewSFTPSender(name string, sc config.SenderConfig) (*SFTPSender, error) {
 		tempSuffix:         suffix,
 		hostKeyFingerprint: strings.TrimSpace(sc.HostKeyFingerprint),
 		concurrency:        config.DefaultSenderConcurrency,
+		notifiers:          notifiers,
 	}
 	if sc.Concurrency > 0 {
 		s.concurrency = sc.Concurrency
@@ -175,14 +183,6 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 			return err
 		}
 	}
-	fileName := strings.TrimSpace(p.Meta.FileName)
-	if fileName == "" {
-		fileName = path.Base(strings.TrimSpace(p.Meta.FilePath))
-	}
-	if fileName == "." || fileName == "/" || fileName == "" {
-		fileName = transferID + ".bin"
-	}
-
 	if want := strings.TrimSpace(p.Meta.Checksum); want != "" {
 		h := sha256.Sum256(p.Payload)
 		if got := hex.EncodeToString(h[:]); !strings.EqualFold(got, want) {
@@ -191,7 +191,14 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 	}
 	st, ok := s.states[idx][transferID]
 	if !ok {
-		finalPath := path.Join(s.remoteDir, fileName)
+		finalPath, err := sftpFinalPath(s.remoteDir, p, transferID)
+		if err != nil {
+			return fmt.Errorf("sftp sender build final path failed: %w", err)
+		}
+		if err := s.sftpClis[idx].MkdirAll(path.Dir(finalPath)); err != nil {
+			s.invalidateConnLocked(idx)
+			return err
+		}
 		st = &sftpTransferState{
 			finalPath: finalPath,
 			tempPath:  finalPath + s.tempSuffix,
@@ -228,6 +235,10 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 			s.invalidateConnLocked(idx)
 			return err
 		}
+		if err := notifyFileReady(ctx, s.notifiers, sftpFileReadyEvent(p, s.name, s.addr, st.finalPath)); err != nil {
+			logx.L().Errorw("SFTP文件提交成功但通知失败", "发送端", s.name, "目标路径", st.finalPath, "错误", err)
+			return err
+		}
 		delete(s.states[idx], transferID)
 		s.assignMu.Lock()
 		delete(s.transferShard, transferID)
@@ -243,6 +254,9 @@ func (s *SFTPSender) Close(ctx context.Context) error {
 		s.locks[i].Lock()
 		s.invalidateConnLocked(i)
 		s.locks[i].Unlock()
+	}
+	for _, n := range s.notifiers {
+		_ = n.Close(ctx)
 	}
 	return nil
 }
