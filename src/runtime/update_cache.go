@@ -144,7 +144,7 @@ func (st *Store) replaceAll(ctx context.Context, cfg config.Config) error {
 	st.senders = make(map[string]*SenderState)
 	st.tasks = make(map[string]*TaskState)
 	st.pipelines = compiled
-	st.pipelineCfg = cfg.Pipelines
+	st.pipelineCfg = clonePipelineConfigMap(cfg.Pipelines)
 	st.pipelineStageSigs = sigsByPipeline
 	st.mu.Unlock()
 	st.gcUnusedStageCache()
@@ -245,7 +245,7 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	oldReceivers := receiverConfigSnapshot(st.receivers)
 	oldSelectors := cloneSelectorConfigMap(st.selectors)
 	oldTaskSets := cloneTaskSetMap(st.taskSets)
-	oldPipelines := st.pipelineCfg
+	oldPipelines := clonePipelineConfigMap(st.pipelineCfg)
 	st.mu.RUnlock()
 
 	plan := planBusinessDelta(oldReceivers, oldSelectors, oldTaskSets, oldSenders, oldPipelines, oldTasks, cfg)
@@ -269,7 +269,7 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 		}
 		st.mu.Lock()
 		st.pipelines = compiled
-		st.pipelineCfg = cfg.Pipelines
+		st.pipelineCfg = clonePipelineConfigMap(cfg.Pipelines)
 		st.pipelineStageSigs = sigsByPipeline
 		st.mu.Unlock()
 		st.gcUnusedStageCache()
@@ -1021,6 +1021,15 @@ func cloneTaskSetMap(in map[string][]string) map[string][]string {
 	out := make(map[string][]string, len(in))
 	for name, tasks := range in {
 		out[name] = append([]string(nil), tasks...)
+	}
+	return out
+}
+
+// clonePipelineConfigMap 深拷贝 pipeline 配置，避免 Store 的差量基线共享外部 map/slice。
+func clonePipelineConfigMap(in map[string][]config.StageConfig) map[string][]config.StageConfig {
+	out := make(map[string][]config.StageConfig, len(in))
+	for name, stages := range in {
+		out[name] = append([]config.StageConfig(nil), stages...)
 	}
 	return out
 }

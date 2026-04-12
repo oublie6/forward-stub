@@ -51,12 +51,27 @@ func stageSignature(sc config.StageConfig) (string, error) {
 func (st *Store) compilePipelinesWithStageCache(cfg map[string][]config.StageConfig) (map[string]*CompiledPipeline, map[string][]string, error) {
 	out := make(map[string]*CompiledPipeline, len(cfg))
 	sigsByPipeline := make(map[string][]string, len(cfg))
+	created := make([]string, 0)
+	cleanupCreated := func() {
+		if len(created) == 0 {
+			return
+		}
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		for _, sig := range created {
+			entry := st.stageCache[sig]
+			if entry != nil && entry.TaskRefs == 0 {
+				delete(st.stageCache, sig)
+			}
+		}
+	}
 	for name, stagesCfg := range cfg {
 		pl := &pipeline.Pipeline{Name: name, Stages: make([]pipeline.StageFunc, 0, len(stagesCfg))}
 		sigs := make([]string, 0, len(stagesCfg))
 		for _, sc := range stagesCfg {
 			sig, err := stageSignature(sc)
 			if err != nil {
+				cleanupCreated()
 				return nil, nil, fmt.Errorf("pipeline %s stage %s signature error: %w", name, sc.Type, err)
 			}
 
@@ -71,6 +86,7 @@ func (st *Store) compilePipelinesWithStageCache(cfg map[string][]config.StageCon
 
 			fn, err := compileStage(sc)
 			if err != nil {
+				cleanupCreated()
 				return nil, nil, fmt.Errorf("pipeline %s stage %s error: %w", name, sc.Type, err)
 			}
 			st.mu.Lock()
@@ -78,6 +94,7 @@ func (st *Store) compilePipelinesWithStageCache(cfg map[string][]config.StageCon
 			if entry == nil {
 				entry = &StageCacheEntry{Sig: sig, Fn: fn, Tasks: make(map[string]struct{})}
 				st.stageCache[sig] = entry
+				created = append(created, sig)
 			}
 			st.mu.Unlock()
 
