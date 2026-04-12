@@ -114,7 +114,7 @@
 ### 1.5 OSS receiver
 
 - `type=oss`
-- 关键字段：`endpoint`、`bucket`、`access_key`、`secret_key`、`selector`、`chunk_size`
+- 关键字段：`endpoint`、`bucket`、`access_key`、`secret_key`、`selector`
 - 可选字段：`region`、`use_ssl`、`force_path_style`、`prefix`、`poll_interval_sec`
 - `match key` 默认输出：`oss|bucket=<bucket>|key=<object key>`。
 - `match_key.mode` 支持：`remote_path`、`filename`、`fixed`。
@@ -123,7 +123,7 @@
 
 - 按 `bucket + prefix` 轮询对象，跳过目录占位对象。
 - 对象列表按 key 排序，保证处理顺序稳定。
-- 对每个对象调用 `GetObject` 流式读取，并按 `chunk_size` 输出 `file_chunk`。
+- 对每个对象调用 `GetObject` 流式读取，并按 `chunk_size` 输出 `file_chunk`；`chunk_size` 可省略或配置为 `0`，运行时默认 64 KiB，若显式配置小于 1024 会自动抬升到 1024。
 - packet meta 会写入 `ProtoOSS`、`Remote=object key`、`Local=bucket@endpoint`、`FileName=path.Base(key)`、`FilePath=key`、`TransferID=bucket|key|size|etag`。
 - 去重指纹包含 `key + size + last_modified + etag`，避免只按对象名导致覆盖对象漏处理。
 

@@ -199,8 +199,8 @@ func (c *Config) Validate() error {
 			if strings.TrimSpace(r.AccessKey) == "" || strings.TrimSpace(r.SecretKey) == "" {
 				return fmt.Errorf("receiver %s oss requires access_key and secret_key", rn)
 			}
-			if r.ChunkSize <= 0 {
-				return fmt.Errorf("receiver %s oss chunk_size must be > 0", rn)
+			if r.ChunkSize < 0 {
+				return fmt.Errorf("receiver %s oss chunk_size must be >= 0", rn)
 			}
 		default:
 			return fmt.Errorf("receiver %s unknown type %s", rn, r.Type)

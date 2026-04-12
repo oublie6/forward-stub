@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"reflect"
 	"testing"
@@ -38,10 +39,14 @@ func (f *fakeOSSAPI) CompleteMultipartUpload(_ context.Context, _, object, _ str
 
 type fakeNotifier struct {
 	events []FileReadyEvent
+	err    error
 }
 
 func (n *fakeNotifier) NotifyFileReady(_ context.Context, event FileReadyEvent) error {
 	n.events = append(n.events, event)
+	if n.err != nil {
+		return n.err
+	}
 	return nil
 }
 
@@ -111,6 +116,52 @@ func TestOSSSenderAggregatesChunksAndCompletesAfterEOF(t *testing.T) {
 	}
 	if len(n.events) != 1 || n.events[0].FetchKey != "out/in/a.txt" || n.events[0].FilePath != "out/in/a.txt" {
 		t.Fatalf("notify event mismatch: %+v", n.events)
+	}
+}
+
+func TestOSSSenderClearsStateWhenNotifyFailsAfterComplete(t *testing.T) {
+	api := &fakeOSSAPI{}
+	n := &fakeNotifier{err: errors.New("notify down")}
+	s := newOSSSenderWithAPI("oss", config.SenderConfig{Endpoint: "endpoint", Bucket: "bucket", KeyPrefix: "out"}, api, []FileReadyNotifier{n}, 4)
+	p := packetWithChecksum([]byte("abcd"), packet.Meta{
+		TransferID: "tx-notify-fail",
+		FilePath:   "in/a.txt",
+		FileName:   "a.txt",
+		Offset:     0,
+		TotalSize:  4,
+		EOF:        true,
+	})
+	err := s.Send(context.Background(), p)
+	if err == nil {
+		t.Fatalf("expected notify failure error")
+	}
+	if !api.completed {
+		t.Fatalf("multipart should have completed before notify failure")
+	}
+	if _, ok := s.states["tx-notify-fail"]; ok {
+		t.Fatalf("transfer state should be cleared after complete even when notify fails")
+	}
+}
+
+func TestSFTPSenderClearsStateWhenNotifyFailsAfterCommit(t *testing.T) {
+	n := &fakeNotifier{err: errors.New("notify down")}
+	s := &SFTPSender{
+		name:          "sftp",
+		addr:          "127.0.0.1:22",
+		states:        []map[string]*sftpTransferState{{"tx-sftp": {finalPath: "/out/a.txt"}}},
+		transferShard: map[string]int{"tx-sftp": 0},
+		notifiers:     []FileReadyNotifier{n},
+	}
+	p := &packet.Packet{Envelope: packet.Envelope{Meta: packet.Meta{TransferID: "tx-sftp", FilePath: "in/a.txt", TotalSize: 1}}}
+	err := s.afterSFTPCommitLocked(context.Background(), 0, "tx-sftp", p, "/out/a.txt")
+	if err == nil {
+		t.Fatalf("expected notify failure error")
+	}
+	if _, ok := s.states[0]["tx-sftp"]; ok {
+		t.Fatalf("sftp transfer state should be cleared after commit even when notify fails")
+	}
+	if _, ok := s.transferShard["tx-sftp"]; ok {
+		t.Fatalf("sftp transfer shard should be cleared after commit even when notify fails")
 	}
 }
 

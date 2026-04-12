@@ -194,11 +194,13 @@ func (s *OSSSender) Send(ctx context.Context, p *packet.Packet) error {
 		if _, err := s.api.CompleteMultipartUpload(ctx, s.bucket, st.objectKey, st.uploadID, parts, s.putOpts); err != nil {
 			return err
 		}
-		if err := notifyFileReady(ctx, s.notifiers, ossFileReadyEvent(p, s.name, s.endpoint, s.bucket, st.objectKey)); err != nil {
-			logx.L().Errorw("OSS文件提交成功但通知失败", "发送端", s.name, "bucket", s.bucket, "key", st.objectKey, "错误", err)
-			return err
-		}
+		objectKey := st.objectKey
 		delete(s.states, transferID)
+		if err := notifyFileReady(ctx, s.notifiers, ossFileReadyEvent(p, s.name, s.endpoint, s.bucket, objectKey)); err != nil {
+			// TODO: 在这里接入通知 outbox / 持久化补发表。对象已经 complete 成功，不能再保留 multipart 未完成状态。
+			logx.L().Errorw("OSS对象已complete成功，通知失败", "发送端", s.name, "bucket", s.bucket, "key", objectKey, "错误", err)
+			return fmt.Errorf("oss sender object completed but notify failed: %w", err)
+		}
 	}
 	return nil
 }
