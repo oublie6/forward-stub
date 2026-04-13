@@ -96,11 +96,58 @@ type SystemConfig struct {
 	BusinessDefaults BusinessDefaultsConfig `json:"business_defaults,omitempty"`
 }
 
-// BusinessDefaultsConfig 复用正式 business 配置结构，表达可覆盖到 business 对象上的系统级默认模板。
+// BusinessDefaultsConfig 描述少量可继承字段的系统级默认模板。
+//
+// 它不是完整 business schema：身份字段、拓扑字段、认证字段以及协议专属主配置字段
+// 必须写在具体 business 对象中，避免默认模板暗示未实现的继承语义。
 type BusinessDefaultsConfig struct {
-	Task     TaskConfig     `json:"task,omitempty"`
-	Receiver ReceiverConfig `json:"receiver,omitempty"`
-	Sender   SenderConfig   `json:"sender,omitempty"`
+	Task     BusinessTaskDefaultsConfig     `json:"task,omitempty"`
+	Receiver BusinessReceiverDefaultsConfig `json:"receiver,omitempty"`
+	Sender   BusinessSenderDefaultsConfig   `json:"sender,omitempty"`
+}
+
+// BusinessTaskDefaultsConfig 是 task 可继承默认值的窄化 schema。
+type BusinessTaskDefaultsConfig struct {
+	ExecutionModel     string `json:"execution_model,omitempty"`
+	PoolSize           int    `json:"pool_size,omitempty"`
+	ChannelQueueSize   int    `json:"channel_queue_size,omitempty"`
+	PayloadLogMaxBytes int    `json:"payload_log_max_bytes,omitempty"`
+}
+
+// BusinessReceiverDefaultsConfig 是 receiver 可继承默认值的窄化 schema。
+type BusinessReceiverDefaultsConfig struct {
+	Multicore              *bool    `json:"multicore,omitempty"`
+	NumEventLoop           int      `json:"num_event_loop,omitempty"`
+	SocketRecvBuffer       int      `json:"socket_recv_buffer,omitempty"`
+	PayloadLogMaxBytes     int      `json:"payload_log_max_bytes,omitempty"`
+	DialTimeout            string   `json:"dial_timeout,omitempty"`
+	ConnIdleTimeout        string   `json:"conn_idle_timeout,omitempty"`
+	MetadataMaxAge         string   `json:"metadata_max_age,omitempty"`
+	RetryBackoff           string   `json:"retry_backoff,omitempty"`
+	SessionTimeout         string   `json:"session_timeout,omitempty"`
+	HeartbeatInterval      string   `json:"heartbeat_interval,omitempty"`
+	RebalanceTimeout       string   `json:"rebalance_timeout,omitempty"`
+	Balancers              []string `json:"balancers,omitempty"`
+	AutoCommit             *bool    `json:"auto_commit,omitempty"`
+	AutoCommitInterval     string   `json:"auto_commit_interval,omitempty"`
+	FetchMaxPartitionBytes int      `json:"fetch_max_partition_bytes,omitempty"`
+	IsolationLevel         string   `json:"isolation_level,omitempty"`
+	WaitTimeout            string   `json:"wait_timeout,omitempty"`
+	DrainMaxItems          int      `json:"drain_max_items,omitempty"`
+	DrainBufferBytes       int      `json:"drain_buffer_bytes,omitempty"`
+}
+
+// BusinessSenderDefaultsConfig 是 sender 可继承默认值的窄化 schema。
+type BusinessSenderDefaultsConfig struct {
+	Concurrency      int    `json:"concurrency,omitempty"`
+	SocketSendBuffer int    `json:"socket_send_buffer,omitempty"`
+	DialTimeout      string `json:"dial_timeout,omitempty"`
+	RequestTimeout   string `json:"request_timeout,omitempty"`
+	RetryTimeout     string `json:"retry_timeout,omitempty"`
+	RetryBackoff     string `json:"retry_backoff,omitempty"`
+	ConnIdleTimeout  string `json:"conn_idle_timeout,omitempty"`
+	MetadataMaxAge   string `json:"metadata_max_age,omitempty"`
+	Partitioner      string `json:"partitioner,omitempty"`
 }
 
 // BusinessConfig 仅包含支持热重载的业务拓扑配置。

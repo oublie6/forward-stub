@@ -99,9 +99,18 @@
 
 ## 5. business_defaults（system 专属）
 
-`business_defaults` 只存在于 system 配置中，用于给 business 配置里**未显式设置**的字段补默认值；如果 business 已写明值，则以 business 为准。
+`system.business_defaults` 不是完整 business 配置模板，而是少量可继承字段的系统级默认模板。它只存在于 system 配置中，用于给 business 配置里**未显式设置**的字段补默认值；如果 business 已写明值，则以 business 为准。
 
-实现上，`BusinessDefaultsConfig` 直接复用正式 `TaskConfig` / `ReceiverConfig` / `SenderConfig`，不再维护单独的影子 schema。因此 JSON 字段名、严格反序列化规则、类型定义都与正式 business 配置保持一致。它只作为默认模板覆盖到已有 business 对象上，不会生成新的 task / receiver / sender，也不会替代协议必填字段校验。
+实现上，`BusinessDefaultsConfig` 使用独立的窄化 schema，不再复用完整的 `TaskConfig` / `ReceiverConfig` / `SenderConfig`。原因是默认值应用逻辑只读取少量字段；继续复用完整 business struct 会让维护者误判 defaults 的真实继承范围。JSON 仍使用严格反序列化，未列入本节的字段会在解析阶段报错。
+
+适合放入 `business_defaults` 的字段，是跨实例共享且当前 `ApplyDefaults` 明确会继承的资源、并发、缓冲、日志截断和少量 Kafka / SkyDDS 调优字段。不适合放入 defaults 的字段包括：
+
+- 身份字段：例如 `type`、receiver / sender 实例名语义。
+- 拓扑字段：例如 `selector`、`pipelines`、`senders`、`task_sets`。
+- 认证字段：例如 `username`、`password`、`sasl_mechanism`、TLS 开关。
+- 协议专属主配置字段：例如 Kafka `topic`、DDS `domain_id` / `topic_name`、SFTP `remote_dir`、OSS bucket / key 等。
+
+这些字段必须写在具体 business 对象中，因为默认值逻辑不会生成新的 task / receiver / sender，也不会替代协议必填字段校验。
 
 ### 5.1 `business_defaults.task`
 
@@ -120,8 +129,8 @@
 | `num_event_loop` | int | 无 | 当 `receiver.num_event_loop <= 0` 时作为系统级默认值。 |
 | `payload_log_max_bytes` | int | 无 | 当 `receiver.payload_log_max_bytes <= 0` 时作为系统级默认值。 |
 | `socket_recv_buffer` | int | 无 | 当 `receiver.socket_recv_buffer <= 0` 时作为系统级默认值。 |
-| Kafka receiver 选项 | 对应字段类型 | 无 | 例如 `dial_timeout`、`metadata_max_age`、`balancers`、`auto_commit`、`fetch_max_partition_bytes`、`isolation_level`，仅对 `type=kafka` 的 receiver 生效。 |
-| dds_skydds receiver 选项 | 对应字段类型 | 无 | 例如 `wait_timeout`、`drain_max_items`、`drain_buffer_bytes`，仅对 `type=dds_skydds` 的 receiver 生效。 |
+| Kafka receiver 选项 | 对应字段类型 | 无 | `dial_timeout`、`conn_idle_timeout`、`metadata_max_age`、`retry_backoff`、`session_timeout`、`heartbeat_interval`、`rebalance_timeout`、`balancers`、`auto_commit`、`auto_commit_interval`、`fetch_max_partition_bytes`、`isolation_level`，仅对 `type=kafka` 的 receiver 生效。 |
+| dds_skydds receiver 选项 | 对应字段类型 | 无 | `wait_timeout`、`drain_max_items`、`drain_buffer_bytes`，仅对 `type=dds_skydds` 的 receiver 生效。 |
 
 ### 5.3 `business_defaults.sender`
 
@@ -129,7 +138,7 @@
 |---|---|---|---|
 | `concurrency` | int | 无 | 当 `sender.concurrency <= 0` 时作为系统级默认值。 |
 | `socket_send_buffer` | int | 无 | 当 `sender.socket_send_buffer <= 0` 时作为系统级默认值。 |
-| Kafka sender 选项 | 对应字段类型 | 无 | 例如 `dial_timeout`、`request_timeout`、`retry_timeout`、`metadata_max_age`、`partitioner`，仅对 `type=kafka` 的 sender 生效。 |
+| Kafka sender 选项 | 对应字段类型 | 无 | `dial_timeout`、`request_timeout`、`retry_timeout`、`retry_backoff`、`conn_idle_timeout`、`metadata_max_age`、`partitioner`，仅对 `type=kafka` 的 sender 生效。 |
 
 ### 5.4 business_defaults 与代码默认值的优先级
 

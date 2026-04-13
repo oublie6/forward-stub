@@ -59,7 +59,7 @@ business 配置只有三层来源：
 2. system 配置中的 `business_defaults`。
 3. 代码硬编码默认值。
 
-`business_defaults` 是 system 配置的一部分，只给 business 中**未显式填写**的字段提供系统级默认值。
+`system.business_defaults` 不是完整 business 配置模板，而是少量可继承字段的系统级默认模板。它只给 business 中**未显式填写**的字段提供系统级默认值。
 
 当前只覆盖三类对象：
 
@@ -69,7 +69,7 @@ business 配置只有三层来源：
 
 它不会生成新对象，也不会覆盖 business 已显式填写的值。
 
-`BusinessDefaultsConfig` 直接复用正式 `TaskConfig` / `ReceiverConfig` / `SenderConfig`，避免再维护一套影子默认值 schema。JSON 严格反序列化规则仍然使用正式配置结构。
+`BusinessDefaultsConfig` 使用独立的窄化 schema，只包含 `ApplyDefaults` 当前会读取并下发的字段。这样做是为了让结构定义和真实生效范围一致：身份字段、拓扑字段、认证字段、协议专属主配置字段仍必须写在具体 business 对象中；如果放进 `business_defaults`，严格 JSON 解析会直接报错。
 
 ### 2.3 统一默认值入口
 

@@ -258,6 +258,8 @@ system 配置主要控制：
 - 日志输出：`logging.*`
 - 系统级业务默认值：`business_defaults.*`
 
+`system.business_defaults` 不是完整 business 配置模板，只能填写当前默认值逻辑支持继承的少量字段。receiver / sender / task 的身份、拓扑、认证和协议专属主配置必须放在 business 配置中；写进 defaults 的未知字段会在严格 JSON 解析阶段报错。
+
 ### 6.2 business 配置控制什么
 
 business 配置主要控制：

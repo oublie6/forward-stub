@@ -19,6 +19,7 @@ receiver -> selector -> task(pipeline + sender)
 
 - system 配置只有两层来源：system 显式值、代码硬编码默认值。
 - business 配置只有三层来源：business 显式值、`system.business_defaults`、代码硬编码默认值。
+- `system.business_defaults` 不是完整 business 配置模板，只是少量可继承字段的系统级默认模板；身份字段、拓扑字段、认证字段和协议专属主配置字段必须写在具体 business 对象中。
 - `SystemConfig.Merge(BusinessConfig)` 只负责拼装完整配置，不负责默认值回填。
 - 最终默认值统一由 `Config.ApplyDefaults(system.business_defaults)` 规范化；运行时构建阶段原则上不再承担通用默认值回填职责。
 
@@ -103,7 +104,7 @@ receiver -> selector -> task(pipeline + sender)
 
 ## 3. 示例配置索引
 
-- `configs/system.example.json`：**system 全量主示例**。覆盖 `control`、`logging`、`business_defaults` 全字段。
+- `configs/system.example.json`：**system 全量主示例**。覆盖 `control`、`logging`、`business_defaults` 当前真实支持的默认值字段。
 - `configs/business.example.json`：**business 全量主示例**。覆盖 receiver / selector / task_set / sender / pipeline / task 全部业务域，并集中展示 UDP/TCP、Kafka、SFTP、OSS、SkyDDS、local_timer、route sender、文件路径改写、执行模型和 stage 组合。
 - `configs/bench.example.json`：**benchmark 全量主示例**。只用于 benchmark / 压测驱动参数，不属于运行时 system + business 双配置。
 
