@@ -21,6 +21,8 @@ func TestExampleSystemBusinessPairsParseAndValidate(t *testing.T) {
 		{name: "kafka", systemFile: "system.example.json", bizFile: "kafka.business.example.json"},
 		{name: "sftp", systemFile: "system.example.json", bizFile: "sftp.business.example.json"},
 		{name: "oss", systemFile: "system.example.json", bizFile: "oss.business.example.json"},
+		{name: "skydds", systemFile: "system.example.json", bizFile: "skydds.business.example.json"},
+		{name: "skydds_batch", systemFile: "system.example.json", bizFile: "skydds-batch.business.example.json"},
 		{name: "task_models", systemFile: "system.example.json", bizFile: "task-models.business.example.json"},
 	}
 

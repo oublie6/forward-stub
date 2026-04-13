@@ -98,6 +98,17 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	for pn, stages := range c.Pipelines {
+		if strings.TrimSpace(pn) == "" {
+			return errors.New("pipeline name empty")
+		}
+		for i, sc := range stages {
+			if err := validateStageConfig(pn, i, sc); err != nil {
+				return err
+			}
+		}
+	}
+
 	for tsn, taskNames := range c.TaskSets {
 		if tsn == "" {
 			return errors.New("task set name empty")
