@@ -18,7 +18,6 @@ import (
 	"forward-stub/src/packet"
 
 	"github.com/minio/minio-go/v7"
-	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -250,7 +249,7 @@ func TestSFTPSenderCloseClearsStateAndShard(t *testing.T) {
 		concurrency:   2,
 		locks:         make([]sync.Mutex, 2),
 		sshClients:    make([]*ssh.Client, 2),
-		sftpClis:      make([]*sftp.Client, 2),
+		sftpClis:      make([]sftpClient, 2),
 		connReady:     make([]atomic.Bool, 2),
 		states:        []map[string]*sftpTransferState{{"tx-a": {finalPath: "/out/a.txt"}}, {"tx-b": {finalPath: "/out/b.txt"}}},
 		transferShard: map[string]int{"tx-a": 0, "tx-b": 1},
@@ -281,6 +280,69 @@ func TestSFTPCleanupCommittedTransferClearsStateAndShard(t *testing.T) {
 		t.Fatalf("sftp transfer shard should be cleared after commit")
 	}
 }
+
+func TestSFTPSenderDoesNotCarryNotifyOnSuccessHook(t *testing.T) {
+	if _, ok := reflect.TypeOf(SFTPSender{}).FieldByName("notifiers"); ok {
+		t.Fatalf("sftp sender must not carry notify_on_success notifiers")
+	}
+}
+
+func TestSFTPSenderRenameCommitDoesNotNotify(t *testing.T) {
+	fc := &fakeSFTPClient{}
+	s := &SFTPSender{
+		name:          "sftp",
+		remoteDir:     "/out",
+		tempSuffix:    ".part",
+		sshClients:    []*ssh.Client{{}},
+		sftpClis:      []sftpClient{fc},
+		states:        []map[string]*sftpTransferState{{}},
+		transferShard: map[string]int{},
+	}
+	p := packetWithChecksum([]byte("done"), packet.Meta{
+		TransferID: "tx-sftp-commit",
+		FilePath:   "a.txt",
+		FileName:   "a.txt",
+		Offset:     0,
+		TotalSize:  4,
+		EOF:        true,
+	})
+	if err := s.sendLocked(0, "tx-sftp-commit", p); err != nil {
+		t.Fatalf("send locked: %v", err)
+	}
+	if fc.renameCount != 1 {
+		t.Fatalf("expected one final rename, got %d", fc.renameCount)
+	}
+	if fc.renameOld != "/out/a.txt.part" || fc.renameNew != "/out/a.txt" {
+		t.Fatalf("unexpected rename: old=%q new=%q", fc.renameOld, fc.renameNew)
+	}
+	if _, ok := s.states[0]["tx-sftp-commit"]; ok {
+		t.Fatalf("committed sftp transfer state should be cleaned")
+	}
+}
+
+type fakeSFTPClient struct {
+	renameCount int
+	renameOld   string
+	renameNew   string
+}
+
+func (f *fakeSFTPClient) MkdirAll(string) error { return nil }
+func (f *fakeSFTPClient) OpenFile(string, int) (sftpFile, error) {
+	return fakeSFTPFile{}, nil
+}
+func (f *fakeSFTPClient) Remove(string) error { return nil }
+func (f *fakeSFTPClient) Rename(oldpath, newpath string) error {
+	f.renameCount++
+	f.renameOld = oldpath
+	f.renameNew = newpath
+	return nil
+}
+func (f *fakeSFTPClient) Close() error { return nil }
+
+type fakeSFTPFile struct{}
+
+func (fakeSFTPFile) WriteAt(b []byte, _ int64) (int, error) { return len(b), nil }
+func (fakeSFTPFile) Close() error                           { return nil }
 
 func TestOSSRangeMergeReadyToComplete(t *testing.T) {
 	st := &ossTransferState{totalSize: 6, pendingSegments: map[int64][]byte{}}

@@ -6,7 +6,7 @@ import (
 )
 
 func TestNotifyOnSuccessUnmarshalObjectAndArray(t *testing.T) {
-	// notify_on_success 最初只支持单对象；这里锁定对象/数组两种写法，避免后续改动破坏兼容配置。
+	// notify_on_success 最初只支持单对象；这里锁定对象/数组两种 JSON 写法，避免后续改动破坏 OSS sender 兼容配置。
 	var one struct {
 		Notify NotifyOnSuccessConfigs `json:"notify_on_success"`
 	}

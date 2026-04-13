@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"forward-stub/src/config"
-	"forward-stub/src/logx"
 	"forward-stub/src/packet"
 
 	"github.com/pkg/sftp"
@@ -46,6 +45,27 @@ type sftpTransferState struct {
 type fileRange struct {
 	start int64
 	end   int64
+}
+
+type sftpClient interface {
+	MkdirAll(path string) error
+	OpenFile(path string, flags int) (sftpFile, error)
+	Remove(path string) error
+	Rename(oldpath, newpath string) error
+	Close() error
+}
+
+type sftpFile interface {
+	WriteAt(b []byte, off int64) (int, error)
+	Close() error
+}
+
+type realSFTPClient struct {
+	*sftp.Client
+}
+
+func (c realSFTPClient) OpenFile(path string, flags int) (sftpFile, error) {
+	return c.Client.OpenFile(path, flags)
 }
 
 // SFTPSender 是按分块写入并最终 rename 提交的 SFTP 发送端。
@@ -82,13 +102,11 @@ type SFTPSender struct {
 	// sshClients/sftpClis 是按分片复用的底层连接。
 	// 用法：ensureConn 保证可用，Close 统一释放。
 	sshClients []*ssh.Client
-	sftpClis   []*sftp.Client
+	sftpClis   []sftpClient
 	connReady  []atomic.Bool
 	// states 保存每个分片 transfer_id 到组装状态的映射。
 	// 用法：跨多次 Send 追踪同一文件的写入进度。
 	states []map[string]*sftpTransferState
-	// notifiers 是文件 rename 成功后的后置通知动作。
-	notifiers []FileReadyNotifier
 
 	assignMu      sync.Mutex
 	transferShard map[string]int
@@ -110,10 +128,6 @@ func NewSFTPSender(name string, sc config.SenderConfig) (*SFTPSender, error) {
 	if err := config.ValidateSSHHostKeyFingerprint(sc.HostKeyFingerprint); err != nil {
 		return nil, fmt.Errorf("sftp sender invalid host_key_fingerprint: %w", err)
 	}
-	notifiers, err := buildFileReadyNotifiers(sc.NotifyOnSuccess)
-	if err != nil {
-		return nil, err
-	}
 	suffix := strings.TrimSpace(sc.TempSuffix)
 	if suffix == "" {
 		suffix = ".part"
@@ -127,7 +141,6 @@ func NewSFTPSender(name string, sc config.SenderConfig) (*SFTPSender, error) {
 		tempSuffix:         suffix,
 		hostKeyFingerprint: strings.TrimSpace(sc.HostKeyFingerprint),
 		concurrency:        config.DefaultSenderConcurrency,
-		notifiers:          notifiers,
 	}
 	if sc.Concurrency > 0 {
 		s.concurrency = sc.Concurrency
@@ -135,7 +148,7 @@ func NewSFTPSender(name string, sc config.SenderConfig) (*SFTPSender, error) {
 	s.shardMask = s.concurrency - 1
 	s.locks = make([]sync.Mutex, s.concurrency)
 	s.sshClients = make([]*ssh.Client, s.concurrency)
-	s.sftpClis = make([]*sftp.Client, s.concurrency)
+	s.sftpClis = make([]sftpClient, s.concurrency)
 	s.connReady = make([]atomic.Bool, s.concurrency)
 	s.states = make([]map[string]*sftpTransferState, s.concurrency)
 	s.transferShard = make(map[string]int)
@@ -183,42 +196,35 @@ func (s *SFTPSender) Send(ctx context.Context, p *packet.Packet) error {
 		}
 	}
 	s.locks[idx].Lock()
-	readyEvent, err := s.sendLocked(idx, transferID, p)
+	err := s.sendLocked(idx, transferID, p)
 	s.locks[idx].Unlock()
 	if err != nil {
 		return err
 	}
-	if readyEvent != nil {
-		if err := notifyFileReady(ctx, s.notifiers, *readyEvent); err != nil {
-			// TODO: 在这里接入通知 outbox / 持久化补发表。文件已经提交成功，不能再保留未完成传输状态。
-			logx.L().Errorw("SFTP文件已提交成功，通知失败", "发送端", s.name, "目标路径", readyEvent.FetchPath, "错误", err)
-			return fmt.Errorf("sftp sender file committed but notify failed: %w", err)
-		}
-	}
 	return nil
 }
 
-func (s *SFTPSender) sendLocked(idx int, transferID string, p *packet.Packet) (*FileReadyEvent, error) {
+func (s *SFTPSender) sendLocked(idx int, transferID string, p *packet.Packet) error {
 	if s.sftpClis[idx] == nil || s.sshClients[idx] == nil {
 		if err := s.ensureConnLocked(idx); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if want := strings.TrimSpace(p.Meta.Checksum); want != "" {
 		h := sha256.Sum256(p.Payload)
 		if got := hex.EncodeToString(h[:]); !strings.EqualFold(got, want) {
-			return nil, fmt.Errorf("sftp sender checksum mismatch: got=%s want=%s transfer=%s", got, want, transferID)
+			return fmt.Errorf("sftp sender checksum mismatch: got=%s want=%s transfer=%s", got, want, transferID)
 		}
 	}
 	st, ok := s.states[idx][transferID]
 	if !ok {
 		finalPath, err := sftpFinalPath(s.remoteDir, p, transferID)
 		if err != nil {
-			return nil, fmt.Errorf("sftp sender build final path failed: %w", err)
+			return fmt.Errorf("sftp sender build final path failed: %w", err)
 		}
 		if err := s.sftpClis[idx].MkdirAll(path.Dir(finalPath)); err != nil {
 			s.invalidateConnLocked(idx)
-			return nil, err
+			return err
 		}
 		st = &sftpTransferState{
 			finalPath: finalPath,
@@ -234,16 +240,16 @@ func (s *SFTPSender) sendLocked(idx int, transferID string, p *packet.Packet) (*
 	f, err := s.sftpClis[idx].OpenFile(st.tempPath, os.O_WRONLY|os.O_CREATE)
 	if err != nil {
 		s.invalidateConnLocked(idx)
-		return nil, err
+		return err
 	}
 	if _, err = f.WriteAt(p.Payload, p.Meta.Offset); err != nil {
 		_ = f.Close()
 		s.invalidateConnLocked(idx)
-		return nil, err
+		return err
 	}
 	if err = f.Close(); err != nil {
 		s.invalidateConnLocked(idx)
-		return nil, err
+		return err
 	}
 	st.addRange(p.Meta.Offset, p.Meta.Offset+int64(len(p.Payload)))
 	if p.Meta.EOF {
@@ -254,19 +260,17 @@ func (s *SFTPSender) sendLocked(idx int, transferID string, p *packet.Packet) (*
 		_ = s.sftpClis[idx].Remove(st.finalPath)
 		if err := s.sftpClis[idx].Rename(st.tempPath, st.finalPath); err != nil {
 			s.invalidateConnLocked(idx)
-			return nil, err
+			return err
 		}
-		finalPath := st.finalPath
 		s.cleanupCommittedTransferLocked(idx, transferID)
-		event := sftpFileReadyEvent(p, s.name, s.addr, finalPath)
-		return &event, nil
+		return nil
 	}
-	return nil, nil
+	return nil
 }
 
 // Close 关闭底层 SFTP/SSH 连接并释放资源。
 // 用法：在 runtime 下线 sender 或进程退出时调用，避免连接泄漏。
-func (s *SFTPSender) Close(ctx context.Context) error {
+func (s *SFTPSender) Close(context.Context) error {
 	for i := 0; i < s.concurrency; i++ {
 		s.locks[i].Lock()
 		s.invalidateConnLocked(i)
@@ -280,9 +284,6 @@ func (s *SFTPSender) Close(ctx context.Context) error {
 	s.assignMu.Lock()
 	s.transferShard = make(map[string]int)
 	s.assignMu.Unlock()
-	for _, n := range s.notifiers {
-		_ = n.Close(ctx)
-	}
 	return nil
 }
 
@@ -322,7 +323,7 @@ func (s *SFTPSender) ensureConnLocked(idx int) error {
 		return err
 	}
 	s.sshClients[idx] = cli
-	s.sftpClis[idx] = scli
+	s.sftpClis[idx] = realSFTPClient{scli}
 	s.connReady[idx].Store(true)
 	return nil
 }

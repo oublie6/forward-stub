@@ -250,7 +250,7 @@ func (c *Config) Validate() error {
 		if err := validateSenderConcurrency(sn, s.Concurrency); err != nil {
 			return err
 		}
-		if err := validateNotifyOnSuccess(sn, s.NotifyOnSuccess); err != nil {
+		if err := validateNotifyOnSuccess(sn, s.Type, s.NotifyOnSuccess); err != nil {
 			return err
 		}
 		switch s.Type {
@@ -568,7 +568,13 @@ func validateReceiverMatchKey(name string, rc ReceiverConfig) error {
 	return nil
 }
 
-func validateNotifyOnSuccess(senderName string, notifiers NotifyOnSuccessConfigs) error {
+func validateNotifyOnSuccess(senderName, senderType string, notifiers NotifyOnSuccessConfigs) error {
+	if len(notifiers) == 0 {
+		return nil
+	}
+	if strings.TrimSpace(senderType) != "oss" {
+		return fmt.Errorf("sender %s type %s: notify_on_success only supports oss", senderName, senderType)
+	}
 	for i, nc := range notifiers {
 		prefix := fmt.Sprintf("sender %s notify_on_success[%d]", senderName, i)
 		switch strings.TrimSpace(nc.Type) {

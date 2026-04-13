@@ -294,6 +294,7 @@
 - 输出 meta 中 `Proto=ProtoOSS`，`FileName=path.Base(key)`，`FilePath=key`，`Remote=key`，`Local=bucket@endpoint`。
 - 去重指纹至少包含 `key + size + last_modified + etag`，不是只按对象名去重。
 - `match_key.mode` 支持留空、`remote_path`、`filename`、`fixed`；留空时输出 `oss|bucket=<bucket>|key=<key>`。
+- 当前 OSS receiver 是轮询驱动；Kafka / SkyDDS `file_ready` 通知驱动拉取对象的入口尚未完整落地。后续扩展应在 OSS receiver 侧接入通知订阅，并复用当前对象读取与 file_chunk 输出链路。
 
 ### 6.6 local_timer receiver
 
@@ -478,7 +479,7 @@
 - sender 优先使用 `packet.Meta.TargetFilePath` 作为最终相对路径；为空时回退 `FilePath`，再回退 `FileName`。
 - `TargetFileName` 可在未显式设置 `TargetFilePath` 时覆盖 basename。
 - 最终路径会清洗为安全相对路径后拼到 `remote_dir` 下，并自动创建父目录。
-- rename 成功后才触发 `notify_on_success`。
+- rename 成功后即完成 SFTP 提交；SFTP sender 不支持 `notify_on_success`。
 
 ### 9.7 OSS sender
 
@@ -508,9 +509,8 @@ object key 生成优先级：
 
 ### 9.8 notify_on_success
 
-`notify_on_success` 是文件型 sender 的 commit success 后置动作，不是 task 普通 sender fan-out。当前适用于 `sftp` 与 `oss`：
+`notify_on_success` 是 OSS sender 的 `CompleteMultipartUpload` commit success 后置动作，不是 task 普通 sender fan-out。配置校验只允许 `sender.type=oss` 使用该字段：
 
-- SFTP：远端 `Rename(temp, final)` 成功后触发。
 - OSS：`CompleteMultipartUpload` 成功后触发。
 
 配置可写单对象或数组。Kafka 示例：
@@ -525,7 +525,7 @@ object key 生成优先级：
 }
 ```
 
-数组写法可同时配置多种通知；任一通知失败时 sender 返回错误，但已提交文件不会回滚：
+数组写法可同时配置多种通知；任一通知失败时 OSS sender 返回错误，但已提交对象不会回滚：
 
 ```json
 "notify_on_success": [
@@ -557,7 +557,7 @@ SkyDDS 单对象示例：
 }
 ```
 
-Kafka 通知支持 `remote`、`topic`、`record_key_source`、`client_id`、`username`、`password`、`sasl_mechanism`、`tls`、`tls_skip_verify`、`dial_timeout`、`request_timeout`、`retry_timeout`、`retry_backoff`、`metadata_max_age`、`conn_idle_timeout`。SkyDDS 通知第一版只支持 `message_model=octet`，一次文件成功发送一条 JSON 通知。
+Kafka 通知支持 `remote`、`topic`、`record_key_source`、`client_id`、`username`、`password`、`sasl_mechanism`、`tls`、`tls_skip_verify`、`dial_timeout`、`request_timeout`、`retry_timeout`、`retry_backoff`、`metadata_max_age`、`conn_idle_timeout`。SkyDDS 通知第一版只支持 `message_model=octet`，一次 OSS 对象 commit 成功发送一条 JSON `file_ready` 通知。当前 OSS receiver 尚未实现由 Kafka / SkyDDS 通知驱动的拉取入口，后续扩展点应放在 OSS receiver 的通知订阅层。
 
 ## 10. pipelines 配置
 
