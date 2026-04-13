@@ -3,16 +3,15 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd)
-DOCKERFILE="${ROOT_DIR}/deploy/docker/skydds-runtime-bookworm/Dockerfile"
-BUILD_CONTEXT="${ROOT_DIR}"
+DOCKERFILE="${ROOT_DIR}/deploy/docker/base-ubuntu1804/Dockerfile"
+BUILD_CONTEXT="${ROOT_DIR}/deploy/docker/base-ubuntu1804"
 IMAGES_DIR="${ROOT_DIR}/deploy/images"
-PACKAGES_DIR="${ROOT_DIR}/third_party/skydds/packages"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 BUILDER="${BUILDER:-default}"
 PLATFORM="linux/arm64"
-IMAGE_TAG="${IMAGE_TAG:-forward-stub:skydds-bookworm-runtime-arm64}"
-OUTPUT_FILE="${OUTPUT_FILE:-${IMAGES_DIR}/forward-stub-skydds-bookworm-runtime-arm64.tar.gz}"
-BASE_IMAGE="${BASE_IMAGE:-forward-stub-base:bookworm-arm64}"
+IMAGE_TAG="${IMAGE_TAG:-forward-stub-base:ubuntu1804-arm64}"
+OUTPUT_FILE="${OUTPUT_FILE:-${IMAGES_DIR}/forward-stub-base-ubuntu1804-arm64.tar.gz}"
+SOURCE_IMAGE="${SOURCE_IMAGE:-ubuntu:18.04}"
 HOST_HTTP_PROXY="${HOST_HTTP_PROXY:-http://127.0.0.1:7890}"
 HOST_HTTPS_PROXY="${HOST_HTTPS_PROXY:-${HOST_HTTP_PROXY}}"
 HOST_ALL_PROXY="${HOST_ALL_PROXY:-socks5://127.0.0.1:7891}"
@@ -71,18 +70,10 @@ bootstrap_builder() {
   "${DOCKER_BIN}" buildx inspect --bootstrap "${BUILDER}" >/dev/null
 }
 
-require_skydds_package() {
-  shopt -s nullglob
-  local archives=("${PACKAGES_DIR}"/*.tar.gz)
-  shopt -u nullglob
-  if [[ ${#archives[@]} -eq 0 ]]; then
-    fail "No SkyDDS .tar.gz package found in ${PACKAGES_DIR}"
-  fi
-}
-
-require_base_image() {
-  if ! "${DOCKER_BIN}" image inspect "${BASE_IMAGE}" >/dev/null 2>&1; then
-    fail "Required local base image not found: ${BASE_IMAGE}"
+maybe_pull_source_image() {
+  echo "[INFO] Prefetching source image for ${PLATFORM}: ${SOURCE_IMAGE}"
+  if ! "${DOCKER_BIN}" pull --platform "${PLATFORM}" "${SOURCE_IMAGE}"; then
+    echo "[WARN] Prefetch failed, continuing with local cache and --pull=false"
   fi
 }
 
@@ -113,32 +104,30 @@ require_command "${DOCKER_BIN}"
 require_command gzip
 require_file "${DOCKERFILE}"
 require_dir "${BUILD_CONTEXT}"
-require_dir "${PACKAGES_DIR}"
-require_skydds_package
 require_docker_daemon
 require_buildx
 ensure_local_builder
 bootstrap_builder
-require_base_image
 maybe_enable_host_proxy
 
 mkdir -p "${IMAGES_DIR}"
 mkdir -p "$(dirname "${OUTPUT_FILE}")"
 
-tmp_tar=$(mktemp "${TMPDIR:-/tmp}/forward-stub-skydds-bookworm-runtime.XXXXXX.tar")
+tmp_tar=$(mktemp "${TMPDIR:-/tmp}/forward-stub-base-ubuntu1804.XXXXXX.tar")
 cleanup() {
   rm -f "${tmp_tar}"
 }
 trap cleanup EXIT
 
-echo "[INFO] Building SkyDDS runtime image (Bookworm)"
+echo "[INFO] Building Ubuntu 18.04 base image"
 echo "[INFO] Dockerfile: ${DOCKERFILE}"
 echo "[INFO] Build context: ${BUILD_CONTEXT}"
 echo "[INFO] Target platform: ${PLATFORM} (aarch64 == linux/arm64)"
 echo "[INFO] Buildx builder: ${BUILDER}"
 echo "[INFO] Image tag: ${IMAGE_TAG}"
 echo "[INFO] Output archive: ${OUTPUT_FILE}"
-echo "[INFO] Base image dependency: ${BASE_IMAGE} must already exist for ${PLATFORM}"
+
+maybe_pull_source_image
 
 "${DOCKER_BIN}" buildx build \
   --builder "${BUILDER}" \

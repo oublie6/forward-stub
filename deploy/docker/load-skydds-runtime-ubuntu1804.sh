@@ -5,7 +5,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd)
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 PLATFORM="linux/arm64"
-OUTPUT_FILE="${OUTPUT_FILE:-${ROOT_DIR}/deploy/images/forward-stub-skydds-bookworm-runtime-arm64.tar.gz}"
+OUTPUT_FILE="${OUTPUT_FILE:-${ROOT_DIR}/deploy/images/forward-stub-skydds-ubuntu1804-runtime-arm64.tar.gz}"
 
 fail() {
   echo "[ERROR] $*" >&2

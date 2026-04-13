@@ -1,5 +1,5 @@
 # Intentionally build the runtime image on top of the local arm64-only base tag.
-FROM --platform=linux/arm64 forward-stub-base:bookworm-arm64
+FROM --platform=linux/arm64 forward-stub-base:ubuntu1804-arm64
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 WORKDIR /workspace

@@ -21,13 +21,13 @@ build-skydds:
 	bash -c 'set -euo pipefail; source scripts/skydds/env.sh; CGO_ENABLED=1 GOFLAGS="$(GOFLAGS)" go build -trimpath -tags skydds -o bin/$(APP_NAME) .'
 
 podman-build-skydds-base:
-	DOCKER_BIN="$(PODMAN_BIN)" ./deploy/docker/build-and-save-base-bookworm.sh
+	DOCKER_BIN="$(PODMAN_BIN)" ./deploy/docker/build-and-save-base-ubuntu1804.sh
 
 podman-load-skydds-base:
-	DOCKER_BIN="$(PODMAN_BIN)" ./deploy/docker/load-base-bookworm.sh
+	DOCKER_BIN="$(PODMAN_BIN)" ./deploy/docker/load-base-ubuntu1804.sh
 
 podman-build-skydds-runtime:
-	DOCKER_BIN="$(PODMAN_BIN)" ./deploy/docker/build-and-save-skydds-runtime-bookworm.sh
+	DOCKER_BIN="$(PODMAN_BIN)" ./deploy/docker/build-and-save-skydds-runtime-ubuntu1804.sh
 
 podman-load-skydds-runtime:
-	DOCKER_BIN="$(PODMAN_BIN)" ./deploy/docker/load-skydds-runtime-bookworm.sh
+	DOCKER_BIN="$(PODMAN_BIN)" ./deploy/docker/load-skydds-runtime-ubuntu1804.sh

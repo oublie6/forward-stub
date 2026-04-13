@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-REM Windows 本地辅助脚本（建议在 WSL/Linux/Bookworm 环境执行主线构建）。
+REM Windows 本地辅助脚本（建议在 WSL/Linux/Ubuntu 18.04 环境执行主线构建）。
 REM 本脚本仅尝试调用仓库现有 SkyDDS 构建路径，不保证原生 Windows SDK 兼容性。
 
 set ROOT_DIR=%~dp0\..\..

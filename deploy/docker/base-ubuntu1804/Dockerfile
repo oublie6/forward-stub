@@ -1,5 +1,4 @@
-# Historical path/name is kept for compatibility, but the userspace baseline
-# is intentionally aligned to a legacy arm64 environment closer to vendor reqs.
+# Ubuntu 18.04 arm64 userspace baseline, aligned with the vendor runtime requirements.
 FROM --platform=linux/arm64 ubuntu:18.04
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]

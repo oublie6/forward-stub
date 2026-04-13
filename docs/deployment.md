@@ -31,7 +31,7 @@
 
 ## 3. Docker 部署（主线入口：`deploy/docker/...`）
 
-### 构建（主服务镜像，Bookworm runtime）
+### 构建（主服务镜像，Ubuntu 18.04 runtime）
 
 ```bash
 make docker-build-skydds-runtime
@@ -40,12 +40,12 @@ make docker-build-skydds-runtime
 ### 运行（示例）
 
 ```bash
-docker run --rm -it forward-stub:skydds-bookworm-runtime
+docker run --rm -it forward-stub:skydds-ubuntu1804-runtime-arm64
 ```
 
 ### 相关文件
 
-- `deploy/docker/skydds-runtime-bookworm/Dockerfile`：Bookworm/glibc 主服务镜像，构建阶段自动完成 `packages -> sdk` 解压并 `-tags skydds` 编译。
+- `deploy/docker/skydds-runtime-ubuntu1804/Dockerfile`：Ubuntu 18.04/glibc 主服务镜像，构建阶段自动完成 `packages -> sdk` 解压并 `-tags skydds` 编译。
 - `scripts/docker-local-test.sh`：受限环境的镜像构建验证脚本。
 
 ## 4. Kubernetes 部署

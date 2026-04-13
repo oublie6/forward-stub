@@ -13,7 +13,7 @@ PRELOADED_IMAGE_DIR=${PRELOADED_IMAGE_DIR:-${ROOT_DIR}/deploy/images}
 
 BUILDER_IMAGE=${BUILDER_IMAGE:-golang:1.25-bookworm}
 VERSION=${VERSION:-dev}
-DOCKERFILE=${DOCKERFILE:-${ROOT_DIR}/deploy/docker/skydds-runtime-bookworm/Dockerfile}
+DOCKERFILE=${DOCKERFILE:-${ROOT_DIR}/deploy/docker/skydds-runtime-ubuntu1804/Dockerfile}
 IMAGE_TAG=${IMAGE_TAG:-forward-stub:skydds-runtime-test}
 PULL_RETRIES=${PULL_RETRIES:-3}
 PULL_RETRY_INTERVAL_SEC=${PULL_RETRY_INTERVAL_SEC:-3}
