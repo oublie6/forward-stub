@@ -101,6 +101,8 @@ type TaskRuntimeStats struct {
 	ChannelQueueAvailable int
 	// Inflight 是任务当前仍未完成的包数量，覆盖 fastpath / pool / channel 三种模型。
 	Inflight int64
+	// RouteSenderMiss 是 RouteSender 指向当前 task 未绑定 sender 的累计次数。
+	RouteSenderMiss uint64
 }
 
 // taskRuntimeStatsMu 保护 taskRuntimeStatsFn 的注册表。
@@ -408,6 +410,7 @@ type taskAggregateStats struct {
 	BPS             float64          `json:"bps,omitempty"`
 	ExecutionModel  string           `json:"execution_model,omitempty"`
 	Inflight        int64            `json:"inflight,omitempty"`
+	RouteSenderMiss uint64           `json:"route_sender_miss,omitempty"`
 	PoolSize        int              `json:"pool_size,omitempty"`
 	WorkerPool      *workerPoolStats `json:"worker_pool,omitempty"`
 	Channel         *channelStats    `json:"channel,omitempty"`
@@ -507,6 +510,7 @@ func (s *trafficSummary) addRuntimeOnlyTask(task string, runtime TaskRuntimeStat
 func (t *taskAggregateStats) applyRuntime(runtime TaskRuntimeStats) {
 	t.ExecutionModel = runtime.ExecutionModel
 	t.Inflight = runtime.Inflight
+	t.RouteSenderMiss = runtime.RouteSenderMiss
 	switch runtime.ExecutionModel {
 	case "pool":
 		t.PoolSize = runtime.PoolSize

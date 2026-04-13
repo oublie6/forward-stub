@@ -88,6 +88,8 @@ type Task struct {
 
 	// inflightCount 是 inflight 的原子镜像，用于聚合统计日志输出当前在途数。
 	inflightCount atomic.Int64
+	// routeSenderMiss 统计 RouteSender 指向当前 task 未绑定 sender 的累计次数。
+	routeSenderMiss atomic.Uint64
 }
 
 // taskRequest 是 channel 执行模型在队列中传递的最小工作单元。
@@ -349,7 +351,7 @@ func (t *Task) processAndSend(ctx context.Context, pkt *packet.Packet) {
 				t.sendToSender(ctx, outPkt, s)
 				continue
 			}
-			// TODO: 增加 route_sender_miss 计数器，便于区分预期丢弃与配置漂移。
+			t.routeSenderMiss.Add(1)
 			logx.L().Warnw("路由发送端未命中任务内发送端", "任务名称", t.Name, "路由发送端", outPkt.Meta.RouteSender)
 			continue
 		}
@@ -385,8 +387,9 @@ func payloadHex(b []byte, max int) string {
 //   - 读取结果允许是“某一时刻的近似快照”，用于观测而非强一致控制。
 func (t *Task) runtimeStats() logx.TaskRuntimeStats {
 	stats := logx.TaskRuntimeStats{
-		ExecutionModel: t.ExecutionModel,
-		Inflight:       t.inflightCount.Load(),
+		ExecutionModel:  t.ExecutionModel,
+		Inflight:        t.inflightCount.Load(),
+		RouteSenderMiss: t.routeSenderMiss.Load(),
 	}
 	t.stateMu.RLock()
 	pool := t.pool

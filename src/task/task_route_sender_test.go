@@ -69,6 +69,9 @@ func TestTaskRouteSenderMissDropsWithoutDefaultFanout(t *testing.T) {
 	if s1.Count() != 0 || s2.Count() != 0 {
 		t.Fatalf("route miss should not fan out to default senders: s1=%d s2=%d", s1.Count(), s2.Count())
 	}
+	if got := tk.runtimeStats().RouteSenderMiss; got != 1 {
+		t.Fatalf("route miss counter = %d, want 1", got)
+	}
 }
 
 func TestTaskNoRouteSenderFansOutToAllSenders(t *testing.T) {

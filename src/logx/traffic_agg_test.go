@@ -19,6 +19,7 @@ func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
 			WorkerPoolFree:    56,
 			WorkerPoolWaiting: 2,
 			Inflight:          3,
+			RouteSenderMiss:   4,
 		}
 	})
 	defer UnregisterTaskRuntimeStats("task-a")
@@ -45,6 +46,9 @@ func TestTrafficSummaryTaskAggregateIncludesWorkerPoolStats(t *testing.T) {
 	}
 	if item.ExecutionModel != "pool" || item.Inflight != 3 || item.PoolSize != 64 {
 		t.Fatalf("unexpected runtime summary: %+v", item)
+	}
+	if item.RouteSenderMiss != 4 {
+		t.Fatalf("unexpected route sender miss counter: %+v", item)
 	}
 	if item.WorkerPool == nil {
 		t.Fatalf("worker pool stats missing: %+v", item)
