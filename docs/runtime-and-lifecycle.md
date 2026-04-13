@@ -1,5 +1,18 @@
 # 运行时、默认值与生命周期
 
+> 职责边界：本文负责说明启动流程、默认值生效层次、runtime 对象生命周期、热更新边界、停机顺序和关键时序摘要。不展开配置字段全集、协议专属字段、pipeline stage 或运维操作步骤；这些内容分别见 `docs/configuration.md`、`docs/receivers-and-senders.md`、`docs/pipeline.md` 和 `docs/operations-manual.md`。
+
+## 0. 关键运行时对象
+
+| 对象 | 主要职责 |
+| --- | --- |
+| `bootstrap.Run` | 启动、重载、停机的总控流程。 |
+| `app.Runtime` | 固化 system 配置基线，并把完整配置应用到 runtime store。 |
+| `runtime.Store` | 保存 receivers / selectors / taskSets / senders / tasks / pipelines 的运行态快照。 |
+| `runtime.UpdateCache` | 冷启动或热更新时构建、替换、复用运行时对象。 |
+| `CompiledSelector` | 把 `match key -> []*TaskState` 编译成热路径只读快照。 |
+| `logx.TrafficCounter` | 在 receiver / task 热路径做轻量统计，由后台聚合输出。 |
+
 ## 1. 启动阶段实际发生了什么
 
 当前启动链路以 `bootstrap.loadConfigPair -> app.Runtime -> runtime.UpdateCache` 为准，顺序如下：
@@ -14,6 +27,18 @@
 8. 执行 `Validate()`。
 9. 初始化 logger、流量统计参数、GC 周期日志、pprof。
 10. 调用 `runtime.UpdateCache()`，编译 pipeline / selector，构建 sender / task / receiver，并启动 receiver。
+11. 启动业务配置监听和信号处理，进入稳定运行态。
+
+`waitReceiversStartInvoked` 只等待 receiver `Start` goroutine 已被触发，不保证底层 socket、Kafka consumer group 或 SFTP 轮询已经完全 ready。
+
+## 1.1 Runtime 生命周期边界
+
+冷启动和热更新都通过 `runtime.UpdateCache()` 发布运行态快照，但两者边界不同：
+
+- 冷启动走完整构建：编译 pipeline，构建 sender，构建并启动 task，编译 selector，构建并启动 receiver。
+- 热更新走 business delta：先构建新对象，再切换快照，最后回收旧对象。
+- system 配置只在冷启动时固化到 `app.Runtime`；热更新时必须与基线一致。
+- receiver / task 的统计对象在各自 `Start()` 阶段创建，真正收到或发送数据后才开始累计字节。
 
 ## 2. 默认值分别在哪一层生效
 
@@ -201,7 +226,7 @@ Kafka 新增配置项并不都在同一层生效：
 - 同名 task 重建时会优先复用旧的发送统计句柄，避免 task 发送统计断档。
 - system 配置不支持热更新；一旦检测到 system 配置变化，会拒绝本次重载。
 
-## 5. 热更新到底会更新哪些配置块
+## 5. 热更新边界：到底会更新哪些配置块
 
 当前只有 business 配置支持热更新，涉及：
 
@@ -276,7 +301,89 @@ receiver -> compiled selector -> []*TaskState
 - task 发送统计句柄是在 `Task.Start()` 阶段创建的，正常停机时由 `Task.StopGraceful()` 关闭。
 - 聚合统计后台线程本身由第一次 `AcquireTrafficCounter()` 惰性启动，进程常驻期间持续运行。
 
-## 9. 为什么文档里要强调“仅某类型生效”
+## 9. 关键时序摘要
+
+### 9.1 启动时序
+
+```text
+main
+  -> bootstrap.Run
+  -> loadConfigPair
+  -> logx / GC logger / pprof
+  -> app.Runtime.SeedSystemConfig
+  -> runtime.UpdateCache
+  -> watchConfigFile + signal handler
+```
+
+`runtime.UpdateCache` 在冷启动时的内部顺序是：
+
+```text
+compile pipelines
+  -> build senders
+  -> build/start tasks
+  -> compile selectors
+  -> build receivers
+  -> refresh receiver selector snapshots
+  -> start receivers
+```
+
+### 9.2 收包与转发时序
+
+热路径稳定为：
+
+```text
+receiver(构造 Packet 与 MatchKey)
+  -> dispatchToSelector(查 CompiledSelector)
+  -> task(按 execution_model 执行)
+  -> pipeline(顺序执行 stage)
+  -> sender(发送或按 RouteSender 选择单个 sender)
+```
+
+关键边界：
+
+- receiver 负责生成完整 `packet.Meta.MatchKey`。
+- dispatch 只做 payload 摘要日志、selector 精确查表和 fan-out。
+- pipeline stage 返回 false 时，当前 task 停止后续处理并丢弃该包。
+- task 发送统计只在真正调用 sender 后累计。
+
+### 9.3 热重载时序
+
+```text
+file watcher / reload signal
+  -> reloadAndApplyBusinessConfig
+  -> loadConfigPair + Validate
+  -> CheckSystemConfigStable
+  -> runtime.UpdateCache(nextCfg)
+  -> rebuild/swap/reuse runtime objects
+```
+
+对象更新语义：
+
+- receiver 变化：新建 receiver，刷新 selector 快照，启动新实例，再停止旧实例。
+- sender 变化：新建 sender，替换引用，再关闭旧 sender。
+- task 变化：按 remove + add 处理；同名重建时尽量复用发送统计句柄。
+- selector / task_set / pipeline 变化：重新编译相关 selector 快照，并扩散重建受影响 task。
+
+### 9.4 停机时序
+
+```text
+stop signal
+  -> stop config watcher
+  -> cancel run context
+  -> stop GC logger
+  -> Store.StopAll
+  -> stop pprof
+```
+
+`Store.StopAll` 的顺序固定为：
+
+```text
+stop receivers concurrently
+  -> stop tasks gracefully in order
+  -> close senders concurrently
+```
+
+## 10. 为什么文档里要强调“仅某类型生效”
 
 因为 `ReceiverConfig`、`SenderConfig` 是按协议并列复用的统一结构体，不是“每个协议一个完全独立 schema”。
 

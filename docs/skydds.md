@@ -1,5 +1,7 @@
 # SkyDDS 接入说明（dds_skydds）
 
+> 职责边界：本文负责 SkyDDS SDK 目录约定、cgo/C++ 调用链、`dds_skydds` receiver/sender 行为和测试方法。不维护通用配置字段表、部署总览、主链路路由规则或日常运维步骤；分别见 `docs/configuration.md`、`docs/deployment.md`、`docs/task-and-dispatch.md` 和 `docs/operations-manual.md`。
+
 ## 1. 设计边界
 
 - 保持主链路不变：`receiver -> selector -> task -> pipeline -> sender`。

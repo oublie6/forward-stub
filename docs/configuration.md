@@ -1,5 +1,7 @@
 # 配置参考手册
 
+> 职责边界：本文负责配置文件结构、字段、默认值、枚举、校验规则和示例一致性。不说明协议运行细节、runtime 对象生命周期、pipeline stage 语义或操作步骤；分别见 `docs/receivers-and-senders.md`、`docs/runtime-and-lifecycle.md`、`docs/pipeline.md` 和 `docs/operations-manual.md`。
+
 > 本文以当前代码实现为唯一准绳，覆盖 `src/config`、默认值逻辑、校验逻辑、runtime/build 阶段实际消费逻辑，以及仓库内全部配置示例文件。
 
 ## 1. 配置文件组织方式

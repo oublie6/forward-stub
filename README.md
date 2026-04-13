@@ -125,16 +125,18 @@ receiver -> selector -> task(pipeline + sender)
 ## 4. 文档索引
 
 - `docs/configuration.md`：**配置字段权威入口**，列出字段、类型、默认值、枚举、适用范围、约束与示例一致性要求。
+- `docs/architecture.md`：**架构总览入口**，说明系统结构、模块职责、热路径原则和扩展点索引。
 - `docs/receivers-and-senders.md`：**协议行为权威入口**，解释各 receiver / sender 的专属配置、match key 行为和协议边界。
 - `docs/task-and-dispatch.md`：**路由与任务权威入口**，说明 selector、task_set、task、dispatch、route sender 的关系。
 - `docs/pipeline.md`：**pipeline stage 权威入口**，说明 stage 类型、字段约束和丢弃语义。
 - `docs/execution-model.md`：`fastpath`、`pool`、`channel` 的配置与选型建议。
-- `docs/runtime-and-lifecycle.md`：默认值生效层次、初始化冷路径、热更新边界和停机顺序。
-- `docs/runtime-sequence-and-flow.md`：启动、收包、dispatch、热重载、停机的关键时序与统计对象生命周期。
+- `docs/runtime-and-lifecycle.md`：默认值生效层次、初始化冷路径、热更新边界、停机顺序和关键时序摘要。
 - `docs/observability.md`：logging、payload 日志、流量统计、GC 日志、pprof 等配置与排障方式。
-- `docs/operations-manual.md`：运维、实施、测试和值班人员的标准操作手册。
 - `docs/deployment.md`：本地、Docker、Kubernetes 部署入口。
 - `docs/skydds.md`：SkyDDS SDK、cgo 构建和 `dds_skydds` 协议说明。
+- `docs/operations-manual.md`：运维、实施、测试和值班人员的标准操作手册。
+
+`docs/internal/` 下只保存 roadmap、代码审查等内部记录，不作为对外主文档入口。
 
 ## 5. 配置使用上的关键规则
 

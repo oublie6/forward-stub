@@ -1,5 +1,7 @@
 # Deployment
 
+> 职责边界：本文负责本地、Docker、Kubernetes 的部署入口和相关清单位置。不维护配置字段全集、日常运维步骤、SkyDDS 协议细节或 runtime 热更新边界；分别见 `docs/configuration.md`、`docs/operations-manual.md`、`docs/skydds.md` 和 `docs/runtime-and-lifecycle.md`。
+
 ## 1. 部署方式总览
 
 仓库提供三类部署路径：

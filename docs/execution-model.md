@@ -1,5 +1,7 @@
 # Task 执行模型配置说明
 
+> 职责边界：本文负责 `fastpath`、`pool`、`channel` 的配置、容量语义、停机行为和选型建议。不说明 selector/task_set 路由、pipeline stage、协议字段或整体热更新流程；分别见 `docs/task-and-dispatch.md`、`docs/pipeline.md`、`docs/receivers-and-senders.md` 和 `docs/runtime-and-lifecycle.md`。
+
 ## 1. 可用配置字段
 
 与 task 执行模型直接相关的字段有：

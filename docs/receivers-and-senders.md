@@ -1,5 +1,7 @@
 # Receiver 与 Sender 配置详解
 
+> 职责边界：本文负责各 receiver / sender 协议类型的有效字段、match key、协议边界和组件行为。不维护全量配置字段表、selector/task 路由规则、runtime 热更新顺序或运维操作；分别见 `docs/configuration.md`、`docs/task-and-dispatch.md`、`docs/runtime-and-lifecycle.md` 和 `docs/operations-manual.md`。
+
 本文从**协议类型**而不是顶层 JSON 结构出发，解释每种 receiver / sender 的有效字段、match key、默认值来源和注意事项。
 
 补充说明：`match_key` 已下沉到 receiver 自身实现。各协议会在初始化阶段把 `match_key.mode` 编译成专用 builder；UDP/TCP/Kafka/SFTP/OSS 都是在各自 receiver 构建阶段完成这件事，避免热路径继续经过统一公共拼接函数。

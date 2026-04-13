@@ -1,5 +1,7 @@
 # 可观测性与相关配置
 
+> 职责边界：本文负责 logging、payload 摘要日志、流量统计、GC 日志、pprof 和观测型排障入口。不维护配置字段全集、操作手册步骤、部署方式或 runtime 生命周期细节；分别见 `docs/configuration.md`、`docs/operations-manual.md`、`docs/deployment.md` 和 `docs/runtime-and-lifecycle.md`。
+
 ## 1. 可观测性入口一览
 
 当前代码内的主要观测手段有：

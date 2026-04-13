@@ -1,5 +1,7 @@
 # forward-stub 标准操作手册
 
+> 职责边界：本文负责启动、重载、停机、巡检、排障和值班检查清单等可执行操作。不维护配置字段全集、协议专属行为、runtime 内部生命周期或部署清单细节；这些内容分别见 `docs/configuration.md`、`docs/receivers-and-senders.md`、`docs/runtime-and-lifecycle.md` 和 `docs/deployment.md`。
+
 > 本手册面向运维、实施、测试、值班与接手维护人员，强调“可直接执行”的操作步骤。内容以当前仓库代码、README、`docs/` 与 `configs/*.json` 为准；若与历史口头经验不一致，应以当前实现和当前文档为准。
 
 ## 1. 文档定位与适用范围
@@ -33,7 +35,6 @@
 - `docs/configuration.md`：字段字典、默认值、校验规则
 - `docs/receivers-and-senders.md`：协议专属字段与行为
 - `docs/runtime-and-lifecycle.md`：默认值生效层次、热重载边界、停机顺序
-- `docs/runtime-sequence-and-flow.md`：启动、转发、热重载、停机时序
 - 本手册：**操作步骤、判断标准、巡检方法、排障流程**
 
 ## 2. 系统概述
@@ -116,13 +117,17 @@ receiver -> selector -> task(pipeline + sender)
 
 | 文件 | 重点用途 |
 | --- | --- |
+| `docs/architecture.md` | 系统结构与模块职责边界 |
 | `docs/configuration.md` | 配置字段与默认值核对 |
 | `docs/receivers-and-senders.md` | 协议字段与行为核对 |
 | `docs/task-and-dispatch.md` | 路由链路与职责边界核对 |
+| `docs/pipeline.md` | pipeline stage 字段与丢弃语义 |
+| `docs/execution-model.md` | task 执行模型与容量语义 |
 | `docs/observability.md` | 日志、流量统计、GC、pprof 观测 |
 | `docs/runtime-and-lifecycle.md` | 热重载边界、默认值层次 |
-| `docs/runtime-sequence-and-flow.md` | 启动/转发/重载/停机时序 |
-| `docs/operations.md` | 简版运维建议 |
+| `docs/deployment.md` | 本地、Docker、Kubernetes 部署入口 |
+| `docs/skydds.md` | SkyDDS SDK 与 `dds_skydds` 协议接入 |
+| `docs/operations-manual.md` | 标准操作步骤与值班检查清单 |
 
 ### 3.4 日志、pprof、GC、traffic stats 入口说明
 
@@ -878,11 +883,14 @@ curl http://127.0.0.1:6060/debug/pprof/
 ### 13.5 文档索引
 
 - `README.md`
+- `docs/architecture.md`
 - `docs/configuration.md`
 - `docs/receivers-and-senders.md`
 - `docs/task-and-dispatch.md`
+- `docs/pipeline.md`
+- `docs/execution-model.md`
 - `docs/observability.md`
 - `docs/runtime-and-lifecycle.md`
-- `docs/runtime-sequence-and-flow.md`
-- `docs/operations.md`
+- `docs/deployment.md`
+- `docs/skydds.md`
 - `docs/operations-manual.md`

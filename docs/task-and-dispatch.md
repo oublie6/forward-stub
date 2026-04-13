@@ -1,5 +1,7 @@
 # Selector、Task Set、Task 与 Dispatch
 
+> 职责边界：本文负责 selector、task_set、task、dispatch、fan-out 和 route sender 的路由关系。不展开协议字段、pipeline stage 字段、task 执行模型容量细节或 runtime 热更新顺序；分别见 `docs/receivers-and-senders.md`、`docs/pipeline.md`、`docs/execution-model.md` 和 `docs/runtime-and-lifecycle.md`。
+
 ## 1. 配置引用链路
 
 当前配置引用关系固定为：

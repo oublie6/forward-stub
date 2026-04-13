@@ -1,5 +1,7 @@
 # Pipeline 与 Stage 配置说明
 
+> 职责边界：本文负责 pipeline 与当前支持 stage 的字段、约束、处理顺序和丢弃语义。不负责 selector/task 路由、协议接入/发送字段、执行模型选型或配置字段全集；分别见 `docs/task-and-dispatch.md`、`docs/receivers-and-senders.md`、`docs/execution-model.md` 和 `docs/configuration.md`。
+
 ## 1. pipeline 的角色
 
 pipeline 是 task 内部的数据处理链，位于：
