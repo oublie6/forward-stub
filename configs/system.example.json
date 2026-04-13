@@ -28,10 +28,36 @@
     "receiver": {
       "multicore": true,
       "num_event_loop": 8,
-      "payload_log_max_bytes": 256
+      "socket_recv_buffer": 1073741824,
+      "payload_log_max_bytes": 256,
+      "dial_timeout": "10s",
+      "conn_idle_timeout": "30s",
+      "metadata_max_age": "5m",
+      "retry_backoff": "250ms",
+      "session_timeout": "45s",
+      "heartbeat_interval": "3s",
+      "rebalance_timeout": "1m",
+      "balancers": [
+        "cooperative_sticky"
+      ],
+      "auto_commit": true,
+      "auto_commit_interval": "5s",
+      "fetch_max_partition_bytes": 1048576,
+      "isolation_level": "read_uncommitted",
+      "wait_timeout": "500ms",
+      "drain_max_items": 2048,
+      "drain_buffer_bytes": 4194304
     },
     "sender": {
-      "concurrency": 8
+      "concurrency": 8,
+      "socket_send_buffer": 1073741824,
+      "dial_timeout": "10s",
+      "request_timeout": "30s",
+      "retry_timeout": "1m",
+      "retry_backoff": "250ms",
+      "conn_idle_timeout": "30s",
+      "metadata_max_age": "5m",
+      "partitioner": "sticky"
     }
   }
 }

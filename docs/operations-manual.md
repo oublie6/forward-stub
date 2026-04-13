@@ -106,12 +106,7 @@ receiver -> selector -> task(pipeline + sender)
 | --- | --- |
 | `configs/system.example.json` | system 全量示例 |
 | `configs/business.example.json` | business 全量示例 |
-| `configs/minimal.system.example.json` | 最小 system 示例 |
-| `configs/minimal.business.example.json` | 最小 business 示例 |
-| `configs/kafka.business.example.json` | Kafka 专项示例 |
-| `configs/sftp.business.example.json` | SFTP 专项示例 |
-| `configs/udp-tcp.business.example.json` | UDP/TCP 专项示例 |
-| `configs/task-models.business.example.json` | 三种 task 执行模型示例 |
+| `configs/bench.example.json` | benchmark / 压测专用示例，不属于运行时主配置 |
 
 ### 3.3 docs 目录关键文档
 
@@ -224,12 +219,12 @@ nc -vz 127.0.0.1 22
 | `-system-config` | system 配置路径 |
 | `-business-config` | business 配置路径 |
 
-### 5.3 最小启动示例
+### 5.3 主示例启动命令
 
 ```bash
 ./bin/forward-stub \
-  -system-config ./configs/minimal.system.example.json \
-  -business-config ./configs/minimal.business.example.json
+  -system-config ./configs/system.example.json \
+  -business-config ./configs/business.example.json
 ```
 
 ### 5.5 如何判断启动成功

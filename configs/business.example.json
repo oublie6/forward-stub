@@ -1,10 +1,13 @@
 {
-  "version": 1001,
+  "version": 20260413,
   "receivers": {
     "rx_udp_ingress": {
       "type": "udp_gnet",
       "listen": "0.0.0.0:19000",
-      "selector": "sel_ingress",
+      "selector": "sel_network_ingress",
+      "match_key": {
+        "mode": "remote_addr"
+      },
       "multicore": true,
       "num_event_loop": 8,
       "read_buffer_cap": 2097152,
@@ -16,12 +19,17 @@
     "rx_tcp_ingress": {
       "type": "tcp_gnet",
       "listen": "0.0.0.0:19001",
+      "selector": "sel_network_ingress",
+      "match_key": {
+        "mode": "remote_ip"
+      },
       "multicore": true,
       "num_event_loop": 4,
       "read_buffer_cap": 1048576,
       "socket_recv_buffer": 1073741824,
       "frame": "u16be",
-      "selector": "sel_ingress"
+      "log_payload_recv": false,
+      "payload_log_max_bytes": 128
     },
     "rx_kafka_orders": {
       "type": "kafka",
@@ -47,6 +55,7 @@
       "heartbeat_interval": "3s",
       "rebalance_timeout": "1m",
       "balancers": [
+        "range",
         "cooperative_sticky"
       ],
       "auto_commit": true,
@@ -59,24 +68,120 @@
       "log_payload_recv": true,
       "payload_log_max_bytes": 512
     },
-    "rx_sftp_input": {
+    "rx_sftp_files": {
       "type": "sftp",
       "listen": "127.0.0.1:22",
-      "selector": "sel_sftp_input",
+      "selector": "sel_file_ingress",
+      "match_key": {
+        "mode": "filename"
+      },
       "username": "demo",
       "password": "demo-pass",
-      "remote_dir": "/input",
-      "poll_interval_sec": 3,
+      "remote_dir": "/incoming",
+      "poll_interval_sec": 5,
       "chunk_size": 65536,
       "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A",
-      "log_payload_recv": false
+      "log_payload_recv": false,
+      "payload_log_max_bytes": 256
+    },
+    "rx_oss_files": {
+      "type": "oss",
+      "selector": "sel_file_ingress",
+      "match_key": {
+        "mode": "remote_path"
+      },
+      "endpoint": "minio.example.com:9000",
+      "bucket": "incoming",
+      "region": "us-east-1",
+      "access_key": "demo-ak",
+      "secret_key": "demo-sk",
+      "use_ssl": false,
+      "force_path_style": true,
+      "prefix": "raw/",
+      "poll_interval_sec": 5,
+      "chunk_size": 65536,
+      "log_payload_recv": false,
+      "payload_log_max_bytes": 256
+    },
+    "rx_skydds_octet": {
+      "type": "dds_skydds",
+      "selector": "sel_skydds_ingress",
+      "match_key": {
+        "mode": "fixed",
+        "fixed_value": "skydds-octet"
+      },
+      "dcps_config_file": "./third_party/skydds/sdk/etc/dds_tcp_conf.ini",
+      "domain_id": 0,
+      "topic_name": "pdxpInputTopic",
+      "message_model": "octet",
+      "wait_timeout": "5ms",
+      "drain_max_items": 512,
+      "drain_buffer_bytes": 4194304,
+      "log_payload_recv": false,
+      "payload_log_max_bytes": 256
+    },
+    "rx_skydds_batch": {
+      "type": "dds_skydds",
+      "selector": "sel_skydds_ingress",
+      "match_key": {
+        "mode": "fixed",
+        "fixed_value": "skydds-batch"
+      },
+      "dcps_config_file": "./third_party/skydds/sdk/etc/dds_tcp_conf.ini",
+      "domain_id": 0,
+      "topic_name": "pdxpBatchInputTopic",
+      "message_model": "batch_octet",
+      "wait_timeout": "5ms",
+      "drain_max_items": 1024,
+      "drain_buffer_bytes": 4194304,
+      "log_payload_recv": false,
+      "payload_log_max_bytes": 256
+    },
+    "rx_local_timer_monitor": {
+      "type": "local_timer",
+      "selector": "sel_local_timer",
+      "match_key": {
+        "mode": "fixed",
+        "fixed_value": "chain-monitor"
+      },
+      "generator": {
+        "interval": "500ms",
+        "payload_format": "hex",
+        "payload_data": "01020304aabbccdd",
+        "start_delay": "1s",
+        "total_packets": 0,
+        "remote": "local_timer:chain-monitor",
+        "local": "forward-stub"
+      },
+      "log_payload_recv": false,
+      "payload_log_max_bytes": 128
+    },
+    "rx_local_timer_load": {
+      "type": "local_timer",
+      "selector": "sel_local_timer",
+      "match_key": {
+        "mode": "fixed",
+        "fixed_value": "load-test"
+      },
+      "generator": {
+        "rate_per_sec": 1000,
+        "tick_interval": "100ms",
+        "payload_format": "text",
+        "payload_data": "load-test-fixed-payload",
+        "start_delay": "2s",
+        "total_packets": 100000,
+        "remote": "local_timer:load-test",
+        "local": "forward-stub"
+      },
+      "log_payload_recv": false,
+      "payload_log_max_bytes": 128
     }
   },
   "selectors": {
-    "sel_ingress": {
+    "sel_network_ingress": {
       "matches": {
         "udp|src_addr=10.0.0.10:9000": "ts_realtime",
-        "tcp|src_addr=10.0.0.10:9000": "ts_realtime",
+        "tcp|src_ip=10.0.0.10": "ts_realtime",
         "udp|src_addr=10.0.0.11:9001": "ts_archive"
       },
       "default_task_set": "ts_realtime"
@@ -88,11 +193,26 @@
       },
       "default_task_set": "ts_orders_p0"
     },
-    "sel_sftp_input": {
+    "sel_file_ingress": {
       "matches": {
-        "sftp|remote_dir=/input|file_name=orders.csv": "ts_file_ingest",
-        "sftp|remote_dir=/input|file_name=orders.done": "ts_file_notify"
-      }
+        "sftp|filename=orders.csv": "ts_file_ingest",
+        "oss|remote_path=raw/orders.csv": "ts_file_ingest"
+      },
+      "default_task_set": "ts_file_ingest"
+    },
+    "sel_skydds_ingress": {
+      "matches": {
+        "dds_skydds|fixed=skydds-octet": "ts_skydds_octet",
+        "dds_skydds|fixed=skydds-batch": "ts_skydds_batch"
+      },
+      "default_task_set": "ts_skydds_octet"
+    },
+    "sel_local_timer": {
+      "matches": {
+        "local|fixed=chain-monitor": "ts_chain_monitor",
+        "local|fixed=load-test": "ts_load_test"
+      },
+      "default_task_set": "ts_chain_monitor"
     }
   },
   "task_sets": {
@@ -112,14 +232,23 @@
       "task_order_forward"
     ],
     "ts_file_ingest": [
-      "task_send_sftp"
+      "task_file_archive"
     ],
-    "ts_file_notify": [
-      "task_fixed_kafka"
+    "ts_skydds_octet": [
+      "task_skydds_octet_forward"
+    ],
+    "ts_skydds_batch": [
+      "task_skydds_batch_forward"
+    ],
+    "ts_chain_monitor": [
+      "task_chain_monitor"
+    ],
+    "ts_load_test": [
+      "task_load_test"
     ]
   },
   "senders": {
-    "tx_udp": {
+    "tx_udp_primary": {
       "type": "udp_unicast",
       "remote": "127.0.0.1:21000",
       "frame": "",
@@ -128,7 +257,7 @@
       "local_ip": "0.0.0.0",
       "local_port": 20000
     },
-    "tx_multicast": {
+    "tx_udp_multicast": {
       "type": "udp_multicast",
       "remote": "239.10.10.10:22000",
       "frame": "",
@@ -140,7 +269,7 @@
       "ttl": 1,
       "loop": false
     },
-    "tx_tcp": {
+    "tx_tcp_downstream": {
       "type": "tcp_gnet",
       "remote": "127.0.0.1:21002",
       "frame": "u16be",
@@ -153,7 +282,7 @@
       "frame": "",
       "concurrency": 8,
       "socket_send_buffer": 1073741824,
-      "topic": "output-topic",
+      "topic": "orders-normalized",
       "username": "demo",
       "password": "demo-pass",
       "sasl_mechanism": "PLAIN",
@@ -185,8 +314,14 @@
       "frame": "",
       "concurrency": 2,
       "socket_send_buffer": 1073741824,
-      "topic": "notify-topic",
+      "topic": "file-events",
       "client_id": "forward-stub-tx-fixed",
+      "dial_timeout": "10s",
+      "request_timeout": "30s",
+      "retry_timeout": "1m",
+      "retry_backoff": "250ms",
+      "conn_idle_timeout": "30s",
+      "metadata_max_age": "5m",
       "acks": 1,
       "idempotent": false,
       "retries": 3,
@@ -198,9 +333,9 @@
       "compression": "gzip",
       "compression_level": 1,
       "partitioner": "round_robin",
-      "record_key": "fixed-key"
+      "record_key": "fixed-file-event"
     },
-    "tx_sftp": {
+    "tx_sftp_archive": {
       "type": "sftp",
       "remote": "127.0.0.1:22",
       "frame": "",
@@ -208,12 +343,77 @@
       "socket_send_buffer": 1073741824,
       "username": "demo",
       "password": "demo-pass",
-      "remote_dir": "/output",
+      "remote_dir": "/archive",
       "temp_suffix": ".tmp",
       "host_key_fingerprint": "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A"
+    },
+    "tx_oss_archive": {
+      "type": "oss",
+      "concurrency": 4,
+      "socket_send_buffer": 1073741824,
+      "endpoint": "minio.example.com:9000",
+      "bucket": "archive",
+      "region": "us-east-1",
+      "access_key": "demo-ak",
+      "secret_key": "demo-sk",
+      "use_ssl": false,
+      "force_path_style": true,
+      "key_prefix": "ready",
+      "part_size": 5242880,
+      "storage_class": "STANDARD",
+      "content_type": "application/octet-stream",
+      "notify_on_success": [
+        {
+          "type": "kafka",
+          "remote": "127.0.0.1:9092",
+          "topic": "file-ready",
+          "record_key_source": "transfer_id",
+          "client_id": "forward-stub-oss-ready",
+          "username": "demo",
+          "password": "demo-pass",
+          "sasl_mechanism": "PLAIN",
+          "tls": true,
+          "tls_skip_verify": false,
+          "dial_timeout": "10s",
+          "request_timeout": "30s",
+          "retry_timeout": "1m",
+          "retry_backoff": "250ms",
+          "metadata_max_age": "5m",
+          "conn_idle_timeout": "30s"
+        },
+        {
+          "type": "dds_skydds",
+          "dcps_config_file": "./third_party/skydds/sdk/etc/dds_tcp_conf.ini",
+          "domain_id": 0,
+          "topic_name": "FileReady",
+          "message_model": "octet"
+        }
+      ]
+    },
+    "tx_skydds_octet": {
+      "type": "dds_skydds",
+      "concurrency": 2,
+      "socket_send_buffer": 1073741824,
+      "dcps_config_file": "./third_party/skydds/sdk/etc/dds_tcp_conf.ini",
+      "domain_id": 0,
+      "topic_name": "pdxpOutputTopic",
+      "message_model": "octet"
+    },
+    "tx_skydds_batch": {
+      "type": "dds_skydds",
+      "concurrency": 2,
+      "socket_send_buffer": 1073741824,
+      "dcps_config_file": "./third_party/skydds/sdk/etc/dds_tcp_conf.ini",
+      "domain_id": 0,
+      "topic_name": "pdxpBatchOutputTopic",
+      "message_model": "batch_octet",
+      "batch_num": 64,
+      "batch_size": 262144,
+      "batch_delay": "20ms"
     }
   },
   "pipelines": {
+    "pipe_passthrough": [],
     "pipe_match_and_replace": [
       {
         "type": "match_offset_bytes",
@@ -231,10 +431,39 @@
         "type": "route_offset_bytes_sender",
         "offset": 0,
         "cases": {
-          "01": "tx_udp",
-          "02": "tx_tcp"
+          "01": "tx_udp_primary",
+          "02": "tx_tcp_downstream"
         },
         "default_sender": "tx_kafka_hash"
+      }
+    ],
+    "pipe_file_path_rewrite": [
+      {
+        "type": "set_target_file_path",
+        "value": "raw/orders/incoming.csv"
+      },
+      {
+        "type": "rewrite_target_path_strip_prefix",
+        "prefix": "raw/"
+      },
+      {
+        "type": "rewrite_target_path_add_prefix",
+        "prefix": "orders/2026/"
+      },
+      {
+        "type": "rewrite_target_filename_replace",
+        "old": ".csv",
+        "new": ".ready.csv"
+      },
+      {
+        "type": "rewrite_target_path_regex",
+        "pattern": "^orders/2026/(.*)$",
+        "replacement": "archive/$1"
+      },
+      {
+        "type": "rewrite_target_filename_regex",
+        "pattern": "^(.*)\\.ready\\.csv$",
+        "replacement": "$1.done.csv"
       }
     ]
   },
@@ -242,12 +471,13 @@
     "task_fast_udp": {
       "pool_size": 4096,
       "execution_model": "fastpath",
+      "channel_queue_size": 8192,
       "pipelines": [
         "pipe_match_and_replace"
       ],
       "senders": [
-        "tx_udp",
-        "tx_multicast"
+        "tx_udp_primary",
+        "tx_udp_multicast"
       ],
       "log_payload_send": true,
       "payload_log_max_bytes": 96
@@ -255,15 +485,17 @@
     "task_pool_route": {
       "pool_size": 2048,
       "execution_model": "pool",
+      "channel_queue_size": 8192,
       "pipelines": [
         "pipe_route_sender"
       ],
       "senders": [
-        "tx_udp",
-        "tx_tcp",
+        "tx_udp_primary",
+        "tx_tcp_downstream",
         "tx_kafka_hash"
       ],
-      "log_payload_send": false
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
     },
     "task_channel_archive": {
       "pool_size": 1024,
@@ -273,44 +505,105 @@
         "pipe_match_and_replace"
       ],
       "senders": [
-        "tx_sftp"
+        "tx_sftp_archive"
       ],
       "log_payload_send": true,
       "payload_log_max_bytes": 128
     },
     "task_order_normalize": {
+      "pool_size": 2048,
       "execution_model": "pool",
+      "channel_queue_size": 8192,
       "pipelines": [
         "pipe_match_and_replace"
       ],
       "senders": [
         "tx_kafka_hash"
-      ]
+      ],
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
     },
     "task_order_forward": {
+      "pool_size": 4096,
       "execution_model": "fastpath",
+      "channel_queue_size": 8192,
       "pipelines": [
         "pipe_route_sender"
       ],
       "senders": [
-        "tx_udp",
-        "tx_tcp",
+        "tx_udp_primary",
+        "tx_tcp_downstream",
         "tx_kafka_hash"
-      ]
+      ],
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
     },
-    "task_send_sftp": {
+    "task_file_archive": {
+      "pool_size": 1024,
       "execution_model": "channel",
-      "pipelines": [],
+      "channel_queue_size": 1024,
+      "pipelines": [
+        "pipe_file_path_rewrite"
+      ],
       "senders": [
-        "tx_sftp"
-      ]
-    },
-    "task_fixed_kafka": {
-      "execution_model": "fastpath",
-      "pipelines": [],
-      "senders": [
+        "tx_sftp_archive",
+        "tx_oss_archive",
         "tx_kafka_fixed"
-      ]
+      ],
+      "log_payload_send": true,
+      "payload_log_max_bytes": 256
+    },
+    "task_skydds_octet_forward": {
+      "pool_size": 4096,
+      "execution_model": "fastpath",
+      "channel_queue_size": 8192,
+      "pipelines": [
+        "pipe_passthrough"
+      ],
+      "senders": [
+        "tx_skydds_octet"
+      ],
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
+    },
+    "task_skydds_batch_forward": {
+      "pool_size": 4096,
+      "execution_model": "fastpath",
+      "channel_queue_size": 8192,
+      "pipelines": [
+        "pipe_passthrough"
+      ],
+      "senders": [
+        "tx_skydds_batch"
+      ],
+      "log_payload_send": false,
+      "payload_log_max_bytes": 256
+    },
+    "task_chain_monitor": {
+      "pool_size": 1024,
+      "execution_model": "fastpath",
+      "channel_queue_size": 8192,
+      "pipelines": [
+        "pipe_passthrough"
+      ],
+      "senders": [
+        "tx_udp_primary"
+      ],
+      "log_payload_send": false,
+      "payload_log_max_bytes": 128
+    },
+    "task_load_test": {
+      "pool_size": 4096,
+      "execution_model": "pool",
+      "channel_queue_size": 8192,
+      "pipelines": [
+        "pipe_passthrough"
+      ],
+      "senders": [
+        "tx_udp_primary"
+      ],
+      "log_payload_send": false,
+      "payload_log_max_bytes": 128
     }
   }
 }

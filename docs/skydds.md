@@ -167,8 +167,11 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 
 ## 10. 运行方式
 
-- Octet 示例：`configs/skydds.business.example.json`
-- Batch 示例：`configs/skydds-batch.business.example.json`
+SkyDDS Octet 与 BatchOctet 示例已收口到 `configs/business.example.json` 中的 `dds_skydds` receiver / sender 段落。运行时仍使用同一组双配置入口：
+
+```bash
+./bin/forward-stub -system-config ./configs/system.example.json -business-config ./configs/business.example.json
+```
 
 ## 11. 测试脚本
 

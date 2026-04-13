@@ -719,11 +719,8 @@ Kafka 通知支持 `remote`、`topic`、`record_key_source`、`client_id`、`use
 
 | 需求 | 推荐文件 |
 |---|---|
-| 想看所有字段 | `configs/system.example.json`、`configs/business.example.json` |
-| 想先跑通最小链路 | `configs/minimal.system.example.json` + `configs/minimal.business.example.json` |
-| 只看 UDP/TCP | `configs/udp-tcp.business.example.json` |
-| 只看 Kafka | `configs/kafka.business.example.json` |
-| 只看 SFTP | `configs/sftp.business.example.json` |
-| 只看本地定时造数 | `configs/local-timer.business.example.json` |
-| 只看 task 执行模型 | `configs/task-models.business.example.json` |
-| 只看 benchmark 配置 | `configs/bench.example.json` |
+| 运行时 system 配置完整示例 | `configs/system.example.json` |
+| 运行时 business 配置完整示例 | `configs/business.example.json` |
+| benchmark / 压测参数完整示例 | `configs/bench.example.json` |
+
+场景拆分 example 不再单独维护；UDP/TCP、Kafka、SFTP、OSS、SkyDDS、local_timer、执行模型和 pipeline stage 示例都集中在 `configs/business.example.json`。

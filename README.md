@@ -99,28 +99,13 @@ receiver -> selector -> task(pipeline + sender)
 }
 ```
 
-对应现成文件：
-
-- `configs/minimal.system.example.json`
-- `configs/minimal.business.example.json`
+该片段只作为 README 内的最小说明；仓库内正式示例收口为 `configs/system.example.json` 与 `configs/business.example.json`，其中主示例覆盖完整字段和主要能力组合。
 
 ## 3. 示例配置索引
 
-### 3.1 全量/主示例
-
-- `configs/system.example.json`：**system 全量示例**。覆盖 `control`、`logging`、`business_defaults` 全字段。
-- `configs/business.example.json`：**business 全量示例**。覆盖 receiver / selector / task_set / sender / pipeline / task 全部配置域，并尽量展示不同协议与执行模型。
-
-### 3.2 场景拆分示例
-
-- `configs/minimal.system.example.json` + `configs/minimal.business.example.json`：最小可运行示例。
-- `configs/udp-tcp.business.example.json`：UDP/TCP 接入与转发示例。
-- `configs/kafka.business.example.json`：Kafka receiver / sender 专项示例。
-- `configs/sftp.business.example.json`：SFTP receiver / sender 专项示例。
-- `configs/local-timer.business.example.json`：本地定时固定报文造数示例，包含 1 秒 2 帧链监和 1 秒 N 帧压测。
-- `configs/task-models.business.example.json`：`fastpath` / `pool` / `channel` 三种 task 执行模型示例。
-- `configs/bench.example.json`：benchmark 驱动配置，不属于运行时主配置。
-- `deploy/k8s/`：默认使用 `system.json + business.json` 双配置挂载方式，不再示例单文件 `config.json`。
+- `configs/system.example.json`：**system 全量主示例**。覆盖 `control`、`logging`、`business_defaults` 全字段。
+- `configs/business.example.json`：**business 全量主示例**。覆盖 receiver / selector / task_set / sender / pipeline / task 全部业务域，并集中展示 UDP/TCP、Kafka、SFTP、OSS、SkyDDS、local_timer、route sender、文件路径改写、执行模型和 stage 组合。
+- `configs/bench.example.json`：**benchmark 全量主示例**。只用于 benchmark / 压测驱动参数，不属于运行时 system + business 双配置。
 
 ## 4. 文档索引
 
@@ -189,6 +174,4 @@ CGO_ENABLED=1 go build -tags skydds -o bin/forward-stub .
 ./scripts/skydds/test_loop.sh
 ```
 
-示例配置：
-- Octet: `configs/skydds.business.example.json`
-- Batch: `configs/skydds-batch.business.example.json`
+SkyDDS Octet 与 BatchOctet 配置示例已收口到 `configs/business.example.json` 中的 `dds_skydds` receiver / sender 段落。

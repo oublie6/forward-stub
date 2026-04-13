@@ -13,7 +13,7 @@ go test ./src/config -run SkyDDS -count=1
 go test ./src/receiver -run SkyDDS -count=1
 
 echo "[INFO] octet receiver smoke command"
-echo "./bin/forward-stub -system-config ./configs/minimal.system.example.json -business-config ./configs/skydds.business.example.json"
+echo "./bin/forward-stub -system-config ./configs/system.example.json -business-config ./configs/business.example.json"
 
 echo "[INFO] batch_octet receiver smoke command"
-echo "./bin/forward-stub -system-config ./configs/minimal.system.example.json -business-config ./configs/skydds-batch.business.example.json"
+echo "./bin/forward-stub -system-config ./configs/system.example.json -business-config ./configs/business.example.json"

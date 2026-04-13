@@ -47,8 +47,7 @@ for target in ${TARGETS}; do
   mkdir -p "${WORK_DIR}/configs"
   cp -f configs/system.example.json "${WORK_DIR}/configs/"
   cp -f configs/business.example.json "${WORK_DIR}/configs/"
-  cp -f configs/minimal.system.example.json "${WORK_DIR}/configs/"
-  cp -f configs/minimal.business.example.json "${WORK_DIR}/configs/"
+  cp -f configs/bench.example.json "${WORK_DIR}/configs/"
 
   ARCHIVE_BASE="${APP_NAME}_${VERSION}_${GOOS}_${GOARCH}"
   # Windows 生态优先 zip，其他平台默认 tar.gz。
