@@ -625,13 +625,14 @@ Kafka 通知支持 `remote`、`topic`、`record_key_source`、`client_id`、`use
 | `pool` | `execution_model=pool` | 提交到 ants worker pool | 通用生产场景 |
 | `channel` | `execution_model=channel` | 入有界 channel，由单 worker 顺序处理 | 顺序敏感链路 |
 
-### 11.3 task 校验规则
+### 11.2 task 校验规则
 
 - `senders` 不能为空。
 - `execution_model` 只允许 `fastpath`、`pool`、`channel`。
 - `channel_queue_size` 不能为负数。
 - `pipelines` 中引用的 pipeline 必须存在。
 - `senders` 中引用的 sender 必须存在。
+- route stage 指向的 sender 必须已经出现在当前 task 的 `senders` 列表中；运行态仍出现 miss 时会 warn 并丢弃该 packet。
 
 ## 12. 默认值总表（代码级）
 

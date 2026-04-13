@@ -28,7 +28,8 @@ type UDPUnicastSender struct {
 	nextIdx     atomic.Uint64
 }
 
-// NewUDPUnicastSender 负责该函数对应的核心逻辑，详见实现细节。
+// NewUDPUnicastSender 创建固定本地源端口的 UDP 单播 sender。
+// 构造阶段会提前打开所有分片 socket，避免首包发送时才暴露端口占用问题。
 func NewUDPUnicastSender(name, localIP string, localPort int, remote string, socketSendBuffer, concurrency int) (*UDPUnicastSender, error) {
 	raddr, err := net.ResolveUDPAddr("udp", remote)
 	if err != nil {
@@ -58,21 +59,23 @@ func NewUDPUnicastSender(name, localIP string, localPort int, remote string, soc
 	}
 	for i := 0; i < concurrency; i++ {
 		if err := s.ensureConn(i); err != nil {
+			_ = s.Close(context.Background())
 			return nil, err
 		}
 	}
 	return s, nil
 }
 
-// Name 负责该函数对应的核心逻辑，详见实现细节。
+// Name 返回 sender 配置名。
 func (s *UDPUnicastSender) Name() string { return s.name }
 
-// Key 负责该函数对应的核心逻辑，详见实现细节。
+// Key 返回本地源地址到远端地址的身份键。
 func (s *UDPUnicastSender) Key() string {
 	return fmt.Sprintf("udp_unicast|%s->%s", s.local.String(), s.remote.String())
 }
 
-// Send 负责该函数对应的核心逻辑，详见实现细节。
+// Send 按分片轮询 socket 写出 UDP payload。
+// 正常路径只做一次原子下标递增、一次 atomic load 和一次 Write。
 func (s *UDPUnicastSender) Send(ctx context.Context, p *packet.Packet) error {
 	idx := nextShardIndex(&s.nextIdx, s.shardMask)
 	c := s.conns[idx].Load()
@@ -87,7 +90,7 @@ func (s *UDPUnicastSender) Send(ctx context.Context, p *packet.Packet) error {
 	return err
 }
 
-// Close 负责该函数对应的核心逻辑，详见实现细节。
+// Close 关闭所有分片 socket；允许重复调用。
 func (s *UDPUnicastSender) Close(ctx context.Context) error {
 	for i := 0; i < s.concurrency; i++ {
 		s.locks[i].Lock()
@@ -100,7 +103,7 @@ func (s *UDPUnicastSender) Close(ctx context.Context) error {
 	return nil
 }
 
-// getConn 负责该函数对应的核心逻辑，详见实现细节。
+// getConn 在分片 socket 丢失时串行重建该分片。
 func (s *UDPUnicastSender) getConn(idx int) (*net.UDPConn, error) {
 	s.locks[idx].Lock()
 	defer s.locks[idx].Unlock()
@@ -113,14 +116,14 @@ func (s *UDPUnicastSender) getConn(idx int) (*net.UDPConn, error) {
 	return s.conns[idx].Load(), nil
 }
 
-// ensureConn 负责该函数对应的核心逻辑，详见实现细节。
+// ensureConn 是 ensureConnLocked 的加锁包装，仅用于构造和异常重连路径。
 func (s *UDPUnicastSender) ensureConn(idx int) error {
 	s.locks[idx].Lock()
 	defer s.locks[idx].Unlock()
 	return s.ensureConnLocked(idx)
 }
 
-// ensureConnLocked 负责该函数对应的核心逻辑，详见实现细节。
+// ensureConnLocked 在调用者持有分片锁时创建 UDP socket。
 func (s *UDPUnicastSender) ensureConnLocked(idx int) error {
 	if s.conns[idx].Load() != nil {
 		return nil

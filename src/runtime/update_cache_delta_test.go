@@ -404,6 +404,39 @@ func TestApplyBusinessDeltaUpdatesPayloadLogOptions(t *testing.T) {
 	}
 }
 
+func TestApplyBusinessDeltaKeepsOldPipelineSnapshotWhenSenderBuildFails(t *testing.T) {
+	st := NewStore()
+	st.senders["s1"] = &SenderState{Name: "s1", Cfg: config.SenderConfig{Type: "tcp_gnet", Remote: "127.0.0.1:12345"}, S: &captureSender{testNamedSender: testNamedSender{name: "s1"}}}
+	st.pipelines["p1"] = &CompiledPipeline{Name: "p1", P: &pipeline.Pipeline{Name: "p1"}}
+	st.pipelineCfg = map[string][]config.StageConfig{"p1": {{Type: "match_offset_bytes", Offset: 0, Hex: "aa"}}}
+	st.pipelineStageSigs = map[string][]string{"p1": {`{"type":"match_offset_bytes","offset":0,"hex":"aa"}`}}
+	st.selectors["sel1"] = config.SelectorConfig{DefaultTaskSet: "ts1"}
+	st.taskSets["ts1"] = []string{"t1"}
+	st.receivers["r1"] = &ReceiverState{Name: "r1", SelectorName: "sel1", Cfg: config.ReceiverConfig{Type: "udp_gnet", Listen: ":1", Selector: "sel1"}}
+	if err := st.addTask("t1", config.TaskConfig{Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}, config.LoggingConfig{}, nil); err != nil {
+		t.Fatalf("add initial task: %v", err)
+	}
+
+	cfg := config.Config{
+		Version:   2,
+		Receivers: map[string]config.ReceiverConfig{"r1": {Type: "udp_gnet", Listen: ":1", Selector: "sel1"}},
+		Selectors: map[string]config.SelectorConfig{"sel1": {DefaultTaskSet: "ts1"}},
+		TaskSets:  map[string][]string{"ts1": {"t1"}},
+		Senders:   map[string]config.SenderConfig{"s1": {Type: "unsupported"}},
+		Pipelines: map[string][]config.StageConfig{"p1": {{Type: "match_offset_bytes", Offset: 0, Hex: "bb"}}},
+		Tasks:     map[string]config.TaskConfig{"t1": {Pipelines: []string{"p1"}, Senders: []string{"s1"}, ExecutionModel: "fastpath"}},
+	}
+	if err := st.applyBusinessDelta(context.Background(), cfg); err == nil {
+		t.Fatalf("expected sender build failure")
+	}
+	if got := st.pipelineCfg["p1"][0].Hex; got != "aa" {
+		t.Fatalf("pipeline snapshot should remain old after failed delta, got %s", got)
+	}
+	if got := st.senders["s1"].Cfg.Type; got != "tcp_gnet" {
+		t.Fatalf("sender snapshot should remain old after failed delta, got %s", got)
+	}
+}
+
 // TestPlanBusinessDeltaTreatsReceiverMatchKeyChangeAsRebuild 验证 match key 配置变化会触发 receiver 重建。
 func TestPlanBusinessDeltaTreatsReceiverMatchKeyChangeAsRebuild(t *testing.T) {
 	oldReceivers := map[string]config.ReceiverConfig{

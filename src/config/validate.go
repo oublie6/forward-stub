@@ -49,6 +49,17 @@ func (c *Config) Validate() error {
 		return errors.New("control pprof_port must be in [-1,65535]")
 	}
 
+	for pn, stages := range c.Pipelines {
+		if strings.TrimSpace(pn) == "" {
+			return errors.New("pipeline name empty")
+		}
+		for i, sc := range stages {
+			if err := validateStageConfig(pn, i, sc); err != nil {
+				return err
+			}
+		}
+	}
+
 	for tn, t := range c.Tasks {
 		if tn == "" {
 			return errors.New("task name empty")

@@ -262,17 +262,22 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	senderChanged := len(senderAdded) > 0 || len(senderRemoved) > 0
 	pipelineChanged := len(pipelineAdded) > 0 || len(pipelineRemoved) > 0
 
+	var nextPipelines map[string]*CompiledPipeline
+	var nextPipelineSigs map[string][]string
 	if pipelineChanged {
-		compiled, sigsByPipeline, err := st.compilePipelinesWithStageCache(cfg.Pipelines)
+		var err error
+		nextPipelines, nextPipelineSigs, err = st.compilePipelinesWithStageCache(cfg.Pipelines)
 		if err != nil {
 			return err
 		}
-		st.mu.Lock()
-		st.pipelines = compiled
-		st.pipelineCfg = clonePipelineConfigMap(cfg.Pipelines)
-		st.pipelineStageSigs = sigsByPipeline
-		st.mu.Unlock()
-		st.gcUnusedStageCache()
+	}
+	var receiverDelta []pendingReceiverState
+	if receiverChanged {
+		var err error
+		receiverDelta, err = st.prepareReceiverDelta(cfg.Receivers, cfg.Logging.Level)
+		if err != nil {
+			return err
+		}
 	}
 
 	if selectorChanged || taskSetChanged {
@@ -288,6 +293,14 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 		if err != nil {
 			return err
 		}
+	}
+	if pipelineChanged {
+		st.mu.Lock()
+		st.pipelines = nextPipelines
+		st.pipelineCfg = clonePipelineConfigMap(cfg.Pipelines)
+		st.pipelineStageSigs = nextPipelineSigs
+		st.mu.Unlock()
+		st.gcUnusedStageCache()
 	}
 
 	removeSet := make(map[string]struct{}, len(taskRemoved))
@@ -321,7 +334,7 @@ func (st *Store) applyBusinessDelta(ctx context.Context, cfg config.Config) erro
 	st.gcUnusedSenders()
 	st.gcUnusedStageCache()
 	if receiverChanged {
-		if err := st.applyReceiverDelta(ctx, cfg.Receivers, cfg.Logging.Level); err != nil {
+		if err := st.commitReceiverDelta(ctx, cfg.Receivers, receiverDelta); err != nil {
 			return err
 		}
 	}
@@ -583,7 +596,7 @@ func taskUsesChangedPipeline(tc config.TaskConfig, changed map[string]struct{}) 
 //
 // 处理要点：
 //  1. 未变更 sender 直接复用；
-//  2. 变更项先创建新 sender，再替换 Store 中引用，最后关闭旧 sender；
+//  2. 所有变更项先在锁外创建成功，再一次性替换 Store 中引用；
 //  3. 对已不存在且引用计数为 0 的 sender 做回收。
 func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLevel string) ([]sender.Sender, error) {
 	st.mu.RLock()
@@ -593,6 +606,20 @@ func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLe
 	}
 	st.mu.RUnlock()
 
+	type builtSender struct {
+		name string
+		cfg  config.SenderConfig
+		s    sender.Sender
+		old  sender.Sender
+	}
+	built := make([]builtSender, 0)
+	closeBuilt := func() {
+		for _, item := range built {
+			if item.s != nil {
+				_ = item.s.Close(context.Background())
+			}
+		}
+	}
 	toClose := make([]sender.Sender, 0)
 	for name, sc := range next {
 		old, ok := oldStates[name]
@@ -601,21 +628,27 @@ func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLe
 		}
 		s, err := buildSender(name, sc, gnetLogLevel)
 		if err != nil {
+			closeBuilt()
 			return nil, err
 		}
-		st.mu.Lock()
-		refs := 0
-		if cur, ok := st.senders[name]; ok {
-			refs = cur.Refs
-		}
-		st.senders[name] = &SenderState{Name: name, Cfg: sc, S: s, Refs: refs}
-		st.mu.Unlock()
+		item := builtSender{name: name, cfg: sc, s: s}
 		if ok {
-			toClose = append(toClose, old.S)
+			item.old = old.S
 		}
+		built = append(built, item)
 	}
 
 	st.mu.Lock()
+	for _, item := range built {
+		refs := 0
+		if cur, ok := st.senders[item.name]; ok {
+			refs = cur.Refs
+		}
+		st.senders[item.name] = &SenderState{Name: item.name, Cfg: item.cfg, S: item.s, Refs: refs}
+		if item.old != nil {
+			toClose = append(toClose, item.old)
+		}
+	}
 	for name, old := range st.senders {
 		if _, ok := next[name]; ok {
 			continue
@@ -629,13 +662,14 @@ func (st *Store) applySenderDelta(next map[string]config.SenderConfig, gnetLogLe
 	return toClose, nil
 }
 
-// applyReceiverDelta 增量更新 receiver 集合。
-//
-// 处理要点：
-//  1. 对新增或变更 receiver 先构建并启动新实例，再停止旧实例；
-//  2. 清理已删除 receiver 的订阅与运行时统计；
-//  3. 最后刷新 receiver payload 日志配置快照。
-func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.ReceiverConfig, gnetLogLevel string) error {
+type pendingReceiverState struct {
+	state *ReceiverState
+	old   *ReceiverState
+}
+
+// prepareReceiverDelta 在发布任何运行态快照前构建新增/变更 receiver。
+// 这样可预期的构建错误会在冷路径提前返回，不会污染当前生效的 Store。
+func (st *Store) prepareReceiverDelta(next map[string]config.ReceiverConfig, gnetLogLevel string) ([]pendingReceiverState, error) {
 	st.mu.RLock()
 	oldStates := make(map[string]*ReceiverState, len(st.receivers))
 	for n, rs := range st.receivers {
@@ -643,6 +677,36 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 	}
 	st.mu.RUnlock()
 
+	built := make([]pendingReceiverState, 0)
+	for name, rc := range next {
+		old, ok := oldStates[name]
+		if ok && reflect.DeepEqual(old.Cfg, rc) {
+			continue
+		}
+		r, err := buildReceiver(name, rc, gnetLogLevel)
+		if err != nil {
+			return nil, err
+		}
+		rs := &ReceiverState{
+			Name:           name,
+			Cfg:            rc,
+			Recv:           r,
+			LogPayloadRecv: rc.LogPayloadRecv,
+			PayloadLogMax:  payloadLogMaxBytes(rc.PayloadLogMaxBytes, st.loggingPayloadLogMaxBytes()),
+			SelectorName:   rc.Selector,
+		}
+		built = append(built, pendingReceiverState{state: rs, old: old})
+	}
+	return built, nil
+}
+
+// commitReceiverDelta 增量更新 receiver 集合。
+//
+// 处理要点：
+//  1. 对新增或变更 receiver 先构建并启动新实例，再停止旧实例；
+//  2. 清理已删除 receiver 的订阅与运行时统计；
+//  3. 最后刷新 receiver payload 日志配置快照。
+func (st *Store) commitReceiverDelta(ctx context.Context, next map[string]config.ReceiverConfig, built []pendingReceiverState) error {
 	st.mu.Lock()
 	for name, rs := range st.receivers {
 		if _, ok := next[name]; ok {
@@ -653,36 +717,30 @@ func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.
 	}
 	st.mu.Unlock()
 
-	for name, rc := range next {
-		old, ok := oldStates[name]
-		if ok && reflect.DeepEqual(old.Cfg, rc) {
-			continue
-		}
-		r, err := buildReceiver(name, rc, gnetLogLevel)
-		if err != nil {
-			return err
-		}
-		rs := &ReceiverState{
-			Name:           name,
-			Cfg:            rc,
-			Recv:           r,
-			LogPayloadRecv: rc.LogPayloadRecv,
-			PayloadLogMax:  payloadLogMaxBytes(rc.PayloadLogMaxBytes, st.loggingPayloadLogMaxBytes()),
-			SelectorName:   rc.Selector,
-		}
+	for _, item := range built {
+		rs := item.state
 		st.mu.Lock()
-		st.receivers[name] = rs
+		st.receivers[rs.Name] = rs
 		st.mu.Unlock()
 		if err := st.rebuildReceiverSelectors(); err != nil {
 			return err
 		}
 		startAck := st.startReceiver(ctx, rs)
 		<-startAck
-		if ok && old != nil && old.Recv != nil {
-			_ = old.Recv.Stop(ctx)
+		if item.old != nil && item.old.Recv != nil {
+			_ = item.old.Recv.Stop(ctx)
 		}
 	}
 	return nil
+}
+
+// applyReceiverDelta 保留给测试和局部调用：先预构建，再提交。
+func (st *Store) applyReceiverDelta(ctx context.Context, next map[string]config.ReceiverConfig, gnetLogLevel string) error {
+	built, err := st.prepareReceiverDelta(next, gnetLogLevel)
+	if err != nil {
+		return err
+	}
+	return st.commitReceiverDelta(ctx, next, built)
 }
 
 // startReceiver 异步启动单个 receiver。

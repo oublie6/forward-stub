@@ -8,7 +8,8 @@ import (
 	"forward-stub/src/packet"
 )
 
-// MatchOffsetBytes 负责该函数对应的核心逻辑，详见实现细节。
+// MatchOffsetBytes 在 payload 固定偏移处做字节匹配。
+// 匹配值会在编译阶段预处理，热路径只做边界检查和定长比较。
 func MatchOffsetBytes(offset int, want []byte) StageFunc {
 	if offset < 0 {
 		return mapStage(func(*packet.Packet) bool { return false })
@@ -49,7 +50,8 @@ func buildOffsetMatcher(want []byte) func([]byte) bool {
 	}
 }
 
-// ReplaceOffsetBytes 负责该函数对应的核心逻辑，详见实现细节。
+// ReplaceOffsetBytes 在 payload 固定偏移处原地覆盖字节。
+// 该 stage 不扩容、不分配；越界时返回 false 终止当前 pipeline。
 func ReplaceOffsetBytes(offset int, with []byte) StageFunc {
 	if offset < 0 {
 		return mapStage(func(*packet.Packet) bool { return false })

@@ -17,7 +17,7 @@ type ConfigAPIClient struct {
 	client  *http.Client
 }
 
-// NewConfigAPIClient 负责该函数对应的核心逻辑，详见实现细节。
+// NewConfigAPIClient 创建只拉取 business 配置的远端配置客户端。
 func NewConfigAPIClient(baseURL string, timeoutSeconds int) *ConfigAPIClient {
 	return &ConfigAPIClient{
 		baseURL: baseURL,
