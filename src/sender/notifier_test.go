@@ -84,10 +84,10 @@ func (n orderedNotifier) Close(context.Context) error {
 	return nil
 }
 
-func TestNotifyFileReadyCallsAllNotifiersAndJoinsFailures(t *testing.T) {
+func TestNotifyOSSCommitSuccessCallsAllNotifiersAndJoinsFailures(t *testing.T) {
 	var calls []int
 	errBoom := errors.New("boom")
-	err := notifyFileReady(context.Background(), []FileReadyNotifier{
+	err := notifyOSSCommitSuccess(context.Background(), []FileReadyNotifier{
 		orderedNotifier{id: 1, calls: &calls},
 		orderedNotifier{id: 2, calls: &calls, err: errBoom},
 		orderedNotifier{id: 3, calls: &calls},
@@ -103,7 +103,7 @@ func TestNotifyFileReadyCallsAllNotifiersAndJoinsFailures(t *testing.T) {
 	}
 }
 
-func TestBuildFileReadyNotifiersClosesAlreadyBuiltOnLaterFailure(t *testing.T) {
+func TestBuildOSSCommitNotifiersClosesAlreadyBuiltOnLaterFailure(t *testing.T) {
 	oldSkyFactory := skyddsCommitWriterFactory
 	defer func() { skyddsCommitWriterFactory = oldSkyFactory }()
 
@@ -112,7 +112,7 @@ func TestBuildFileReadyNotifiersClosesAlreadyBuiltOnLaterFailure(t *testing.T) {
 		return closeCountingSkyDDSWriter{closed: &closed}, nil
 	}
 
-	_, err := buildFileReadyNotifiers(config.NotifyOnSuccessConfigs{
+	_, err := buildOSSCommitNotifiers(config.NotifyOnSuccessConfigs{
 		{Type: "dds_skydds", DCPSConfigFile: "dds.ini", DomainID: 0, TopicName: "ready", MessageModel: "octet"},
 		{Type: "unknown"},
 	})

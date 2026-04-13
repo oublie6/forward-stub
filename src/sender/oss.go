@@ -55,7 +55,7 @@ var errOSSPendingLimitExceeded = errors.New("oss sender pending out-of-order chu
 //  1. 每个 transfer_id 创建一个 multipart upload session；
 //  2. chunk 可乱序到达，连续区间进入 pendingPartBuffer，空洞后的区间进入有界 pendingSegments；
 //  3. pendingPartBuffer 达到 part_size 后上传一个 part；
-//  4. EOF 且覆盖区间完整后上传尾 part、complete 对象并触发通知。
+//  4. EOF 且覆盖区间完整后上传尾 part、complete 对象并触发 OSS commit success 通知。
 type OSSSender struct {
 	name         string
 	endpoint     string
@@ -133,7 +133,7 @@ func NewOSSSender(name string, sc config.SenderConfig) (*OSSSender, error) {
 	if err != nil {
 		return nil, err
 	}
-	notifiers, err := buildFileReadyNotifiers(sc.NotifyOnSuccess)
+	notifiers, err := buildOSSCommitNotifiers(sc.NotifyOnSuccess)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +291,7 @@ func (s *OSSSender) driveOSSUpload(ctx context.Context, transferID string, st *o
 				delete(s.states, transferID)
 			}
 			s.mu.Unlock()
-			if err := notifyFileReady(ctx, s.notifiers, ossFileReadyEvent(p, s.name, s.endpoint, s.bucket, op.objectKey)); err != nil {
+			if err := notifyOSSCommitSuccess(ctx, s.notifiers, ossFileReadyEvent(p, s.name, s.endpoint, s.bucket, op.objectKey)); err != nil {
 				// TODO: 在这里接入通知 outbox / 持久化补发表。对象已经 complete 成功，不能再保留 multipart 未完成状态。
 				logx.L().Errorw("OSS对象已complete成功，通知失败", "发送端", s.name, "bucket", s.bucket, "key", op.objectKey, "错误", err)
 				return fmt.Errorf("oss sender object completed but notify failed: %w", err)

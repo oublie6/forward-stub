@@ -208,7 +208,7 @@ type LocalGeneratorConfig struct {
 	Local string `json:"local,omitempty"`
 }
 
-// NotifyOnSuccessConfigs 描述 sender 文件提交成功后的后置通知配置列表。
+// NotifyOnSuccessConfigs 描述 OSS sender commit success 后的后置通知配置列表。
 // 兼容单对象与数组两种 JSON 写法，便于第一版从单通知平滑扩展为多通知。
 type NotifyOnSuccessConfigs []NotifyOnSuccessConfig
 
@@ -234,7 +234,7 @@ func (n *NotifyOnSuccessConfigs) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// NotifyOnSuccessConfig 描述文件型 sender commit success 后的通知动作。
+// NotifyOnSuccessConfig 描述 OSS sender commit success 后的通知动作。
 type NotifyOnSuccessConfig struct {
 	Type            string `json:"type"`
 	Remote          string `json:"remote,omitempty"`
@@ -574,8 +574,8 @@ type SenderConfig struct {
 	PartSize       int64  `json:"part_size,omitempty"`
 	StorageClass   string `json:"storage_class,omitempty"`
 	ContentType    string `json:"content_type,omitempty"`
-	// NotifyOnSuccess 是文件型 sender commit success 后的后置通知配置。
-	// 用法：仅 sftp/oss 文件提交成功后触发，不参与 task 普通 sender fan-out。
+	// NotifyOnSuccess 是 OSS sender CompleteMultipartUpload 成功后的后置通知配置。
+	// 用法：仅 Type=oss 时允许配置，不参与 task 普通 sender fan-out。
 	NotifyOnSuccess NotifyOnSuccessConfigs `json:"notify_on_success,omitempty"`
 }
 

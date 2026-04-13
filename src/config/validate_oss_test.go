@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -119,5 +120,85 @@ func TestValidateOSSSenderNotifyOnSuccessKafkaAndSkyDDS(t *testing.T) {
 	err := cfg.Validate()
 	if err == nil || !strings.Contains(err.Error(), "record_key_source unsupported") {
 		t.Fatalf("expected unsupported notify record_key_source error, got: %v", err)
+	}
+}
+
+func TestValidateOSSSenderNotifyOnSuccessSingleObjectJSON(t *testing.T) {
+	raw := []byte(`{
+		"type": "oss",
+		"endpoint": "minio.example.com:9000",
+		"bucket": "out",
+		"access_key": "ak",
+		"secret_key": "sk",
+		"part_size": 5242880,
+		"notify_on_success": {"type":"kafka","remote":"127.0.0.1:9092","topic":"file-ready"}
+	}`)
+	var s SenderConfig
+	if err := json.Unmarshal(raw, &s); err != nil {
+		t.Fatalf("unmarshal single notify object: %v", err)
+	}
+	cfg := ossSenderBaseConfig()
+	cfg.Senders["oss"] = s
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected single notify object valid for oss sender: %v", err)
+	}
+}
+
+func TestValidateNotifyOnSuccessRejectsNonOSSSenders(t *testing.T) {
+	tests := []struct {
+		name       string
+		senderName string
+		sender     SenderConfig
+		wantType   string
+	}{
+		{
+			name:       "sftp",
+			senderName: "sftp-out",
+			sender: SenderConfig{
+				Type:               "sftp",
+				Remote:             "127.0.0.1:22",
+				Username:           "u",
+				Password:           "p",
+				RemoteDir:          "/out",
+				HostKeyFingerprint: "SHA256:W5M5Qf3jQ8jD8I2LqzY9zT6QfPj1O9g3k8xw0Jm9r3A",
+				NotifyOnSuccess:    NotifyOnSuccessConfigs{{Type: "kafka", Remote: "127.0.0.1:9092", Topic: "file-ready"}},
+			},
+			wantType: "sftp",
+		},
+		{
+			name:       "tcp_gnet",
+			senderName: "tcp-out",
+			sender: SenderConfig{
+				Type:            "tcp_gnet",
+				Remote:          "127.0.0.1:9001",
+				NotifyOnSuccess: NotifyOnSuccessConfigs{{Type: "kafka", Remote: "127.0.0.1:9092", Topic: "file-ready"}},
+			},
+			wantType: "tcp_gnet",
+		},
+		{
+			name:       "unknown",
+			senderName: "custom-out",
+			sender: SenderConfig{
+				Type:            "custom_file",
+				NotifyOnSuccess: NotifyOnSuccessConfigs{{Type: "kafka", Remote: "127.0.0.1:9092", Topic: "file-ready"}},
+			},
+			wantType: "custom_file",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := ossSenderBaseConfig()
+			cfg.Senders = map[string]SenderConfig{tt.senderName: tt.sender}
+			cfg.Tasks["t1"] = TaskConfig{Pipelines: []string{"p1"}, Senders: []string{tt.senderName}}
+			err := cfg.Validate()
+			if err == nil {
+				t.Fatalf("expected notify_on_success scope error")
+			}
+			msg := err.Error()
+			if !strings.Contains(msg, "sender "+tt.senderName) || !strings.Contains(msg, "type "+tt.wantType) || !strings.Contains(msg, "notify_on_success only supports oss") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	}
 }

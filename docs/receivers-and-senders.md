@@ -124,6 +124,7 @@
 - 对每个对象调用 `GetObject` 流式读取，并按 `chunk_size` 输出 `file_chunk`；`chunk_size` 可省略或配置为 `0`，运行时默认 64 KiB，若显式配置小于 1024 会自动抬升到 1024。
 - packet meta 会写入 `ProtoOSS`、`Remote=object key`、`Local=bucket@endpoint`、`FileName=path.Base(key)`、`FilePath=key`、`TransferID=bucket|key|size|etag`。
 - 去重指纹包含 `key + size + last_modified + etag`，避免只按对象名导致覆盖对象漏处理。
+- 当前 OSS receiver 是轮询驱动；Kafka / SkyDDS `file_ready` 通知驱动拉取对象的 receiver 扩展点尚未落地。后续应在 OSS receiver 侧增加通知订阅入口，并复用现有 `GetObject -> file_chunk` 处理链路。
 
 ### 1.6 SkyDDS receiver
 
@@ -249,7 +250,7 @@
 - sender 会先把 chunk 写入临时文件，直到收到 EOF 且写满总长度后再 rename 为正式文件。
 - 如果 packet 带了 `checksum`，sender 会先做校验，不一致会直接报错。
 - sender 优先使用 `TargetFilePath`，为空时回退 `FilePath`，再回退 `FileName`；最终路径会清洗为安全相对路径并拼到 `remote_dir` 下。
-- 远端 rename 成功后，才会执行 `notify_on_success`。
+- 远端 rename 成功后即完成 SFTP 提交；SFTP sender 不支持 `notify_on_success`。
 
 ### 2.6 OSS sender
 
@@ -285,13 +286,12 @@ object key 生成规则：
 - 通过 C ABI + C++ wrapper 调用 SkyDDS `DataWriter` 写 `OctetMsg` / `BatchOctetMsg`
 - 当 `message_model=batch_octet` 时必须配置 `batch_num`/`batch_size`/`batch_delay`，并按三阈值（条数/字节/等待时长）触发 flush
 
-### 2.8 文件提交成功通知
+### 2.8 OSS commit success 通知
 
-`notify_on_success` 是文件型 sender 的 commit success 后置动作，不是 task 普通 sender fan-out。
+`notify_on_success` 是 OSS sender 的 commit success 后置动作，不是 task 普通 sender fan-out。配置校验只允许 `sender.type=oss` 使用该字段。
 
 触发点：
 
-- SFTP：远端临时文件 rename 为最终文件成功后。
 - OSS：multipart upload complete 成功后。
 
 支持通知类型：
@@ -304,12 +304,11 @@ object key 生成规则：
 - 单对象：`"notify_on_success": {"type":"kafka", ...}`
 - 数组：`"notify_on_success": [{"type":"kafka", ...}, {"type":"dds_skydds", ...}]`
 
-通知事件包含来源协议/路径、目标协议/最终路径、`transfer_id`、文件大小、sender/receiver 名称、ready 时间，以及接收方取文件所需定位信息：
+通知事件包含来源协议/路径、OSS 目标位置、`transfer_id`、文件大小、sender/receiver 名称、ready 时间，以及接收方取对象所需定位信息：
 
-- SFTP：`fetch_protocol=sftp`、`fetch_host`、`fetch_port`、`fetch_path`
-- OSS：`fetch_protocol=oss`、`fetch_endpoint`、`fetch_bucket`、`fetch_key`
+- `fetch_protocol=oss`、`fetch_endpoint`、`fetch_bucket`、`fetch_key`
 
-如果文件已经 commit 成功但通知失败，sender 会返回错误并打印清晰日志；代码中预留了后续持久化补发扩展点。
+如果 OSS 对象已经 commit 成功但通知失败，sender 会返回错误并打印清晰日志；代码中预留了后续持久化补发扩展点。当前 OSS receiver 尚未实现由 Kafka / SkyDDS 通知驱动的拉取入口，不能把该机制理解为 SFTP 通知或通用文件 sender 通知。
 
 ### 2.9 文件名/路径改写 stage
 
@@ -376,4 +375,4 @@ object key 生成规则：
 - Kafka timeout / acks / balancers / key / compression 只对 Kafka 生效。
 - `remote_dir` / `temp_suffix` / `host_key_fingerprint` 只对 SFTP 生效。
 - `endpoint` / `bucket` / `key_prefix` / `part_size` / `storage_class` / `content_type` 只对 OSS 生效。
-- `notify_on_success` 只对文件型 sender 的 commit success 后置通知生效。
+- `notify_on_success` 只对 OSS sender 的 `CompleteMultipartUpload` commit success 后置通知生效。
