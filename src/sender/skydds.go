@@ -33,10 +33,14 @@ type SkyDDSSender struct {
 
 func NewSkyDDSSender(name string, sc config.SenderConfig) (*SkyDDSSender, error) {
 	w, err := skyddsWriterFactory(skydds.CommonOptions{
-		DCPSConfigFile: sc.DCPSConfigFile,
-		DomainID:       sc.DomainID,
-		TopicName:      sc.TopicName,
-		MessageModel:   strings.ToLower(strings.TrimSpace(sc.MessageModel)),
+		DCPSConfigFile:      sc.DCPSConfigFile,
+		DomainID:            sc.DomainID,
+		TopicName:           sc.TopicName,
+		MessageModel:        strings.ToLower(strings.TrimSpace(sc.MessageModel)),
+		Reliable:            sc.Reliable,
+		QueueDepth:          sc.QueueDepth,
+		MaxBlockingTimeMsec: sc.MaxBlockingTimeMsec,
+		Compress:            sc.Compress,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("new skydds writer: %w", err)

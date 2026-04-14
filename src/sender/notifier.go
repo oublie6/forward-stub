@@ -177,10 +177,14 @@ func NewSkyDDSCommitNotifier(nc config.NotifyOnSuccessConfig) (*SkyDDSCommitNoti
 		return nil, fmt.Errorf("skydds commit notifier only supports message_model=octet")
 	}
 	w, err := skyddsCommitWriterFactory(skydds.CommonOptions{
-		DCPSConfigFile: nc.DCPSConfigFile,
-		DomainID:       nc.DomainID,
-		TopicName:      nc.TopicName,
-		MessageModel:   "octet",
+		DCPSConfigFile:      nc.DCPSConfigFile,
+		DomainID:            nc.DomainID,
+		TopicName:           nc.TopicName,
+		MessageModel:        "octet",
+		Reliable:            nc.Reliable,
+		QueueDepth:          nc.QueueDepth,
+		MaxBlockingTimeMsec: nc.MaxBlockingTimeMsec,
+		Compress:            nc.Compress,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("new skydds commit notifier writer: %w", err)

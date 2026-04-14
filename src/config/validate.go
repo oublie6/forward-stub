@@ -212,6 +212,12 @@ func (c *Config) Validate() error {
 			if r.DrainBufferBytes <= 0 {
 				return fmt.Errorf("receiver %s dds_skydds drain_buffer_bytes must be > 0", rn)
 			}
+			if r.QueueDepth < 0 {
+				return fmt.Errorf("receiver %s dds_skydds queue_depth must be >= 0", rn)
+			}
+			if r.MaxBlockingTimeMsec < 0 {
+				return fmt.Errorf("receiver %s dds_skydds max_blocking_time_msec must be >= 0", rn)
+			}
 		case "sftp":
 			if r.Listen == "" {
 				return fmt.Errorf("receiver %s sftp requires listen", rn)
@@ -359,6 +365,12 @@ func (c *Config) Validate() error {
 				if s.BatchNum != 0 || s.BatchSize != 0 || strings.TrimSpace(s.BatchDelay) != "" {
 					return fmt.Errorf("sender %s dds_skydds batch_* only allowed when message_model=batch_octet", sn)
 				}
+			}
+			if s.QueueDepth < 0 {
+				return fmt.Errorf("sender %s dds_skydds queue_depth must be >= 0", sn)
+			}
+			if s.MaxBlockingTimeMsec < 0 {
+				return fmt.Errorf("sender %s dds_skydds max_blocking_time_msec must be >= 0", sn)
 			}
 		case "sftp":
 			if s.Remote == "" {
@@ -623,6 +635,12 @@ func validateNotifyOnSuccess(senderName, senderType string, notifiers NotifyOnSu
 			}
 			if strings.ToLower(strings.TrimSpace(nc.MessageModel)) != "octet" {
 				return fmt.Errorf("%s dds_skydds message_model only supports octet in this version", prefix)
+			}
+			if nc.QueueDepth < 0 {
+				return fmt.Errorf("%s dds_skydds queue_depth must be >= 0", prefix)
+			}
+			if nc.MaxBlockingTimeMsec < 0 {
+				return fmt.Errorf("%s dds_skydds max_blocking_time_msec must be >= 0", prefix)
 			}
 		case "":
 			return fmt.Errorf("%s type required", prefix)

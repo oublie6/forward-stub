@@ -14,6 +14,11 @@ typedef struct skydds_common_options_t {
     int domain_id;
     const char* topic_name;
     const char* message_model;
+    int reliable;
+    int queue_depth;
+    int max_blocking_time_msec;
+    const char* consumer_group;
+    int compress;
 } skydds_common_options_t;
 
 int skydds_writer_open(const skydds_common_options_t* opts, skydds_writer_t** out, char* err, int err_len);

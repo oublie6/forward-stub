@@ -300,10 +300,14 @@ type NotifyOnSuccessConfig struct {
 	MetadataMaxAge  string `json:"metadata_max_age,omitempty"`
 	ConnIdleTimeout string `json:"conn_idle_timeout,omitempty"`
 
-	DCPSConfigFile string `json:"dcps_config_file,omitempty"`
-	DomainID       int    `json:"domain_id,omitempty"`
-	TopicName      string `json:"topic_name,omitempty"`
-	MessageModel   string `json:"message_model,omitempty"`
+	DCPSConfigFile      string `json:"dcps_config_file,omitempty"`
+	DomainID            int    `json:"domain_id,omitempty"`
+	TopicName           string `json:"topic_name,omitempty"`
+	MessageModel        string `json:"message_model,omitempty"`
+	Reliable            bool   `json:"reliable,omitempty"`
+	QueueDepth          int    `json:"queue_depth,omitempty"`
+	MaxBlockingTimeMsec int    `json:"max_blocking_time_msec,omitempty"`
+	Compress            bool   `json:"compress,omitempty"`
 }
 
 // ReceiverConfig 描述单个接收端实例。
@@ -450,6 +454,15 @@ type ReceiverConfig struct {
 	// MessageModel 指定 SkyDDS 消息模型。
 	// 用法：支持 octet 与 batch_octet。
 	MessageModel string `json:"message_model,omitempty"`
+	// Reliable/QueueDepth/MaxBlockingTimeMsec 映射官方 DDSQos。
+	// 用法：仅 Type=dds_skydds 时生效；<=0 的数值字段交给 SDK 默认策略处理。
+	Reliable            bool `json:"reliable,omitempty"`
+	QueueDepth          int  `json:"queue_depth,omitempty"`
+	MaxBlockingTimeMsec int  `json:"max_blocking_time_msec,omitempty"`
+	// ConsumerGroup 指定 SkyDDS 接收消费组，非空时使用 ddsCreateDataReaderOnGroup。
+	ConsumerGroup string `json:"consumer_group,omitempty"`
+	// Compress 透传官方 C wrapper 的 compress 参数。
+	Compress bool `json:"compress,omitempty"`
 	// WaitTimeout 指定 SkyDDS receiver 在无数据时等待通知的最长时间。
 	// 用法：仅 Type=dds_skydds 时生效，需为 >0 的 duration（如 500ms / 5ms / 100us）。
 	WaitTimeout string `json:"wait_timeout,omitempty"`
@@ -578,6 +591,13 @@ type SenderConfig struct {
 	// MessageModel 指定 SkyDDS 消息模型。
 	// 用法：支持 octet 与 batch_octet。
 	MessageModel string `json:"message_model,omitempty"`
+	// Reliable/QueueDepth/MaxBlockingTimeMsec 映射官方 DDSQos。
+	// 用法：仅 Type=dds_skydds 时生效；<=0 的数值字段交给 SDK 默认策略处理。
+	Reliable            bool `json:"reliable,omitempty"`
+	QueueDepth          int  `json:"queue_depth,omitempty"`
+	MaxBlockingTimeMsec int  `json:"max_blocking_time_msec,omitempty"`
+	// Compress 透传官方 C wrapper 的 compress 参数。
+	Compress bool `json:"compress,omitempty"`
 	// BatchNum/BatchSize/BatchDelay 是 SkyDDS BatchOctetMsg 聚合参数。
 	// 用法：仅 message_model=batch_octet 时生效；分别表示单批条数阈值、字节阈值与等待时长阈值。
 	BatchNum   int    `json:"batch_num,omitempty"`

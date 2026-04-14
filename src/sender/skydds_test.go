@@ -88,16 +88,23 @@ func TestNewSkyDDSSenderPassesCommonOptions(t *testing.T) {
 	}
 
 	_, err := NewSkyDDSSender("tx", config.SenderConfig{
-		DCPSConfigFile: "/tmp/dds.ini",
-		DomainID:       3,
-		TopicName:      "T",
-		MessageModel:   "octet",
+		DCPSConfigFile:      "/tmp/dds.ini",
+		DomainID:            3,
+		TopicName:           "T",
+		MessageModel:        "octet",
+		Reliable:            true,
+		QueueDepth:          128,
+		MaxBlockingTimeMsec: 50,
+		Compress:            true,
 	})
 	if err != nil {
 		t.Fatalf("new sender: %v", err)
 	}
 	if got.DCPSConfigFile != "/tmp/dds.ini" || got.DomainID != 3 || got.TopicName != "T" || got.MessageModel != "octet" {
 		t.Fatalf("unexpected writer options: %+v", got)
+	}
+	if !got.Reliable || got.QueueDepth != 128 || got.MaxBlockingTimeMsec != 50 || !got.Compress {
+		t.Fatalf("unexpected writer qos options: %+v", got)
 	}
 }
 

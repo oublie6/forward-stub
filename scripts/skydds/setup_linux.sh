@@ -7,7 +7,7 @@ SDK_DIR="${ROOT_DIR}/third_party/skydds/sdk"
 
 mkdir -p "${PKG_DIR}" "${SDK_DIR}"
 
-if compgen -G "${SDK_DIR}/*" >/dev/null; then
+if find "${SDK_DIR}" -mindepth 1 ! -name .gitkeep -print -quit | grep -q .; then
   echo "[INFO] SDK directory already has content: ${SDK_DIR}"
 else
   shopt -s nullglob
@@ -20,7 +20,11 @@ else
   fi
   pkg="${archives[0]}"
   echo "[INFO] Extracting package: ${pkg}"
-  tar -xzf "${pkg}" -C "${SDK_DIR}" --strip-components=2
+  tar -xzf "${pkg}" -C "${SDK_DIR}" --strip-components=1
+fi
+
+if [[ -f "${SDK_DIR}/lib/libhiredis.so.1.2.1-dev" && ! -e "${SDK_DIR}/lib/libhiredis.so" ]]; then
+  ln -s libhiredis.so.1.2.1-dev "${SDK_DIR}/lib/libhiredis.so"
 fi
 
 echo "[INFO] Setup done. Next step:"

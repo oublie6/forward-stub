@@ -11,10 +11,10 @@ if [[ ! -d "${SDK_DIR}" ]]; then
 fi
 
 export SKY_DDS="${SDK_DIR}"
-export DDS_ROOT="${SDK_DIR}/DDS"
-export ACE_ROOT="${SDK_DIR}/ACE_wrappers"
+export DDS_ROOT="${SDK_DIR}"
+export ACE_ROOT="${SDK_DIR}"
 export TAO_ROOT="${ACE_ROOT}/TAO"
-export LD_LIBRARY_PATH="${DDS_ROOT}/lib:${ACE_ROOT}/lib:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${SDK_DIR}/lib:${LD_LIBRARY_PATH:-}"
 
 echo "[INFO] SKY_DDS=${SKY_DDS}"
 echo "[INFO] DDS_ROOT=${DDS_ROOT}"

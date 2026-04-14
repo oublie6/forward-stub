@@ -76,15 +76,20 @@ func TestNewSkyDDSReceiverPassesCommonOptionsAndKnobs(t *testing.T) {
 	}
 
 	cfg := config.ReceiverConfig{
-		Type:             "dds_skydds",
-		Selector:         "sel",
-		DCPSConfigFile:   "/tmp/dds.ini",
-		DomainID:         1,
-		TopicName:        "topicA",
-		MessageModel:     "octet",
-		WaitTimeout:      "9ms",
-		DrainMaxItems:    11,
-		DrainBufferBytes: 123456,
+		Type:                "dds_skydds",
+		Selector:            "sel",
+		DCPSConfigFile:      "/tmp/dds.ini",
+		DomainID:            1,
+		TopicName:           "topicA",
+		MessageModel:        "octet",
+		Reliable:            true,
+		QueueDepth:          256,
+		MaxBlockingTimeMsec: 75,
+		ConsumerGroup:       "group-a",
+		Compress:            true,
+		WaitTimeout:         "9ms",
+		DrainMaxItems:       11,
+		DrainBufferBytes:    123456,
 	}
 	r, err := NewSkyDDSReceiver("rx", cfg)
 	if err != nil {
@@ -101,6 +106,9 @@ func TestNewSkyDDSReceiverPassesCommonOptionsAndKnobs(t *testing.T) {
 	}
 	if got.DrainBufferBytes != cfg.DrainBufferBytes {
 		t.Fatalf("drain buffer bytes mismatch: got=%d want=%d", got.DrainBufferBytes, cfg.DrainBufferBytes)
+	}
+	if !got.Reliable || got.QueueDepth != 256 || got.MaxBlockingTimeMsec != 75 || got.ConsumerGroup != "group-a" || !got.Compress {
+		t.Fatalf("unexpected reader qos/group options: %+v", got)
 	}
 }
 

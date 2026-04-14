@@ -17,16 +17,16 @@ ARG no_proxy
 COPY . .
 
 RUN set -eux; \
-    rm -rf /workspace/third_party/skydds/sdk/*; \
+    find /workspace/third_party/skydds/sdk -mindepth 1 ! -name .gitkeep -exec rm -rf {} +; \
     /workspace/scripts/skydds/setup_linux.sh; \
     source /workspace/scripts/skydds/env.sh; \
     find /workspace/third_party/skydds/sdk/ -maxdepth 1; \
     CGO_ENABLED=1 GOFLAGS=-mod=vendor go build -trimpath -tags skydds -o /workspace/bin/forward-stub .
 
 ENV SKY_DDS=/workspace/third_party/skydds/sdk \
-    DDS_ROOT=/workspace/third_party/skydds/sdk/DDS \
-    ACE_ROOT=/workspace/third_party/skydds/sdk/ACE_wrappers \
-    TAO_ROOT=/workspace/third_party/skydds/sdk/ACE_wrappers/TAO \
-    LD_LIBRARY_PATH=/workspace/third_party/skydds/sdk/DDS/lib:/workspace/third_party/skydds/sdk/ACE_wrappers/lib
+    DDS_ROOT=/workspace/third_party/skydds/sdk \
+    ACE_ROOT=/workspace/third_party/skydds/sdk \
+    TAO_ROOT=/workspace/third_party/skydds/sdk/TAO \
+    LD_LIBRARY_PATH=/workspace/third_party/skydds/sdk/lib
 
 ENTRYPOINT ["/workspace/bin/forward-stub"]

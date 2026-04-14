@@ -3,10 +3,10 @@
 package skydds
 
 /*
-// Prefer the vendored SkyDDS/ACE/TAO SDK tree to avoid mixing system headers
-// or linker search paths with the SDK-provided userspace baseline.
-#cgo CXXFLAGS: -std=c++17 -I${SRCDIR} -I${SRCDIR}/../../third_party/skydds/sdk/include -I${SRCDIR}/../../third_party/skydds/sdk/ACE_wrappers -I${SRCDIR}/../../third_party/skydds/sdk/ACE_wrappers/TAO -I${SRCDIR}/../../third_party/skydds/sdk/examples/SatelliteBatchMsg
-#cgo LDFLAGS: -L${SRCDIR}/../../third_party/skydds/sdk/lib -L${SRCDIR}/../../third_party/skydds/sdk/DDS/lib -L${SRCDIR}/../../third_party/skydds/sdk/ACE_wrappers/lib -lSkyDDS_Dcps -lSkyDDS_Tcp -lSkyDDS_Rtps_Udp -lSkyDDS_InfoRepoDiscovery -lTAO_PortableServer -lTAO_AnyTypeCode -lTAO -lACE -lSatelliteCommon -ldl -lpthread
+// Prefer the vendored SkyDDS SDK tree to avoid mixing system libraries with
+// the SDK-provided userspace baseline.
+#cgo CFLAGS: -I${SRCDIR} -I${SRCDIR}/../../third_party/skydds/sdk/include
+#cgo LDFLAGS: -L${SRCDIR}/../../third_party/skydds/sdk/lib -lSatelliteDDSWrapper -lSatelliteCommon -lSkyDDS_Dcps -lSkyDDS_Rtps -lSkyDDS_Tcp -lSkyDDS_Rtps_Udp -lACE -lTAO -lTAO_AnyTypeCode -lTAO_PortableServer -ldl -lpthread
 #include <stdlib.h>
 #include "skydds_bridge.h"
 */
@@ -71,7 +71,7 @@ func (w *cgoWriter) Write(payload []byte) error {
 	}
 	var errBuf [512]C.char
 	if code := C.skydds_writer_send(w.ptr, (*C.uint8_t)(unsafe.Pointer(&payload[0])), C.int(len(payload)), &errBuf[0], C.int(len(errBuf))); code != 0 {
-		return fmt.Errorf("skydds writer send failed (code=%d): %s", int(code), C.GoString(&errBuf[0]))
+		return formatCError("skydds writer send failed", code, &errBuf[0])
 	}
 	return nil
 }
@@ -119,7 +119,7 @@ func (w *cgoWriter) WriteBatch(payloads [][]byte) error {
 		&errBuf[0],
 		C.int(len(errBuf)),
 	); code != 0 {
-		return fmt.Errorf("skydds writer send_batch failed (code=%d): %s", int(code), C.GoString(&errBuf[0]))
+		return formatCError("skydds writer send_batch failed", code, &errBuf[0])
 	}
 	return nil
 }
@@ -265,10 +265,15 @@ func (r *cgoReader) Close() error {
 
 func buildCOptions(opts CommonOptions) C.skydds_common_options_t {
 	return C.skydds_common_options_t{
-		dcps_config_file: C.CString(opts.DCPSConfigFile),
-		domain_id:        C.int(opts.DomainID),
-		topic_name:       C.CString(opts.TopicName),
-		message_model:    C.CString(opts.MessageModel),
+		dcps_config_file:       C.CString(opts.DCPSConfigFile),
+		domain_id:              C.int(opts.DomainID),
+		topic_name:             C.CString(opts.TopicName),
+		message_model:          C.CString(opts.MessageModel),
+		reliable:               boolToCInt(opts.Reliable),
+		queue_depth:            C.int(opts.QueueDepth),
+		max_blocking_time_msec: C.int(opts.MaxBlockingTimeMsec),
+		consumer_group:         C.CString(opts.ConsumerGroup),
+		compress:               boolToCInt(opts.Compress),
 	}
 }
 
@@ -276,4 +281,23 @@ func freeCOptions(opts C.skydds_common_options_t) {
 	C.free(unsafe.Pointer(opts.dcps_config_file))
 	C.free(unsafe.Pointer(opts.topic_name))
 	C.free(unsafe.Pointer(opts.message_model))
+	C.free(unsafe.Pointer(opts.consumer_group))
+}
+
+func boolToCInt(v bool) C.int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func formatCError(prefix string, code C.int, err *C.char) error {
+	msg := C.GoString(err)
+	if int(code) == 10 {
+		if msg == "" {
+			msg = "SkyDDS queue full"
+		}
+		return fmt.Errorf("%s: %s (code=10)", prefix, msg)
+	}
+	return fmt.Errorf("%s (code=%d): %s", prefix, int(code), msg)
 }

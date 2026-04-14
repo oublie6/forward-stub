@@ -136,9 +136,9 @@
 - 可选：`wait_timeout`、`drain_max_items`、`drain_buffer_bytes`
   - `wait_timeout`：通知等待超时（duration，默认 `500ms`）
   - `drain_max_items`：每次 drain 拉取上限（正整数，默认 `2048`）
-  - `drain_buffer_bytes`：C++ bridge 单次 drain 的总缓冲上限（正整数，默认 `4194304`）
+  - `drain_buffer_bytes`：native bridge 单次 drain 的总缓冲上限（正整数，默认 `4194304`）
 - `match_key.mode` 仅支持留空（默认 `skydds|topic_name=<topic>`）或 `fixed`
-- 接收模型：C++ DataReader listener 入队并通知，Go 侧 `Wait(wait_timeout)` 被唤醒后执行 `Drain(drain_max_items)`；无论 `octet` 还是 `batch_octet`，进入 runtime 前都逐条 packet 下发。
+- 接收模型：native pump thread 通过官方 `takeDDSMessages` 拉取后入队并通知，Go 侧 `Wait(wait_timeout)` 被唤醒后执行 `Drain(drain_max_items)`；无论 `octet` 还是 `batch_octet`，进入 runtime 前都逐条 packet 下发。
 - 说明：当前主数据面不使用“Go 侧纯轮询 Poll/PollBatch”，也不使用“每条消息 direct callback Go”。
 
 ## 2. Sender：负责最终输出
@@ -285,8 +285,8 @@ object key 生成规则：
 - `type=dds_skydds`
 - 必填：`dcps_config_file`、`domain_id`、`topic_name`、`message_model`
 - `message_model` 支持 `octet` 与 `batch_octet`
-- 通过 C ABI + C++ wrapper 调用 SkyDDS `DataWriter` 写 `OctetMsg` / `BatchOctetMsg`
-- 当 `message_model=batch_octet` 时必须配置 `batch_num`/`batch_size`/`batch_delay`，并按三阈值（条数/字节/等待时长）触发 flush
+- 通过 C ABI + 官方 C wrapper 调用 SkyDDS `ddsWriteMessage`
+- 当 `message_model=batch_octet` 时必须配置 `batch_num`/`batch_size`/`batch_delay`，并按三阈值（条数/字节/等待时长）触发 flush；flush 后 native 层在一次 cgo 调用内循环写入多条 payload
 
 ### 2.8 OSS commit success 通知
 

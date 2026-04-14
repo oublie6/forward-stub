@@ -4,14 +4,19 @@ import "time"
 
 const DefaultDrainBufferBytes = 4 << 20
 
-// CommonOptions 是 Go 层传给 SkyDDS writer/reader 的最小公共配置。
-// DrainBufferBytes 只被 reader drain 使用，用来限制单次 C++ bridge 拷贝到 Go 的总字节数。
+// CommonOptions 是 Go 层传给 SkyDDS writer/reader 的公共配置。
+// DrainBufferBytes 只被 reader drain 使用，用来限制单次 native bridge 拷贝到 Go 的总字节数。
 type CommonOptions struct {
-	DCPSConfigFile   string
-	DomainID         int
-	TopicName        string
-	MessageModel     string
-	DrainBufferBytes int
+	DCPSConfigFile      string
+	DomainID            int
+	TopicName           string
+	MessageModel        string
+	Reliable            bool
+	QueueDepth          int
+	MaxBlockingTimeMsec int
+	ConsumerGroup       string
+	Compress            bool
+	DrainBufferBytes    int
 }
 
 func normalizeDrainBufferBytes(v int) int {
@@ -30,7 +35,7 @@ type Writer interface {
 }
 
 type Reader interface {
-	// Wait 等待 C++ listener 通知或超时；返回 false 表示本轮没有可读数据。
+	// Wait 等待 native 本地队列非空或超时；返回 false 表示本轮没有可读数据。
 	Wait(timeout time.Duration) (bool, error)
 	// Drain 批量拉取已入队 payload，最多返回 maxItems 条。
 	Drain(maxItems int) ([][]byte, error)
