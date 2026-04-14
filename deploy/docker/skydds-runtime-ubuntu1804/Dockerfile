@@ -20,6 +20,7 @@ RUN set -eux; \
     rm -rf /workspace/third_party/skydds/sdk/*; \
     /workspace/scripts/skydds/setup_linux.sh; \
     source /workspace/scripts/skydds/env.sh; \
+    find /workspace/third_party/skydds/sdk/ -maxdepth 1; \
     CGO_ENABLED=1 GOFLAGS=-mod=vendor go build -trimpath -tags skydds -o /workspace/bin/forward-stub .
 
 ENV SKY_DDS=/workspace/third_party/skydds/sdk \

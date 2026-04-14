@@ -20,7 +20,7 @@ else
   fi
   pkg="${archives[0]}"
   echo "[INFO] Extracting package: ${pkg}"
-  tar -xzf "${pkg}" -C "${SDK_DIR}" --strip-components=1
+  tar -xzf "${pkg}" -C "${SDK_DIR}" --strip-components=2
 fi
 
 echo "[INFO] Setup done. Next step:"
