@@ -17,6 +17,24 @@
 - 解压后 SDK 目录：`third_party/skydds/sdk/`
 - 安装包格式：当前仅支持 `*.tar.gz`
 
+### 2.1 安装包 Git LFS 说明
+
+仓库已通过 `.gitattributes` 将 `third_party/skydds/packages/*.tar.gz` 交给 Git LFS 管理。新安装包在该规则已存在的前提下，首次 `git add` 就会按 LFS 生效。
+
+如果某个安装包已经作为普通 Git 文件加入过索引，后续只补 `.gitattributes` 不会自动把它转换成 LFS pointer，必须先从索引移除再重新加入：
+
+```bash
+git lfs install
+git check-attr -a -- third_party/skydds/packages/<package>.tar.gz
+git rm --cached third_party/skydds/packages/<package>.tar.gz
+git add .gitattributes
+git add third_party/skydds/packages/<package>.tar.gz
+git lfs ls-files
+git show :third_party/skydds/packages/<package>.tar.gz | head
+```
+
+验证时，`git check-attr` 应显示 `filter: lfs`、`diff: lfs`、`merge: lfs`；`git lfs ls-files` 应列出该安装包；`git show :... | head` 应显示 LFS pointer 文本，而不是 gzip 二进制内容。
+
 ## 3. 与 PDF 的对应关系
 
 读取文档：`docs/数据分发中间件SkyDDS应用开发接口说明（C）.docx`。
