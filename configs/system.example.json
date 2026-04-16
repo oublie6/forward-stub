@@ -57,7 +57,11 @@
       "retry_backoff": "250ms",
       "conn_idle_timeout": "30s",
       "metadata_max_age": "5m",
-      "partitioner": "sticky"
+      "partitioner": "sticky",
+      "send_mode": "async",
+      "async_queue_size": 8192,
+      "async_backpressure": "block",
+      "close_flush_timeout": "10s"
     }
   }
 }

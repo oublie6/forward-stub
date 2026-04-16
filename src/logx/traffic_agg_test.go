@@ -107,3 +107,30 @@ func TestTrafficSummaryFastPathOmitsPoolAndChannelStats(t *testing.T) {
 		t.Fatalf("fastpath should not expose pool/channel stats: %+v", item)
 	}
 }
+
+func TestTrafficSummaryIncludesAsyncSenderStats(t *testing.T) {
+	stats := TaskRuntimeStats{
+		ExecutionModel: "pool",
+		Async: TaskAsyncStats{
+			QueueSize:      16,
+			QueueUsed:      5,
+			QueueAvailable: 11,
+			Dropped:        2,
+			SendErrors:     3,
+			SendSuccess:    7,
+		},
+	}
+	s := newTrafficSummary(time.Second)
+	s.addRuntimeOnlyTask("task-async", stats)
+	if len(s.Tasks) != 1 {
+		t.Fatalf("expected one runtime-only task, got %d", len(s.Tasks))
+	}
+	item := s.Tasks[0]
+	if item.Async == nil {
+		t.Fatalf("async stats missing: %+v", item)
+	}
+	if item.Async.QueueSize != 16 || item.Async.QueueUsed != 5 || item.Async.QueueAvailable != 11 ||
+		item.Async.Dropped != 2 || item.Async.SendErrors != 3 || item.Async.SendSuccess != 7 {
+		t.Fatalf("unexpected async stats: %+v", item.Async)
+	}
+}

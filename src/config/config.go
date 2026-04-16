@@ -37,6 +37,10 @@ const (
 	DefaultKafkaConnIdleTimeout      = "30s"
 	DefaultKafkaMetadataMaxAge       = "5m"
 	DefaultKafkaSenderPartitioner    = "sticky"
+	DefaultKafkaSenderSendMode       = "async"
+	DefaultKafkaSenderAsyncQueueSize = 8192
+	DefaultKafkaSenderBackpressure   = "block"
+	DefaultKafkaSenderCloseFlushTTL  = "10s"
 	DefaultKafkaReceiverSessionTTL   = "45s"
 	DefaultKafkaReceiverHeartbeat    = "3s"
 	DefaultKafkaReceiverRebalanceTTL = "1m"
@@ -139,15 +143,19 @@ type BusinessReceiverDefaultsConfig struct {
 
 // BusinessSenderDefaultsConfig 是 sender 可继承默认值的窄化 schema。
 type BusinessSenderDefaultsConfig struct {
-	Concurrency      int    `json:"concurrency,omitempty"`
-	SocketSendBuffer int    `json:"socket_send_buffer,omitempty"`
-	DialTimeout      string `json:"dial_timeout,omitempty"`
-	RequestTimeout   string `json:"request_timeout,omitempty"`
-	RetryTimeout     string `json:"retry_timeout,omitempty"`
-	RetryBackoff     string `json:"retry_backoff,omitempty"`
-	ConnIdleTimeout  string `json:"conn_idle_timeout,omitempty"`
-	MetadataMaxAge   string `json:"metadata_max_age,omitempty"`
-	Partitioner      string `json:"partitioner,omitempty"`
+	Concurrency       int    `json:"concurrency,omitempty"`
+	SocketSendBuffer  int    `json:"socket_send_buffer,omitempty"`
+	DialTimeout       string `json:"dial_timeout,omitempty"`
+	RequestTimeout    string `json:"request_timeout,omitempty"`
+	RetryTimeout      string `json:"retry_timeout,omitempty"`
+	RetryBackoff      string `json:"retry_backoff,omitempty"`
+	ConnIdleTimeout   string `json:"conn_idle_timeout,omitempty"`
+	MetadataMaxAge    string `json:"metadata_max_age,omitempty"`
+	Partitioner       string `json:"partitioner,omitempty"`
+	SendMode          string `json:"send_mode,omitempty"`
+	AsyncQueueSize    int    `json:"async_queue_size,omitempty"`
+	AsyncBackpressure string `json:"async_backpressure,omitempty"`
+	CloseFlushTimeout string `json:"close_flush_timeout,omitempty"`
 }
 
 // BusinessConfig 仅包含支持热重载的业务拓扑配置。
@@ -578,6 +586,18 @@ type SenderConfig struct {
 	// RecordKeySource 指定 Kafka record key 的来源字段。
 	// 用法：当前支持 payload / match_key / remote / local / file_name / file_path / transfer_id / route_sender；与 record_key 互斥。
 	RecordKeySource string `json:"record_key_source,omitempty"`
+	// SendMode 控制 Kafka sender 发送模式：async（默认）或 sync。
+	// 用法：async 下 Send 只表示成功入本地队列，真正 broker ack 由异步 callback 统计；sync 下 Send 成功才表示 ProduceSync 成功。
+	SendMode string `json:"send_mode,omitempty"`
+	// AsyncQueueSize 是 Kafka async 模式每个 shard 的本地有界队列容量。
+	// 用法：仅 send_mode=async 时生效；默认 8192。
+	AsyncQueueSize int `json:"async_queue_size,omitempty"`
+	// AsyncBackpressure 控制 Kafka async 队列满时的策略：block 或 error。
+	// 用法：block 会等待入队或 ctx 取消；error 会立即返回并累计 dropped。
+	AsyncBackpressure string `json:"async_backpressure,omitempty"`
+	// CloseFlushTimeout 是 Kafka async Close 时 drain/flush/callback 等待的最长时间。
+	// 用法：仅 send_mode=async 时生效，避免关闭阶段无限阻塞。
+	CloseFlushTimeout string `json:"close_flush_timeout,omitempty"`
 
 	// DCPSConfigFile 是 SkyDDS DCPS 配置文件路径（例如 dds_tcp_conf.ini）。
 	// 用法：Type=dds_skydds 时必填；SkyDDS discovery/transport/qos 等能力由该文件控制。

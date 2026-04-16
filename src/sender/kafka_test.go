@@ -2,8 +2,11 @@ package sender
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -147,5 +150,240 @@ func TestKafkaCompressionCodecAppliesLevel(t *testing.T) {
 	}
 	if compressor, err := kgo.DefaultCompressor(codec); err != nil || compressor == nil {
 		t.Fatalf("expected valid compressor, err=%v", err)
+	}
+}
+
+func TestKafkaSenderDefaultModeIsAsync(t *testing.T) {
+	s, err := NewKafkaSender("k1", config.SenderConfig{
+		Type:        "kafka",
+		Remote:      "127.0.0.1:9092",
+		Topic:       "out",
+		Concurrency: 1,
+	})
+	if err != nil {
+		t.Fatalf("new kafka sender: %v", err)
+	}
+	defer func() { _ = s.Close(context.Background()) }()
+
+	if s.sendMode != "async" {
+		t.Fatalf("send mode=%q want async", s.sendMode)
+	}
+	if s.asyncQueueSize != config.DefaultKafkaSenderAsyncQueueSize {
+		t.Fatalf("async queue size=%d want %d", s.asyncQueueSize, config.DefaultKafkaSenderAsyncQueueSize)
+	}
+}
+
+func TestKafkaSenderAsyncSendEnqueuesAndCallbackStats(t *testing.T) {
+	s := newTestKafkaAsyncSender(1, 4)
+	s.startTestWorkers()
+	defer func() { _ = s.Close(context.Background()) }()
+
+	produced := make(chan struct{}, 1)
+	s.produceAsyncFn = func(_ context.Context, _ int, rec *kgo.Record, cb func(error)) {
+		if string(rec.Value) != "hello" {
+			t.Errorf("record value=%q want hello", rec.Value)
+		}
+		cb(nil)
+		produced <- struct{}{}
+	}
+
+	if err := s.Send(context.Background(), &packet.Packet{Envelope: packet.Envelope{Payload: []byte("hello")}}); err != nil {
+		t.Fatalf("async send enqueue: %v", err)
+	}
+	select {
+	case <-produced:
+	case <-time.After(time.Second):
+		t.Fatal("produce callback not observed")
+	}
+	stats := s.AsyncRuntimeStats()
+	if stats.SendSuccess != 1 || stats.SendErrors != 0 || stats.Dropped != 0 {
+		t.Fatalf("unexpected async stats: %+v", stats)
+	}
+}
+
+func TestKafkaSenderAsyncCallbackErrorStats(t *testing.T) {
+	s := newTestKafkaAsyncSender(1, 4)
+	s.startTestWorkers()
+	defer func() { _ = s.Close(context.Background()) }()
+
+	produced := make(chan struct{}, 1)
+	s.produceAsyncFn = func(_ context.Context, _ int, _ *kgo.Record, cb func(error)) {
+		cb(errors.New("broker rejected"))
+		produced <- struct{}{}
+	}
+	if err := s.Send(context.Background(), &packet.Packet{Envelope: packet.Envelope{Payload: []byte("hello")}}); err != nil {
+		t.Fatalf("async send enqueue: %v", err)
+	}
+	select {
+	case <-produced:
+	case <-time.After(time.Second):
+		t.Fatal("produce callback not observed")
+	}
+	stats := s.AsyncRuntimeStats()
+	if stats.SendErrors != 1 || stats.SendSuccess != 0 {
+		t.Fatalf("unexpected async error stats: %+v", stats)
+	}
+}
+
+func TestKafkaSenderSyncModeUsesProduceSync(t *testing.T) {
+	s := &KafkaSender{
+		name:        "k1",
+		topic:       "out",
+		concurrency: 1,
+		clients:     make([]atomic.Pointer[kgo.Client], 1),
+		sendMode:    "sync",
+	}
+	var calls atomic.Int64
+	s.produceSyncFn = func(_ context.Context, _ int, rec *kgo.Record) error {
+		calls.Add(1)
+		if string(rec.Value) != "sync" {
+			t.Errorf("record value=%q want sync", rec.Value)
+		}
+		return nil
+	}
+	if err := s.Send(context.Background(), &packet.Packet{Envelope: packet.Envelope{Payload: []byte("sync")}}); err != nil {
+		t.Fatalf("sync send: %v", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("produce sync calls=%d want 1", calls.Load())
+	}
+
+	wantErr := errors.New("boom")
+	s.produceSyncFn = func(context.Context, int, *kgo.Record) error { return wantErr }
+	if err := s.Send(context.Background(), &packet.Packet{Envelope: packet.Envelope{Payload: []byte("sync")}}); !errors.Is(err, wantErr) {
+		t.Fatalf("sync send err=%v want %v", err, wantErr)
+	}
+}
+
+func TestKafkaSenderAsyncBackpressureErrorWhenQueueFull(t *testing.T) {
+	s := newTestKafkaAsyncSender(1, 1)
+	s.asyncBackpressure = "error"
+	s.queues[0] <- kafkaAsyncItem{record: &kgo.Record{Topic: "out"}}
+
+	err := s.Send(context.Background(), &packet.Packet{Envelope: packet.Envelope{Payload: []byte("x")}})
+	if err == nil || !strings.Contains(err.Error(), "queue full") {
+		t.Fatalf("send err=%v want queue full", err)
+	}
+	if got := s.AsyncRuntimeStats().Dropped; got != 1 {
+		t.Fatalf("dropped=%d want 1", got)
+	}
+}
+
+func TestKafkaSenderAsyncBackpressureBlockHonorsContext(t *testing.T) {
+	s := newTestKafkaAsyncSender(1, 1)
+	s.queues[0] <- kafkaAsyncItem{record: &kgo.Record{Topic: "out"}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	err := s.Send(ctx, &packet.Packet{Envelope: packet.Envelope{Payload: []byte("x")}})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("send err=%v want deadline exceeded", err)
+	}
+	if got := s.AsyncRuntimeStats().Dropped; got != 1 {
+		t.Fatalf("dropped=%d want 1", got)
+	}
+}
+
+func TestKafkaSenderAsyncCloseDrainsAndWaitsCallbacks(t *testing.T) {
+	s := newTestKafkaAsyncSender(1, 8)
+	s.startTestWorkers()
+	var flushCalls atomic.Int64
+	var closeCalls atomic.Int64
+	var clientClosed atomic.Bool
+	var mu sync.Mutex
+	callbacks := make([]func(error), 0, 3)
+	produced := make(chan struct{}, 3)
+	closeReturned := make(chan struct{})
+
+	s.produceAsyncFn = func(_ context.Context, _ int, _ *kgo.Record, cb func(error)) {
+		mu.Lock()
+		callbacks = append(callbacks, cb)
+		mu.Unlock()
+		produced <- struct{}{}
+	}
+	s.flushFn = func(context.Context, int) error {
+		flushCalls.Add(1)
+		return nil
+	}
+	s.closeClientFn = func(int) {
+		if clientClosed.CompareAndSwap(false, true) {
+			closeCalls.Add(1)
+		}
+	}
+
+	for i := 0; i < 3; i++ {
+		if err := s.Send(context.Background(), &packet.Packet{Envelope: packet.Envelope{Payload: []byte("x")}}); err != nil {
+			t.Fatalf("send %d: %v", i, err)
+		}
+	}
+
+	go func() {
+		_ = s.Close(context.Background())
+		close(closeReturned)
+	}()
+
+	for i := 0; i < 3; i++ {
+		select {
+		case <-produced:
+		case <-time.After(time.Second):
+			t.Fatalf("record %d not drained", i)
+		}
+	}
+	select {
+	case <-closeReturned:
+		t.Fatal("close returned before callbacks completed")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	mu.Lock()
+	for _, cb := range callbacks {
+		cb(nil)
+	}
+	mu.Unlock()
+
+	select {
+	case <-closeReturned:
+	case <-time.After(time.Second):
+		t.Fatal("close did not return after callbacks")
+	}
+	if flushCalls.Load() != 1 || closeCalls.Load() != 1 {
+		t.Fatalf("flush calls=%d close calls=%d want 1/1", flushCalls.Load(), closeCalls.Load())
+	}
+	if stats := s.AsyncRuntimeStats(); stats.SendSuccess != 3 || stats.SendErrors != 0 {
+		t.Fatalf("unexpected async stats after close: %+v", stats)
+	}
+	if err := s.Close(context.Background()); err != nil {
+		t.Fatalf("second close: %v", err)
+	}
+	if closeCalls.Load() != 1 {
+		t.Fatalf("repeat close should be idempotent, got close calls %d", closeCalls.Load())
+	}
+}
+
+func newTestKafkaAsyncSender(concurrency, queueSize int) *KafkaSender {
+	s := &KafkaSender{
+		name:              "k1",
+		topic:             "out",
+		concurrency:       concurrency,
+		shardMask:         concurrency - 1,
+		clients:           make([]atomic.Pointer[kgo.Client], concurrency),
+		sendMode:          "async",
+		asyncQueueSize:    queueSize,
+		asyncBackpressure: "block",
+		closeFlushTimeout: time.Second,
+		queues:            make([]chan kafkaAsyncItem, concurrency),
+		closeCh:           make(chan struct{}),
+	}
+	s.produceAsyncFn = func(_ context.Context, _ int, _ *kgo.Record, cb func(error)) { cb(nil) }
+	for i := 0; i < concurrency; i++ {
+		s.queues[i] = make(chan kafkaAsyncItem, queueSize)
+	}
+	return s
+}
+
+func (s *KafkaSender) startTestWorkers() {
+	for i := 0; i < s.concurrency; i++ {
+		s.workers.Add(1)
+		go s.asyncWorker(i, s.queues[i])
 	}
 }

@@ -20,7 +20,11 @@ func TestApplyDefaultsSetsKafkaSenderOptionDefaults(t *testing.T) {
 		got.RetryBackoff != DefaultKafkaRetryBackoff ||
 		got.ConnIdleTimeout != DefaultKafkaConnIdleTimeout ||
 		got.MetadataMaxAge != DefaultKafkaMetadataMaxAge ||
-		got.Partitioner != DefaultKafkaSenderPartitioner {
+		got.Partitioner != DefaultKafkaSenderPartitioner ||
+		got.SendMode != DefaultKafkaSenderSendMode ||
+		got.AsyncQueueSize != DefaultKafkaSenderAsyncQueueSize ||
+		got.AsyncBackpressure != DefaultKafkaSenderBackpressure ||
+		got.CloseFlushTimeout != DefaultKafkaSenderCloseFlushTTL {
 		t.Fatalf("unexpected kafka sender defaults: %+v", got)
 	}
 }

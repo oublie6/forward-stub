@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,10 +30,36 @@ type KafkaSender struct {
 
 	clients []atomic.Pointer[kgo.Client]
 	nextIdx atomic.Uint64
+
+	sendMode          string
+	asyncQueueSize    int
+	asyncBackpressure string
+	closeFlushTimeout time.Duration
+
+	queues    []chan kafkaAsyncItem
+	closeCh   chan struct{}
+	closeOnce sync.Once
+	closed    atomic.Bool
+	workers   sync.WaitGroup
+	inflight  sync.WaitGroup
+
+	dropped     atomic.Uint64
+	sendErrors  atomic.Uint64
+	sendSuccess atomic.Uint64
+
+	produceSyncFn  func(context.Context, int, *kgo.Record) error
+	produceAsyncFn func(context.Context, int, *kgo.Record, func(error))
+	flushFn        func(context.Context, int) error
+	closeClientFn  func(int)
+}
+
+type kafkaAsyncItem struct {
+	record *kgo.Record
 }
 
 // NewKafkaSender 创建 franz-go producer 分片。
-// 所有 Kafka 选项在构造阶段编译完成，Send 热路径只选择 client、构造 record 并同步发送。
+// 所有 Kafka 选项在构造阶段编译完成；sync 模式热路径直接 ProduceSync，
+// async 模式热路径只入本地有界队列，broker ack 由 callback 统计。
 func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 	if strings.TrimSpace(sc.Topic) == "" {
 		return nil, errors.New("kafka sender requires topic")
@@ -64,6 +91,10 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 	metadataMaxAge, err := kafkautil.DurationOrDefault(sc.MetadataMaxAge, config.DefaultKafkaMetadataMaxAge)
 	if err != nil {
 		return nil, fmt.Errorf("kafka sender metadata_max_age 配置非法: %w", err)
+	}
+	closeFlushTimeout, err := kafkautil.DurationOrDefault(sc.CloseFlushTimeout, config.DefaultKafkaSenderCloseFlushTTL)
+	if err != nil {
+		return nil, fmt.Errorf("kafka sender close_flush_timeout 配置非法: %w", err)
 	}
 	partitioner, err := kafkautil.Partitioner(sc.Partitioner)
 	if err != nil {
@@ -119,15 +150,32 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 		opts = append(opts, kgo.SASL(mech))
 	}
 	concurrency := kafkautil.IntDefault(sc.Concurrency, 1)
+	sendMode := strings.TrimSpace(sc.SendMode)
+	if sendMode == "" {
+		sendMode = config.DefaultKafkaSenderSendMode
+	}
+	asyncQueueSize := kafkautil.IntDefault(sc.AsyncQueueSize, config.DefaultKafkaSenderAsyncQueueSize)
+	asyncBackpressure := strings.TrimSpace(sc.AsyncBackpressure)
+	if asyncBackpressure == "" {
+		asyncBackpressure = config.DefaultKafkaSenderBackpressure
+	}
 	s := &KafkaSender{
-		name:        name,
-		brokers:     brs,
-		topic:       sc.Topic,
-		concurrency: concurrency,
-		shardMask:   concurrency - 1,
-		recordKey:   []byte(sc.RecordKey),
-		keySource:   strings.TrimSpace(sc.RecordKeySource),
-		clients:     make([]atomic.Pointer[kgo.Client], concurrency),
+		name:              name,
+		brokers:           brs,
+		topic:             sc.Topic,
+		concurrency:       concurrency,
+		shardMask:         concurrency - 1,
+		recordKey:         []byte(sc.RecordKey),
+		keySource:         strings.TrimSpace(sc.RecordKeySource),
+		clients:           make([]atomic.Pointer[kgo.Client], concurrency),
+		sendMode:          sendMode,
+		asyncQueueSize:    asyncQueueSize,
+		asyncBackpressure: asyncBackpressure,
+		closeFlushTimeout: closeFlushTimeout,
+	}
+	if sendMode == "async" {
+		s.closeCh = make(chan struct{})
+		s.queues = make([]chan kafkaAsyncItem, concurrency)
 	}
 	for i := 0; i < concurrency; i++ {
 		cli, err := kgo.NewClient(opts...)
@@ -136,6 +184,11 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 			return nil, err
 		}
 		s.clients[i].Store(cli)
+		if sendMode == "async" {
+			s.queues[i] = make(chan kafkaAsyncItem, asyncQueueSize)
+			s.workers.Add(1)
+			go s.asyncWorker(i, s.queues[i])
+		}
 	}
 	return s, nil
 }
@@ -146,17 +199,35 @@ func (s *KafkaSender) Name() string { return s.name }
 // Key 返回 Kafka broker+topic 身份键。
 func (s *KafkaSender) Key() string { return "kafka|" + strings.Join(s.brokers, ",") + "|" + s.topic }
 
-// Send 同步生产一条 Kafka record。
+// Send 生产一条 Kafka record。
+// sync 模式下 nil 表示 ProduceSync 已成功；async 模式下 nil 仅表示已进入本地队列，
+// 真正发送成功/失败会在 franz-go callback 中进入 send_success/send_errors 统计。
 // record key 来源已在配置校验阶段约束，运行时只按预编译字段取值。
 func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
-	idx := nextShardIndex(&s.nextIdx, s.shardMask)
-	cli := s.clients[idx].Load()
-	if cli == nil {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if s.closed.Load() {
 		return errors.New("kafka sender closed")
 	}
+	idx := nextShardIndex(&s.nextIdx, s.shardMask)
+	if idx < 0 || idx >= len(s.clients) {
+		return errors.New("kafka sender closed")
+	}
+	cli := s.clients[idx].Load()
 	rec := &kgo.Record{Topic: s.topic, Value: p.Payload, Key: kafkautil.RecordKey(s.recordKey, s.keySource, p)}
-	res := cli.ProduceSync(ctx, rec)
-	if err := res.FirstErr(); err != nil {
+
+	if s.sendMode == "async" {
+		if cli == nil && s.produceAsyncFn == nil {
+			return errors.New("kafka sender closed")
+		}
+		return s.enqueueAsync(ctx, idx, rec)
+	}
+
+	if cli == nil && s.produceSyncFn == nil {
+		return errors.New("kafka sender closed")
+	}
+	if err := s.produceSync(ctx, idx, rec); err != nil {
 		logx.L().Warnw("Kafka发送失败", "发送端", s.name, "主题", s.topic, "错误", err)
 		return err
 	}
@@ -164,12 +235,191 @@ func (s *KafkaSender) Send(ctx context.Context, p *packet.Packet) error {
 }
 
 // Close 关闭所有 producer 分片；允许重复调用。
+// async 模式会先停止接收新消息，再尽力 drain 本地队列、等待 callback 和 Flush；
+// 整个等待受 close_flush_timeout 与传入 ctx 共同约束，避免停机无限阻塞。
 func (s *KafkaSender) Close(ctx context.Context) error {
-	for i := 0; i < s.concurrency; i++ {
-		cli := s.clients[i].Swap(nil)
-		if cli != nil {
-			cli.Close()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if s.sendMode == "async" {
+		s.closeOnce.Do(func() {
+			s.closed.Store(true)
+			if s.closeCh != nil {
+				close(s.closeCh)
+			}
+		})
+
+		waitCtx := ctx
+		cancel := func() {}
+		if s.closeFlushTimeout > 0 {
+			waitCtx, cancel = context.WithTimeout(ctx, s.closeFlushTimeout)
 		}
+		defer cancel()
+
+		if err := waitGroupDone(waitCtx, &s.workers); err != nil {
+			logx.L().Warnw("Kafka异步发送队列关闭等待超时", "发送端", s.name, "错误", err)
+		}
+		for i := 0; i < s.concurrency; i++ {
+			if err := s.flush(waitCtx, i); err != nil {
+				logx.L().Warnw("Kafka异步发送Flush失败", "发送端", s.name, "分片", i, "错误", err)
+			}
+		}
+		if err := waitGroupDone(waitCtx, &s.inflight); err != nil {
+			logx.L().Warnw("Kafka异步发送callback等待超时", "发送端", s.name, "错误", err)
+		}
+	} else {
+		s.closed.Store(true)
+	}
+	for i := 0; i < s.concurrency; i++ {
+		s.closeClient(i)
 	}
 	return nil
+}
+
+func (s *KafkaSender) enqueueAsync(ctx context.Context, idx int, rec *kgo.Record) error {
+	if idx < 0 || idx >= len(s.queues) || s.queues[idx] == nil {
+		return errors.New("kafka async queue not initialized")
+	}
+	item := kafkaAsyncItem{record: rec}
+	switch s.asyncBackpressure {
+	case "error":
+		select {
+		case <-s.closeCh:
+			return errors.New("kafka sender closed")
+		case s.queues[idx] <- item:
+			return nil
+		default:
+			s.dropped.Add(1)
+			return errors.New("kafka async queue full")
+		}
+	default:
+		select {
+		case <-s.closeCh:
+			return errors.New("kafka sender closed")
+		case s.queues[idx] <- item:
+			return nil
+		case <-ctx.Done():
+			s.dropped.Add(1)
+			return ctx.Err()
+		}
+	}
+}
+
+func (s *KafkaSender) asyncWorker(idx int, q <-chan kafkaAsyncItem) {
+	defer s.workers.Done()
+	for {
+		select {
+		case item := <-q:
+			s.produceAsyncItem(idx, item)
+			continue
+		default:
+		}
+
+		select {
+		case item := <-q:
+			s.produceAsyncItem(idx, item)
+		case <-s.closeCh:
+			for {
+				select {
+				case item := <-q:
+					s.produceAsyncItem(idx, item)
+				default:
+					return
+				}
+			}
+		}
+	}
+}
+
+func (s *KafkaSender) produceAsyncItem(idx int, item kafkaAsyncItem) {
+	s.inflight.Add(1)
+	s.produceAsync(context.Background(), idx, item.record, func(err error) {
+		defer s.inflight.Done()
+		if err != nil {
+			s.sendErrors.Add(1)
+			logx.L().Warnw("Kafka异步发送失败", "发送端", s.name, "主题", s.topic, "分片", idx, "错误", err)
+			return
+		}
+		s.sendSuccess.Add(1)
+	})
+}
+
+func (s *KafkaSender) produceSync(ctx context.Context, idx int, rec *kgo.Record) error {
+	if s.produceSyncFn != nil {
+		return s.produceSyncFn(ctx, idx, rec)
+	}
+	cli := s.clients[idx].Load()
+	if cli == nil {
+		return errors.New("kafka sender closed")
+	}
+	return cli.ProduceSync(ctx, rec).FirstErr()
+}
+
+func (s *KafkaSender) produceAsync(ctx context.Context, idx int, rec *kgo.Record, cb func(error)) {
+	if s.produceAsyncFn != nil {
+		s.produceAsyncFn(ctx, idx, rec, cb)
+		return
+	}
+	cli := s.clients[idx].Load()
+	if cli == nil {
+		cb(errors.New("kafka sender closed"))
+		return
+	}
+	cli.Produce(ctx, rec, func(_ *kgo.Record, err error) { cb(err) })
+}
+
+func (s *KafkaSender) flush(ctx context.Context, idx int) error {
+	if s.flushFn != nil {
+		return s.flushFn(ctx, idx)
+	}
+	cli := s.clients[idx].Load()
+	if cli == nil {
+		return nil
+	}
+	return cli.Flush(ctx)
+}
+
+func (s *KafkaSender) closeClient(idx int) {
+	if s.closeClientFn != nil {
+		s.closeClientFn(idx)
+		return
+	}
+	cli := s.clients[idx].Swap(nil)
+	if cli != nil {
+		cli.Close()
+	}
+}
+
+func waitGroupDone(ctx context.Context, wg *sync.WaitGroup) error {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *KafkaSender) AsyncRuntimeStats() AsyncRuntimeStats {
+	if s.sendMode != "async" {
+		return AsyncRuntimeStats{}
+	}
+	stats := AsyncRuntimeStats{
+		Dropped:     s.dropped.Load(),
+		SendErrors:  s.sendErrors.Load(),
+		SendSuccess: s.sendSuccess.Load(),
+	}
+	for _, q := range s.queues {
+		if q == nil {
+			continue
+		}
+		stats.QueueSize += cap(q)
+		stats.QueueUsed += len(q)
+	}
+	stats.QueueAvailable = stats.QueueSize - stats.QueueUsed
+	return stats
 }

@@ -770,6 +770,22 @@ func validateKafkaSenderOptions(name string, sc SenderConfig) error {
 	if err := validatePositiveDurationField("sender", name, "metadata_max_age", sc.MetadataMaxAge); err != nil {
 		return err
 	}
+	if err := validatePositiveDurationField("sender", name, "close_flush_timeout", sc.CloseFlushTimeout); err != nil {
+		return err
+	}
+	switch sc.SendMode {
+	case "", "sync", "async":
+	default:
+		return fmt.Errorf("sender %s kafka send_mode must be sync or async", name)
+	}
+	if sc.AsyncQueueSize <= 0 {
+		return fmt.Errorf("sender %s kafka async_queue_size must be > 0", name)
+	}
+	switch sc.AsyncBackpressure {
+	case "", "block", "error":
+	default:
+		return fmt.Errorf("sender %s kafka async_backpressure must be block or error", name)
+	}
 	if sc.Partitioner != "" && sc.Partitioner != "sticky" && sc.Partitioner != "round_robin" && sc.Partitioner != "hash_key" {
 		return fmt.Errorf("sender %s kafka partitioner unsupported: %s", name, sc.Partitioner)
 	}

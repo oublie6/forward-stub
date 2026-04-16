@@ -103,6 +103,18 @@ type TaskRuntimeStats struct {
 	Inflight int64
 	// RouteSenderMiss 是 RouteSender 指向当前 task 未绑定 sender 的累计次数。
 	RouteSenderMiss uint64
+	// Async 是 sender 可选暴露的异步队列与 callback 结果统计。
+	Async TaskAsyncStats
+}
+
+// TaskAsyncStats 描述 task 绑定 sender 的异步发送运行态汇总。
+type TaskAsyncStats struct {
+	QueueSize      int
+	QueueUsed      int
+	QueueAvailable int
+	Dropped        uint64
+	SendErrors     uint64
+	SendSuccess    uint64
 }
 
 // taskRuntimeStatsMu 保护 taskRuntimeStatsFn 的注册表。
@@ -414,6 +426,7 @@ type taskAggregateStats struct {
 	PoolSize        int              `json:"pool_size,omitempty"`
 	WorkerPool      *workerPoolStats `json:"worker_pool,omitempty"`
 	Channel         *channelStats    `json:"channel,omitempty"`
+	Async           *asyncStats      `json:"async,omitempty"`
 }
 
 // workerPoolStats 描述 pool 执行模型在 flush 时刻的运行状态。
@@ -428,6 +441,16 @@ type channelStats struct {
 	QueueSize      int `json:"queue_size,omitempty"`
 	QueueUsed      int `json:"queue_used,omitempty"`
 	QueueAvailable int `json:"queue_available,omitempty"`
+}
+
+// asyncStats 描述 sender async 模式的本地队列和异步 callback 结果。
+type asyncStats struct {
+	QueueSize      int    `json:"queue_size,omitempty"`
+	QueueUsed      int    `json:"queue_used,omitempty"`
+	QueueAvailable int    `json:"queue_available,omitempty"`
+	Dropped        uint64 `json:"dropped,omitempty"`
+	SendErrors     uint64 `json:"send_errors,omitempty"`
+	SendSuccess    uint64 `json:"send_success,omitempty"`
 }
 
 // newTrafficSummary 创建单次 flush 使用的摘要容器。
@@ -524,6 +547,16 @@ func (t *taskAggregateStats) applyRuntime(runtime TaskRuntimeStats) {
 			QueueSize:      runtime.ChannelQueueSize,
 			QueueUsed:      runtime.ChannelQueueUsed,
 			QueueAvailable: runtime.ChannelQueueAvailable,
+		}
+	}
+	if runtime.Async.QueueSize > 0 || runtime.Async.Dropped > 0 || runtime.Async.SendErrors > 0 || runtime.Async.SendSuccess > 0 {
+		t.Async = &asyncStats{
+			QueueSize:      runtime.Async.QueueSize,
+			QueueUsed:      runtime.Async.QueueUsed,
+			QueueAvailable: runtime.Async.QueueAvailable,
+			Dropped:        runtime.Async.Dropped,
+			SendErrors:     runtime.Async.SendErrors,
+			SendSuccess:    runtime.Async.SendSuccess,
 		}
 	}
 }

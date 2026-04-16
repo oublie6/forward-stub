@@ -138,7 +138,7 @@
 |---|---|---|---|
 | `concurrency` | int | 无 | 当 `sender.concurrency <= 0` 时作为系统级默认值。 |
 | `socket_send_buffer` | int | 无 | 当 `sender.socket_send_buffer <= 0` 时作为系统级默认值。 |
-| Kafka sender 选项 | 对应字段类型 | 无 | `dial_timeout`、`request_timeout`、`retry_timeout`、`retry_backoff`、`conn_idle_timeout`、`metadata_max_age`、`partitioner`，仅对 `type=kafka` 的 sender 生效。 |
+| Kafka sender 选项 | 对应字段类型 | 无 | `dial_timeout`、`request_timeout`、`retry_timeout`、`retry_backoff`、`conn_idle_timeout`、`metadata_max_age`、`partitioner`、`send_mode`、`async_queue_size`、`async_backpressure`、`close_flush_timeout`，仅对 `type=kafka` 的 sender 生效。 |
 
 ### 5.4 business_defaults 与代码默认值的优先级
 
@@ -436,6 +436,12 @@
 | `partitioner` | string | 否 | `sticky` | 支持 `sticky`、`round_robin`、`hash_key`。 |
 | `record_key` | string | 否 | 空 | 固定 record key。 |
 | `record_key_source` | string | 否 | 空 | 从 packet 中提取 key。 |
+| `send_mode` | string | 否 | `async` | Kafka sender 发送模式，支持 `async` / `sync`。`async` 下 `Send()==nil` 只表示成功进入本地队列；真正发送到 Kafka 成功/失败由 callback 统计。`sync` 下 `Send()==nil` 表示 `ProduceSync` 成功。 |
+| `async_queue_size` | int | 否 | `8192` | `async` 模式每个 shard 的本地有界队列容量。 |
+| `async_backpressure` | string | 否 | `block` | `async` 队列满时策略：`block` 等待入队或 `ctx.Done()`；`error` 立即返回错误并累计 `async.dropped`。 |
+| `close_flush_timeout` | string(duration) | 否 | `10s` | `async` 模式关闭时 drain 本地队列、等待 in-flight callback 和 flush 的最长时间，避免关闭无限阻塞。 |
+
+Kafka sender 默认使用 `async`，目的是把 broker ack 延迟从 task 热路径中移出，提高高吞吐链路的稳定性。默认异步不表示忽略错误：聚合统计会输出 `async.queue_*`、`async.dropped`、`async.send_errors`、`async.send_success`，用于区分“已入本地队列”和“Kafka callback 确认成功/失败”。需要让 `Send()` 直接返回 broker ack 结果时，显式配置 `send_mode=sync`。
 
 #### 9.5.2 Kafka 直接映射到 kgo 的字段
 
@@ -458,6 +464,9 @@
 - `retries`、`max_in_flight_requests_per_connection`、`max_buffered_bytes`、`max_buffered_records` 不能为负数。
 - 所有 duration 字段必须是合法且 `>0` 的 duration。
 - `partitioner` 只支持 `sticky`、`round_robin`、`hash_key`。
+- `send_mode` 只支持 `async`、`sync`。
+- `async_queue_size` 必须 `>0`。
+- `async_backpressure` 只支持 `block`、`error`。
 - `record_key` 与 `record_key_source` 互斥。
 - `record_key_source` 当前只支持：`payload`、`match_key`、`remote`、`local`、`file_name`、`file_path`、`transfer_id`、`route_sender`。热重载时若这些字段变化，会重建 sender，并联动重建引用它的 task。
 - `partitioner=hash_key` 时必须提供 `record_key` 或 `record_key_source`。
@@ -699,6 +708,10 @@ Kafka 通知支持 `remote`、`topic`、`record_key_source`、`client_id`、`use
 | Kafka `conn_idle_timeout` | `30s` | 仅 Kafka sender。 |
 | Kafka `metadata_max_age` | `5m` | 仅 Kafka sender。 |
 | Kafka `partitioner` | `sticky` | 仅 Kafka sender。 |
+| Kafka `send_mode` | `async` | 仅 Kafka sender。 |
+| Kafka `async_queue_size` | `8192` | 仅 Kafka sender，按 shard 生效。 |
+| Kafka `async_backpressure` | `block` | 仅 Kafka sender。 |
+| Kafka `close_flush_timeout` | `10s` | 仅 Kafka sender。 |
 
 ### 12.4 task
 

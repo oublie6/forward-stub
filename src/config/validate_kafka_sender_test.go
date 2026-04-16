@@ -93,6 +93,46 @@ func TestValidateKafkaSenderRejectsCompressionLevelWithoutSupportedCodec(t *test
 	}
 }
 
+func TestValidateKafkaSenderRejectsInvalidAsyncOptions(t *testing.T) {
+	tests := []struct {
+		name string
+		edit func(*SenderConfig)
+		want string
+	}{
+		{
+			name: "send_mode",
+			edit: func(s *SenderConfig) { s.SendMode = "background" },
+			want: "send_mode must be sync or async",
+		},
+		{
+			name: "async_queue_size",
+			edit: func(s *SenderConfig) { s.AsyncQueueSize = 0 },
+			want: "async_queue_size must be > 0",
+		},
+		{
+			name: "async_backpressure",
+			edit: func(s *SenderConfig) { s.AsyncBackpressure = "drop" },
+			want: "async_backpressure must be block or error",
+		},
+		{
+			name: "close_flush_timeout",
+			edit: func(s *SenderConfig) { s.CloseFlushTimeout = "0s" },
+			want: "close_flush_timeout",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := kafkaSenderBaseConfig()
+			s := cfg.Senders["k1"]
+			tt.edit(&s)
+			cfg.Senders["k1"] = s
+			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("expected %q validation error, got: %v", tt.want, err)
+			}
+		})
+	}
+}
+
 func TestKafkaAcksConfigUnmarshal(t *testing.T) {
 	var a KafkaAcksConfig
 	if err := a.UnmarshalJSON([]byte("-1")); err != nil {

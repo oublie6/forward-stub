@@ -306,7 +306,11 @@
       "compression": "zstd",
       "compression_level": 3,
       "partitioner": "hash_key",
-      "record_key_source": "match_key"
+      "record_key_source": "match_key",
+      "send_mode": "async",
+      "async_queue_size": 8192,
+      "async_backpressure": "block",
+      "close_flush_timeout": "10s"
     },
     "tx_kafka_fixed": {
       "type": "kafka",
@@ -333,7 +337,8 @@
       "compression": "gzip",
       "compression_level": 1,
       "partitioner": "round_robin",
-      "record_key": "fixed-file-event"
+      "record_key": "fixed-file-event",
+      "send_mode": "sync"
     },
     "tx_sftp_archive": {
       "type": "sftp",

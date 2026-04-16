@@ -264,6 +264,18 @@ func applyBusinessDefaults(c *Config, d BusinessDefaultsConfig) {
 			if sc.Partitioner == "" && d.Sender.Partitioner != "" {
 				sc.Partitioner = d.Sender.Partitioner
 			}
+			if sc.SendMode == "" && d.Sender.SendMode != "" {
+				sc.SendMode = d.Sender.SendMode
+			}
+			if sc.AsyncQueueSize <= 0 && d.Sender.AsyncQueueSize > 0 {
+				sc.AsyncQueueSize = d.Sender.AsyncQueueSize
+			}
+			if sc.AsyncBackpressure == "" && d.Sender.AsyncBackpressure != "" {
+				sc.AsyncBackpressure = d.Sender.AsyncBackpressure
+			}
+			if sc.CloseFlushTimeout == "" && d.Sender.CloseFlushTimeout != "" {
+				sc.CloseFlushTimeout = d.Sender.CloseFlushTimeout
+			}
 		}
 		if sc.Concurrency <= 0 {
 			sc.Concurrency = DefaultSenderConcurrency
@@ -297,6 +309,18 @@ func applyBusinessDefaults(c *Config, d BusinessDefaultsConfig) {
 			}
 			if sc.Partitioner == "" {
 				sc.Partitioner = DefaultKafkaSenderPartitioner
+			}
+			if sc.SendMode == "" {
+				sc.SendMode = DefaultKafkaSenderSendMode
+			}
+			if sc.AsyncQueueSize <= 0 {
+				sc.AsyncQueueSize = DefaultKafkaSenderAsyncQueueSize
+			}
+			if sc.AsyncBackpressure == "" {
+				sc.AsyncBackpressure = DefaultKafkaSenderBackpressure
+			}
+			if sc.CloseFlushTimeout == "" {
+				sc.CloseFlushTimeout = DefaultKafkaSenderCloseFlushTTL
 			}
 		}
 		c.Senders[name] = sc

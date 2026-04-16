@@ -39,6 +39,16 @@
 - channel 模式附加：`channel.queue_size`、`channel.queue_used`、`channel.queue_available`
 - fastpath 模式：只输出最小必要字段，不再伪造 pool/channel 指标
 
+当 task 绑定 Kafka async sender 时，还会通过 sender 的可选运行时统计接口附加 `async` 字段：
+
+- `async.queue_size`：当前 task 绑定 Kafka async sender 的本地队列总容量，按 shard 汇总。
+- `async.queue_used` / `async.queue_available`：本地队列已用和剩余槽位，用于判断是否接近背压。
+- `async.dropped`：未能进入本地队列的累计数量，包括 `async_backpressure=error` 队列满，以及 `block` 等待时 `ctx` 取消。
+- `async.send_errors`：franz-go async produce callback 返回错误的累计数量，表示已经入本地队列但最终发送失败。
+- `async.send_success`：franz-go async produce callback 成功的累计数量，表示 Kafka produce 已被 callback 确认成功。
+
+Kafka async 模式下，`sender.Send()==nil` 只表示“成功入本地队列”，不等价于 broker 已 ack。是否真正发送到 Kafka 成功，需要看 `async.send_success` / `async.send_errors`；队列压力和本地丢弃需要看 `async.queue_used` / `async.queue_available` / `async.dropped`。Kafka sync 模式下，`sender.Send()==nil` 才表示本次 `ProduceSync` 成功。
+
 ### 2.3 payload 摘要日志
 
 #### receiver 侧
