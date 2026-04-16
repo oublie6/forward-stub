@@ -51,6 +51,8 @@ type KafkaSender struct {
 	produceAsyncFn func(context.Context, int, *kgo.Record, func(error))
 	flushFn        func(context.Context, int) error
 	closeClientFn  func(int)
+
+	unregisterRuntimeStats func()
 }
 
 type kafkaAsyncItem struct {
@@ -190,6 +192,9 @@ func NewKafkaSender(name string, sc config.SenderConfig) (*KafkaSender, error) {
 			go s.asyncWorker(i, s.queues[i])
 		}
 	}
+	if sendMode == "async" {
+		s.unregisterRuntimeStats = logx.RegisterSenderRuntimeStats(s.name, s.senderRuntimeStats)
+	}
 	return s, nil
 }
 
@@ -242,6 +247,9 @@ func (s *KafkaSender) Close(ctx context.Context) error {
 		ctx = context.Background()
 	}
 	if s.sendMode == "async" {
+		if s.unregisterRuntimeStats != nil {
+			s.unregisterRuntimeStats()
+		}
 		s.closeOnce.Do(func() {
 			s.closed.Store(true)
 			if s.closeCh != nil {
@@ -422,4 +430,16 @@ func (s *KafkaSender) AsyncRuntimeStats() AsyncRuntimeStats {
 	}
 	stats.QueueAvailable = stats.QueueSize - stats.QueueUsed
 	return stats
+}
+
+func (s *KafkaSender) senderRuntimeStats() logx.SenderRuntimeStats {
+	stats := s.AsyncRuntimeStats()
+	return logx.SenderRuntimeStats{
+		QueueSize:      stats.QueueSize,
+		QueueUsed:      stats.QueueUsed,
+		QueueAvailable: stats.QueueAvailable,
+		Dropped:        stats.Dropped,
+		SendErrors:     stats.SendErrors,
+		SendSuccess:    stats.SendSuccess,
+	}
 }

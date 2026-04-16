@@ -38,6 +38,12 @@ receiver -> selector -> task -> pipeline -> sender
 - 作用：从 payload 某个偏移读固定长度字节，映射到 sender 名称，并写入 `packet.Meta.RouteSender`。
 - 常用字段：`offset`、`cases`、`default_sender`
 
+### 2.4 `set_kafka_record_key_from_offset_bytes`
+
+- 作用：从 payload 某个固定区间读取字节，写入 `packet.Meta.KafkaRecordKey`，供 Kafka sender 在 `record_key_source=kafka_record_key` 时使用。
+- 常用字段：`offset`、`length`、`encoding`
+- `encoding` 当前只支持 `text` / `hex`。
+
 ## 3. `route_offset_bytes_sender` 的约束
 
 - `cases` 不能为空。
@@ -46,7 +52,14 @@ receiver -> selector -> task -> pipeline -> sender
 - `cases` 的 value 不能为空。
 - `default_sender` 可选；为空表示未命中时不路由到任何 sender。
 
-## 4. route sender 与 task.senders 的关系
+## 4. `set_kafka_record_key_from_offset_bytes` 的约束
+
+- `offset` 必须 `>=0`。
+- `length` 必须 `>0`。
+- `encoding` 必须是 `text` 或 `hex`。
+- payload 越界时当前 pipeline 返回 false，task 直接停止后续处理。
+
+## 5. route sender 与 task.senders 的关系
 
 这是当前配置里最容易配错的地方：
 
@@ -54,9 +67,9 @@ receiver -> selector -> task -> pipeline -> sender
 - 否则配置校验会报错。
 - 如果运行态仍出现未命中，task 会记录 warn 并丢弃该 packet；这通常表示配置发布与运行态快照之间存在漂移，需要按 `docs/task-and-dispatch.md` 的边界排查。
 
-## 5. 常见示例
+## 6. 常见示例
 
-### 5.1 按固定头匹配并替换
+### 6.1 按固定头匹配并替换
 
 ```json
 [
@@ -65,7 +78,7 @@ receiver -> selector -> task -> pipeline -> sender
 ]
 ```
 
-### 5.2 按首字节路由到不同 sender
+### 6.2 按首字节路由到不同 sender
 
 ```json
 [
@@ -77,6 +90,19 @@ receiver -> selector -> task -> pipeline -> sender
       "02": "tx_tcp"
     },
     "default_sender": "tx_kafka"
+  }
+]
+```
+
+### 6.3 从固定字段设置 Kafka record key
+
+```json
+[
+  {
+    "type": "set_kafka_record_key_from_offset_bytes",
+    "offset": 12,
+    "length": 8,
+    "encoding": "hex"
   }
 ]
 ```

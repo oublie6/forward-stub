@@ -1,6 +1,7 @@
 package logx
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -108,29 +109,86 @@ func TestTrafficSummaryFastPathOmitsPoolAndChannelStats(t *testing.T) {
 	}
 }
 
-func TestTrafficSummaryIncludesAsyncSenderStats(t *testing.T) {
-	stats := TaskRuntimeStats{
-		ExecutionModel: "pool",
-		Async: TaskAsyncStats{
-			QueueSize:      16,
-			QueueUsed:      5,
-			QueueAvailable: 11,
-			Dropped:        2,
-			SendErrors:     3,
-			SendSuccess:    7,
-		},
-	}
+func TestTrafficSummaryIncludesSenderRuntimeStats(t *testing.T) {
 	s := newTrafficSummary(time.Second)
-	s.addRuntimeOnlyTask("task-async", stats)
-	if len(s.Tasks) != 1 {
-		t.Fatalf("expected one runtime-only task, got %d", len(s.Tasks))
+	s.addSenderRuntime("kafka-a", SenderRuntimeStats{
+		QueueSize:      16,
+		QueueUsed:      5,
+		QueueAvailable: 11,
+		Dropped:        2,
+		SendErrors:     3,
+		SendSuccess:    7,
+	})
+	if len(s.Senders) != 1 {
+		t.Fatalf("expected one sender item, got %d", len(s.Senders))
 	}
-	item := s.Tasks[0]
-	if item.Async == nil {
-		t.Fatalf("async stats missing: %+v", item)
+	item := s.Senders[0]
+	if item.Sender != "kafka-a" {
+		t.Fatalf("unexpected sender identity: %+v", item)
 	}
-	if item.Async.QueueSize != 16 || item.Async.QueueUsed != 5 || item.Async.QueueAvailable != 11 ||
-		item.Async.Dropped != 2 || item.Async.SendErrors != 3 || item.Async.SendSuccess != 7 {
-		t.Fatalf("unexpected async stats: %+v", item.Async)
+	if item.QueueSize != 16 || item.QueueUsed != 5 || item.QueueAvailable != 11 ||
+		item.Dropped != 2 || item.SendErrors != 3 || item.SendSuccess != 7 {
+		t.Fatalf("unexpected sender stats: %+v", item)
+	}
+}
+
+func TestSenderRuntimeStatsRegisteredOnceBySenderName(t *testing.T) {
+	unregisterOld := RegisterSenderRuntimeStats("kafka-shared", func() SenderRuntimeStats {
+		return SenderRuntimeStats{QueueSize: 8, QueueUsed: 3, QueueAvailable: 5}
+	})
+	unregisterNew := RegisterSenderRuntimeStats("kafka-shared", func() SenderRuntimeStats {
+		return SenderRuntimeStats{QueueSize: 8, QueueUsed: 4, QueueAvailable: 4}
+	})
+	defer unregisterNew()
+
+	unregisterOld()
+
+	stats := listSenderRuntimeStats()
+	if len(stats) != 1 {
+		t.Fatalf("expected one sender runtime entry, got %d", len(stats))
+	}
+	got := stats["kafka-shared"]
+	if got.QueueUsed != 4 || got.QueueAvailable != 4 {
+		t.Fatalf("expected latest sender runtime callback, got %+v", got)
+	}
+}
+
+func TestTrafficSummarySharedSenderNotRepeatedPerTask(t *testing.T) {
+	s := newTrafficSummary(time.Second)
+	s.addRuntimeOnlyTask("task-a", TaskRuntimeStats{ExecutionModel: "fastpath"})
+	s.addRuntimeOnlyTask("task-b", TaskRuntimeStats{ExecutionModel: "fastpath"})
+	s.addSenderRuntime("kafka-shared", SenderRuntimeStats{QueueSize: 8, QueueUsed: 3, QueueAvailable: 5})
+
+	if len(s.Tasks) != 2 {
+		t.Fatalf("expected two task entries, got %d", len(s.Tasks))
+	}
+	if len(s.Senders) != 1 {
+		t.Fatalf("shared sender should appear once, got %d entries", len(s.Senders))
+	}
+	if s.Senders[0].Sender != "kafka-shared" {
+		t.Fatalf("unexpected sender entry: %+v", s.Senders[0])
+	}
+}
+
+func TestTrafficSummaryTaskDoesNotCarrySenderAsyncStats(t *testing.T) {
+	s := newTrafficSummary(time.Second)
+	s.addRuntimeOnlyTask("task-a", TaskRuntimeStats{ExecutionModel: "pool", Inflight: 1})
+	s.addSenderRuntime("kafka-a", SenderRuntimeStats{QueueSize: 16, QueueUsed: 5, QueueAvailable: 11})
+
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal summary: %v", err)
+	}
+	var raw struct {
+		Tasks []map[string]any `json:"tasks"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatalf("unmarshal summary: %v", err)
+	}
+	if len(raw.Tasks) != 1 {
+		t.Fatalf("expected one task, got %d", len(raw.Tasks))
+	}
+	if _, ok := raw.Tasks[0]["async"]; ok {
+		t.Fatalf("task should not carry sender async stats: %s", b)
 	}
 }

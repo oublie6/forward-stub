@@ -82,6 +82,17 @@ func TestValidateKafkaSenderRejectsUnsupportedRecordKeySource(t *testing.T) {
 	}
 }
 
+func TestValidateKafkaSenderAcceptsKafkaRecordKeySource(t *testing.T) {
+	cfg := kafkaSenderBaseConfig()
+	s := cfg.Senders["k1"]
+	s.Partitioner = "hash_key"
+	s.RecordKeySource = "kafka_record_key"
+	cfg.Senders["k1"] = s
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected validation error: %v", err)
+	}
+}
+
 func TestValidateKafkaSenderRejectsCompressionLevelWithoutSupportedCodec(t *testing.T) {
 	cfg := kafkaSenderBaseConfig()
 	s := cfg.Senders["k1"]

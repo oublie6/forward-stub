@@ -474,6 +474,18 @@ func validateStageConfig(pipelineName string, idx int, sc StageConfig) error {
 				return fmt.Errorf("%s route case %s sender empty", prefix, hk)
 			}
 		}
+	case "set_kafka_record_key_from_offset_bytes":
+		if sc.Offset < 0 {
+			return fmt.Errorf("%s offset must be >= 0", prefix)
+		}
+		if sc.Length <= 0 {
+			return fmt.Errorf("%s length must be > 0", prefix)
+		}
+		switch strings.TrimSpace(sc.Encoding) {
+		case "text", "hex":
+		default:
+			return fmt.Errorf("%s encoding must be text or hex", prefix)
+		}
 	case "set_target_file_path":
 		if strings.TrimSpace(sc.Value) == "" {
 			return fmt.Errorf("%s requires value", prefix)
@@ -794,7 +806,7 @@ func validateKafkaSenderOptions(name string, sc SenderConfig) error {
 	}
 	if sc.RecordKeySource != "" {
 		switch sc.RecordKeySource {
-		case "payload", "match_key", "remote", "local", "file_name", "file_path", "transfer_id", "route_sender":
+		case "payload", "match_key", "kafka_record_key", "remote", "local", "file_name", "file_path", "transfer_id", "route_sender":
 		default:
 			return fmt.Errorf("sender %s kafka record_key_source unsupported: %s", name, sc.RecordKeySource)
 		}

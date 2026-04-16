@@ -119,13 +119,14 @@ func TestKafkaRecordKeyUsesConfiguredSource(t *testing.T) {
 		Envelope: packet.Envelope{
 			Payload: []byte("payload"),
 			Meta: packet.Meta{
-				MatchKey:    "kafka|topic=in|partition=0",
-				Remote:      "remote",
-				Local:       "local",
-				FileName:    "a.txt",
-				FilePath:    "/tmp/a.txt",
-				TransferID:  "tx-1",
-				RouteSender: "tx_kafka",
+				MatchKey:       "kafka|topic=in|partition=0",
+				KafkaRecordKey: "orders-42",
+				Remote:         "remote",
+				Local:          "local",
+				FileName:       "a.txt",
+				FilePath:       "/tmp/a.txt",
+				TransferID:     "tx-1",
+				RouteSender:    "tx_kafka",
 			},
 		},
 	}
@@ -134,6 +135,9 @@ func TestKafkaRecordKeyUsesConfiguredSource(t *testing.T) {
 	}
 	if got := string(kafkautil.RecordKey(nil, "match_key", pkt)); got != pkt.Meta.MatchKey {
 		t.Fatalf("unexpected match_key source: %q", got)
+	}
+	if got := string(kafkautil.RecordKey(nil, "kafka_record_key", pkt)); got != pkt.Meta.KafkaRecordKey {
+		t.Fatalf("unexpected kafka_record_key source: %q", got)
 	}
 	if got := string(kafkautil.RecordKey(nil, "payload", pkt)); got != "payload" {
 		t.Fatalf("unexpected payload source: %q", got)

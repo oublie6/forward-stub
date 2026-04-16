@@ -584,7 +584,7 @@ type SenderConfig struct {
 	// 用法：当所有消息都需要固定 key 时填写；与 record_key_source 互斥。
 	RecordKey string `json:"record_key,omitempty"`
 	// RecordKeySource 指定 Kafka record key 的来源字段。
-	// 用法：当前支持 payload / match_key / remote / local / file_name / file_path / transfer_id / route_sender；与 record_key 互斥。
+	// 用法：当前支持 payload / match_key / kafka_record_key / remote / local / file_name / file_path / transfer_id / route_sender；与 record_key 互斥。
 	RecordKeySource string `json:"record_key_source,omitempty"`
 	// SendMode 控制 Kafka sender 发送模式：async（默认）或 sync。
 	// 用法：async 下 Send 只表示成功入本地队列，真正 broker ack 由异步 callback 统计；sync 下 Send 成功才表示 ProduceSync 成功。
@@ -730,6 +730,12 @@ type StageConfig struct {
 	// Offset 是偏移类 stage 的起始字节位置。
 	// 用法：常与 Hex 组合，表达“从某字节位置读/写”。
 	Offset int `json:"offset,omitempty"`
+	// Length 是定长提取类 stage 的读取字节数。
+	// 用法：用于从 payload 固定区间提取字段。
+	Length int `json:"length,omitempty"`
+	// Encoding 是定长提取类 stage 写入字符串前使用的编码。
+	// 用法：set_kafka_record_key_from_offset_bytes 支持 text / hex。
+	Encoding string `json:"encoding,omitempty"`
 	// Hex 是十六进制匹配/写入参数。
 	// 用法：填写无空格 hex 串，供匹配/替换类 stage 使用。
 	Hex string `json:"hex,omitempty"`

@@ -227,6 +227,7 @@
 
 - `payload`
 - `match_key`
+- `kafka_record_key`
 - `remote`
 - `local`
 - `file_name`

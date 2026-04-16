@@ -46,6 +46,9 @@ type Meta struct {
 	// MatchKey 是 receiver 显式构造的唯一匹配字符串。
 	// 用法：selector 仅使用该字段做完整字符串精确匹配，不再推断协议语义。
 	MatchKey string
+	// KafkaRecordKey 是 Kafka sender 使用的 record key / partition key 来源。
+	// 用法：仅用于 Kafka 写出分区键，不参与 receiver/selector 匹配或 task 内 sender 分流。
+	KafkaRecordKey string
 
 	// TransferID 是文件传输会话标识。
 	// 用法：file_chunk 场景下用于 sender 聚合同一文件的多个分块。

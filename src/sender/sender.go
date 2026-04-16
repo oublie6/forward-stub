@@ -26,7 +26,7 @@ type AsyncRuntimeStats struct {
 }
 
 // AsyncRuntimeStatsProvider 由支持本地异步队列的 sender 选择性实现。
-// task 聚合统计会通过该接口采样队列水位和 callback 发送结果。
+// 聚合统计慢路径会通过该接口采样队列水位和 callback 发送结果。
 type AsyncRuntimeStatsProvider interface {
 	AsyncRuntimeStats() AsyncRuntimeStats
 }

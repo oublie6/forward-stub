@@ -108,6 +108,8 @@ func RecordKey(fixedKey []byte, source string, p *packet.Packet) []byte {
 		return append([]byte(nil), p.Payload...)
 	case "match_key":
 		return []byte(p.Meta.MatchKey)
+	case "kafka_record_key":
+		return []byte(p.Meta.KafkaRecordKey)
 	case "remote":
 		return []byte(p.Meta.Remote)
 	case "local":

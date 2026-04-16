@@ -103,18 +103,82 @@ type TaskRuntimeStats struct {
 	Inflight int64
 	// RouteSenderMiss 是 RouteSender 指向当前 task 未绑定 sender 的累计次数。
 	RouteSenderMiss uint64
-	// Async 是 sender 可选暴露的异步队列与 callback 结果统计。
-	Async TaskAsyncStats
 }
 
-// TaskAsyncStats 描述 task 绑定 sender 的异步发送运行态汇总。
-type TaskAsyncStats struct {
+// SenderRuntimeStats 描述 sender 在 flush 时一并附加到统计日志中的运行时快照。
+//
+// 当前仅承载 Kafka async sender 的本地队列与 callback 结果统计；由 sender 自身注册，
+// flush 慢路径按 sender 名称唯一采样，避免同一 sender 被多个 task 复用时重复展开。
+type SenderRuntimeStats struct {
 	QueueSize      int
 	QueueUsed      int
 	QueueAvailable int
 	Dropped        uint64
 	SendErrors     uint64
 	SendSuccess    uint64
+}
+
+// senderRuntimeStatsMu 保护 senderRuntimeStatsFn 的注册表。
+var senderRuntimeStatsMu sync.RWMutex
+
+var senderRuntimeStatsSeq atomic.Uint64
+
+type senderRuntimeStatsEntry struct {
+	id uint64
+	fn func() SenderRuntimeStats
+}
+
+// senderRuntimeStatsFn 保存“sender 名称 -> 运行时状态采样函数”的映射。
+var senderRuntimeStatsFn = make(map[string]senderRuntimeStatsEntry)
+
+// RegisterSenderRuntimeStats 注册 sender 运行时统计回调，并返回仅注销本次注册的闭包。
+//
+// 生命周期：sender 构造成功后注册，Close 时注销；flush 慢路径按名称唯一读取。
+func RegisterSenderRuntimeStats(sender string, fn func() SenderRuntimeStats) func() {
+	if sender == "" || fn == nil {
+		return func() {}
+	}
+	id := senderRuntimeStatsSeq.Add(1)
+	senderRuntimeStatsMu.Lock()
+	senderRuntimeStatsFn[sender] = senderRuntimeStatsEntry{id: id, fn: fn}
+	senderRuntimeStatsMu.Unlock()
+	return func() {
+		senderRuntimeStatsMu.Lock()
+		entry, ok := senderRuntimeStatsFn[sender]
+		if ok && entry.id == id {
+			delete(senderRuntimeStatsFn, sender)
+		}
+		senderRuntimeStatsMu.Unlock()
+	}
+}
+
+// UnregisterSenderRuntimeStats 注销 sender 运行时统计回调。
+func UnregisterSenderRuntimeStats(sender string) {
+	if sender == "" {
+		return
+	}
+	senderRuntimeStatsMu.Lock()
+	delete(senderRuntimeStatsFn, sender)
+	senderRuntimeStatsMu.Unlock()
+}
+
+// listSenderRuntimeStats 返回所有 sender 的运行时快照副本。
+func listSenderRuntimeStats() map[string]SenderRuntimeStats {
+	senderRuntimeStatsMu.RLock()
+	fns := make(map[string]func() SenderRuntimeStats, len(senderRuntimeStatsFn))
+	for sender, entry := range senderRuntimeStatsFn {
+		if entry.fn == nil {
+			continue
+		}
+		fns[sender] = entry.fn
+	}
+	senderRuntimeStatsMu.RUnlock()
+
+	out := make(map[string]SenderRuntimeStats, len(fns))
+	for sender, fn := range fns {
+		out[sender] = fn()
+	}
+	return out
 }
 
 // taskRuntimeStatsMu 保护 taskRuntimeStatsFn 的注册表。
@@ -371,7 +435,8 @@ func (h *trafficStatsHub) loop() {
 // 关键点：
 //   - 只在复制 counters 切片时持读锁，避免日志序列化阻塞 acquire/release；
 //   - receiver 目前只贡献累计字节/包数，不输出独立摘要条目；
-//   - task 除累计值外，还会拼接 runtimeStats；
+//   - task 除累计值外，还会拼接 task runtimeStats；
+//   - sender runtimeStats 独立输出到 senders 维度，避免被 task 复用关系重复展开；
 //   - 即使 task 暂时没有流量，只要仍注册了 runtimeStats，也会出现在摘要中。
 func (h *trafficStatsHub) flush(elapsed, interval time.Duration) {
 	h.mu.RLock()
@@ -399,16 +464,20 @@ func (h *trafficStatsHub) flush(elapsed, interval time.Duration) {
 		}
 		summary.addRuntimeOnlyTask(task, runtime)
 	}
+	for sender, runtime := range listSenderRuntimeStats() {
+		summary.addSenderRuntime(sender, runtime)
+	}
 	if summary.hasData() {
 		summary.log()
 	}
 }
 
 // trafficSummary 是单次 flush 输出的聚合日志模型。
-// 当前只输出 task 视角摘要，因为它最能串起“收包后是否真正被处理/发送”。
+// task 维度描述转发处理链路；sender 维度描述发送端自身队列和 callback 状态。
 type trafficSummary struct {
-	Uptime string               `json:"uptime"`
-	Tasks  []taskAggregateStats `json:"tasks"`
+	Uptime  string                 `json:"uptime"`
+	Tasks   []taskAggregateStats   `json:"tasks"`
+	Senders []senderAggregateStats `json:"senders,omitempty"`
 }
 
 // taskAggregateStats 描述单个 task 在某次 flush 中的聚合结果。
@@ -426,7 +495,17 @@ type taskAggregateStats struct {
 	PoolSize        int              `json:"pool_size,omitempty"`
 	WorkerPool      *workerPoolStats `json:"worker_pool,omitempty"`
 	Channel         *channelStats    `json:"channel,omitempty"`
-	Async           *asyncStats      `json:"async,omitempty"`
+}
+
+// senderAggregateStats 描述单个 sender 在某次 flush 中的运行态结果。
+type senderAggregateStats struct {
+	Sender         string `json:"sender"`
+	QueueSize      int    `json:"queue_size,omitempty"`
+	QueueUsed      int    `json:"queue_used,omitempty"`
+	QueueAvailable int    `json:"queue_available,omitempty"`
+	Dropped        uint64 `json:"dropped,omitempty"`
+	SendErrors     uint64 `json:"send_errors,omitempty"`
+	SendSuccess    uint64 `json:"send_success,omitempty"`
 }
 
 // workerPoolStats 描述 pool 执行模型在 flush 时刻的运行状态。
@@ -441,16 +520,6 @@ type channelStats struct {
 	QueueSize      int `json:"queue_size,omitempty"`
 	QueueUsed      int `json:"queue_used,omitempty"`
 	QueueAvailable int `json:"queue_available,omitempty"`
-}
-
-// asyncStats 描述 sender async 模式的本地队列和异步 callback 结果。
-type asyncStats struct {
-	QueueSize      int    `json:"queue_size,omitempty"`
-	QueueUsed      int    `json:"queue_used,omitempty"`
-	QueueAvailable int    `json:"queue_available,omitempty"`
-	Dropped        uint64 `json:"dropped,omitempty"`
-	SendErrors     uint64 `json:"send_errors,omitempty"`
-	SendSuccess    uint64 `json:"send_success,omitempty"`
 }
 
 // newTrafficSummary 创建单次 flush 使用的摘要容器。
@@ -506,9 +575,9 @@ func diffCounter(cur, prev uint64) uint64 {
 }
 
 // hasData 判断当前摘要是否值得输出。
-// 目前只要存在任意 task 条目就输出；空摘要会被静默跳过，减少噪声日志。
+// 目前只要存在任意 task 或 sender 条目就输出；空摘要会被静默跳过，减少噪声日志。
 func (s *trafficSummary) hasData() bool {
-	return len(s.Tasks) > 0
+	return len(s.Tasks) > 0 || len(s.Senders) > 0
 }
 
 // log 将摘要格式化为带缩进的 JSON，并写入 info 日志。
@@ -530,6 +599,18 @@ func (s *trafficSummary) addRuntimeOnlyTask(task string, runtime TaskRuntimeStat
 	s.Tasks = append(s.Tasks, item)
 }
 
+func (s *trafficSummary) addSenderRuntime(sender string, runtime SenderRuntimeStats) {
+	s.Senders = append(s.Senders, senderAggregateStats{
+		Sender:         sender,
+		QueueSize:      runtime.QueueSize,
+		QueueUsed:      runtime.QueueUsed,
+		QueueAvailable: runtime.QueueAvailable,
+		Dropped:        runtime.Dropped,
+		SendErrors:     runtime.SendErrors,
+		SendSuccess:    runtime.SendSuccess,
+	})
+}
+
 func (t *taskAggregateStats) applyRuntime(runtime TaskRuntimeStats) {
 	t.ExecutionModel = runtime.ExecutionModel
 	t.Inflight = runtime.Inflight
@@ -547,16 +628,6 @@ func (t *taskAggregateStats) applyRuntime(runtime TaskRuntimeStats) {
 			QueueSize:      runtime.ChannelQueueSize,
 			QueueUsed:      runtime.ChannelQueueUsed,
 			QueueAvailable: runtime.ChannelQueueAvailable,
-		}
-	}
-	if runtime.Async.QueueSize > 0 || runtime.Async.Dropped > 0 || runtime.Async.SendErrors > 0 || runtime.Async.SendSuccess > 0 {
-		t.Async = &asyncStats{
-			QueueSize:      runtime.Async.QueueSize,
-			QueueUsed:      runtime.Async.QueueUsed,
-			QueueAvailable: runtime.Async.QueueAvailable,
-			Dropped:        runtime.Async.Dropped,
-			SendErrors:     runtime.Async.SendErrors,
-			SendSuccess:    runtime.Async.SendSuccess,
 		}
 	}
 }

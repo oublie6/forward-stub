@@ -406,19 +406,6 @@ func (t *Task) runtimeStats() logx.TaskRuntimeStats {
 		stats.ChannelQueueUsed = len(ch)
 		stats.ChannelQueueAvailable = cap(ch) - len(ch)
 	}
-	for _, s := range t.Senders {
-		provider, ok := s.(sender.AsyncRuntimeStatsProvider)
-		if !ok {
-			continue
-		}
-		async := provider.AsyncRuntimeStats()
-		stats.Async.QueueSize += async.QueueSize
-		stats.Async.QueueUsed += async.QueueUsed
-		stats.Async.QueueAvailable += async.QueueAvailable
-		stats.Async.Dropped += async.Dropped
-		stats.Async.SendErrors += async.SendErrors
-		stats.Async.SendSuccess += async.SendSuccess
-	}
 	return stats
 }
 

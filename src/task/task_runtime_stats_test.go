@@ -1,11 +1,7 @@
 package task
 
 import (
-	"context"
 	"testing"
-
-	"forward-stub/src/packet"
-	"forward-stub/src/sender"
 )
 
 func TestRuntimeStatsPoolUsesPoolFields(t *testing.T) {
@@ -64,33 +60,3 @@ func TestRuntimeStatsFastPathOmitsPoolAndChannelFields(t *testing.T) {
 		t.Fatalf("fastpath stats should not expose channel fields: %+v", stats)
 	}
 }
-
-func TestRuntimeStatsAggregatesSenderAsyncStats(t *testing.T) {
-	tk := &Task{
-		Name:           "async",
-		ExecutionModel: ExecutionModelFastPath,
-		Senders: []sender.Sender{
-			&testAsyncStatsSender{testNamedSender: testNamedSender{name: "s1"}, stats: sender.AsyncRuntimeStats{QueueSize: 10, QueueUsed: 4, QueueAvailable: 6, Dropped: 1, SendErrors: 2, SendSuccess: 3}},
-			&testAsyncStatsSender{testNamedSender: testNamedSender{name: "s2"}, stats: sender.AsyncRuntimeStats{QueueSize: 20, QueueUsed: 5, QueueAvailable: 15, Dropped: 4, SendErrors: 5, SendSuccess: 6}},
-		},
-	}
-	if err := tk.Start(); err != nil {
-		t.Fatalf("start task: %v", err)
-	}
-	defer tk.StopGraceful()
-
-	stats := tk.runtimeStats()
-	if stats.Async.QueueSize != 30 || stats.Async.QueueUsed != 9 || stats.Async.QueueAvailable != 21 ||
-		stats.Async.Dropped != 5 || stats.Async.SendErrors != 7 || stats.Async.SendSuccess != 9 {
-		t.Fatalf("unexpected sender async stats: %+v", stats.Async)
-	}
-}
-
-type testAsyncStatsSender struct {
-	testNamedSender
-	stats sender.AsyncRuntimeStats
-}
-
-func (s *testAsyncStatsSender) Send(context.Context, *packet.Packet) error { return nil }
-
-func (s *testAsyncStatsSender) AsyncRuntimeStats() sender.AsyncRuntimeStats { return s.stats }

@@ -88,6 +88,9 @@ func TestValidateRejectsPipelineStageSyntaxBeforeRuntimeBuild(t *testing.T) {
 		{name: "bad hex", stage: StageConfig{Type: "replace_offset_bytes", Offset: 0, Hex: "xx"}, want: "hex invalid"},
 		{name: "empty route cases", stage: StageConfig{Type: "route_offset_bytes_sender"}, want: "non-empty cases"},
 		{name: "route length mismatch", stage: StageConfig{Type: "route_offset_bytes_sender", Cases: map[string]string{"aa": "s1", "aabb": "s1"}}, want: "length mismatch"},
+		{name: "kafka key negative offset", stage: StageConfig{Type: "set_kafka_record_key_from_offset_bytes", Offset: -1, Length: 1, Encoding: "text"}, want: "offset must be >= 0"},
+		{name: "kafka key zero length", stage: StageConfig{Type: "set_kafka_record_key_from_offset_bytes", Offset: 0, Encoding: "text"}, want: "length must be > 0"},
+		{name: "kafka key bad encoding", stage: StageConfig{Type: "set_kafka_record_key_from_offset_bytes", Offset: 0, Length: 1, Encoding: "base64"}, want: "encoding must be text or hex"},
 		{name: "bad regex", stage: StageConfig{Type: "rewrite_target_path_regex", Pattern: "["}, want: "invalid pattern"},
 	}
 	for _, tt := range tests {

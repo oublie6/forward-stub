@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 
 	"forward-stub/src/config"
 	"forward-stub/src/pipeline"
@@ -155,6 +156,14 @@ func compileStage(sc config.StageConfig) (pipeline.StageFunc, error) {
 			routes[string(v)] = sn
 		}
 		return pipeline.RouteSenderByOffsetBytes(sc.Offset, keyLen, routes, sc.DefaultSender), nil
+	case "set_kafka_record_key_from_offset_bytes":
+		encoding := strings.TrimSpace(sc.Encoding)
+		switch encoding {
+		case "text", "hex":
+		default:
+			return nil, fmt.Errorf("set_kafka_record_key_from_offset_bytes encoding must be text or hex")
+		}
+		return pipeline.SetKafkaRecordKeyFromOffsetBytes(sc.Offset, sc.Length, encoding), nil
 	case "set_target_file_path":
 		if sc.Value == "" {
 			return nil, fmt.Errorf("set_target_file_path requires value")
