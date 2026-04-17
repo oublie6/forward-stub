@@ -2,13 +2,20 @@
 package main
 
 import (
+	"log"
 	"os"
+	"runtime"
 
 	"forward-stub/src/bootstrap"
-
-	_ "go.uber.org/automaxprocs/maxprocs"
+	"go.uber.org/automaxprocs/maxprocs"
 )
 
 func main() {
+	if _, err := maxprocs.Set(); err != nil {
+		log.Printf("automaxprocs apply failed: %v", err)
+	} else {
+		log.Printf("automaxprocs applied, GOMAXPROCS=%d", runtime.GOMAXPROCS(0))
+	}
+
 	os.Exit(bootstrap.Run(os.Args[1:]))
 }
